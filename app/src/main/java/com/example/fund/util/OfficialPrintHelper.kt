@@ -136,7 +136,7 @@ object OfficialPrintHelper {
                                 <div style="font-weight:bold; font-size:15px; color:$primaryColor;">رقم السند: ${voucher.voucherNo}</div>
                                 <div style="font-size:13px;">التاريخ: ${voucher.date}</div>
                                 <div style="font-size:12px; color:#2E7D32;">القيد المحاسبي: ${voucher.linkedJournalEntryId}</div>
-                                <div class="amount-box"># %,d # ﷼</div>
+                                <div class="amount-box"># ${"%,d".format(voucher.amountYer.toLong())} # ﷼</div>
                             </div>
                         </div>
 
@@ -187,7 +187,7 @@ object OfficialPrintHelper {
                 </div>
             </body>
             </html>
-        """.trimIndent().format(voucher.amountYer.toLong())
+        """.trimIndent()
 
         launchAndroidPrintJob(context, html, "Voucher_${voucher.voucherNo}")
     }
@@ -234,12 +234,12 @@ object OfficialPrintHelper {
                     <hr style="border-color:rgba(255,255,255,0.2);" />
                     <div style="font-size:12px; display:flex; justify-content:space-between;">
                         <span>تاريخ الانتساب: ${member.joinDate}</span>
-                        <span>إجمالي السداد: %,d ﷼</span>
+                        <span>إجمالي السداد: ${"%,d".format(member.totalPaidYer.toLong())} ﷼</span>
                     </div>
                 </div>
             </body>
             </html>
-        """.trimIndent().format(member.totalPaidYer.toLong())
+        """.trimIndent()
 
         launchAndroidPrintJob(context, html, "MemberCard_${member.memberNo}")
     }

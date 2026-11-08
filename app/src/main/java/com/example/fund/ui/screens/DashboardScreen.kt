@@ -9,6 +9,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.MenuBook
+import androidx.compose.material.icons.automirrored.filled.ReceiptLong
+import androidx.compose.material.icons.automirrored.filled.TrendingDown
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -272,7 +276,7 @@ fun DashboardScreen(
             ) {
                 CircularQuickAction(
                     label = "سند مالي",
-                    icon = Icons.Default.ReceiptLong,
+                    icon = Icons.AutoMirrored.Filled.ReceiptLong,
                     containerColor = FundPrimary.copy(alpha = 0.12f),
                     iconColor = FundPrimary,
                     onClick = { onNavigate(Screen.VOUCHERS) }
@@ -318,7 +322,7 @@ fun DashboardScreen(
                     title = "إجمالي الإيرادات",
                     value = "%,d ﷼".format(totalRevenue.toLong()),
                     subtitle = "${vouchers.count { it.type == VoucherType.RECEIPT }} سند قبض",
-                    icon = Icons.Default.TrendingUp,
+                    icon = Icons.AutoMirrored.Filled.TrendingUp,
                     color = StatusSuccess,
                     modifier = Modifier.weight(1f),
                     onClick = { onNavigate(Screen.FINANCIAL_REPORTS) }
@@ -327,7 +331,7 @@ fun DashboardScreen(
                     title = "إجمالي المصروفات",
                     value = "%,d ﷼".format(totalExpense.toLong()),
                     subtitle = "الفائض: %,d ﷼".format(netSurplus.toLong()),
-                    icon = Icons.Default.TrendingDown,
+                    icon = Icons.AutoMirrored.Filled.TrendingDown,
                     color = StatusDanger,
                     modifier = Modifier.weight(1f),
                     onClick = { onNavigate(Screen.FINANCIAL_REPORTS) }
@@ -547,7 +551,7 @@ fun DashboardScreen(
         ) {
             QuickModuleButton("الحملات (${campaigns.size})", Icons.Default.Campaign, Modifier.weight(1f)) { onNavigate(Screen.CAMPAIGNS) }
             QuickModuleButton("القوائم المالية", Icons.Default.Assessment, Modifier.weight(1f)) { onNavigate(Screen.FINANCIAL_REPORTS) }
-            QuickModuleButton("دفتر اليومية", Icons.Default.MenuBook, Modifier.weight(1f)) { onNavigate(Screen.JOURNAL) }
+            QuickModuleButton("دفتر اليومية", Icons.AutoMirrored.Filled.MenuBook, Modifier.weight(1f)) { onNavigate(Screen.JOURNAL) }
         }
 
         Spacer(modifier = Modifier.height(12.dp))

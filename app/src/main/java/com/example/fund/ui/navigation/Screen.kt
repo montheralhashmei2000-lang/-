@@ -1,6 +1,8 @@
 package com.example.fund.ui.navigation
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.MenuBook
+import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.*
 import androidx.compose.ui.graphics.vector.ImageVector
 
@@ -18,8 +20,8 @@ enum class Screen(
     PERIODIC_AIDS("المساعدات الدورية والكفالات", Icons.Default.EventRepeat, "المساعدات"),
     IN_KIND("المساعدات العينية والمستودع", Icons.Default.Inventory2, "المساعدات"),
     TREASURY("إدارة الخزينة والنقدية", Icons.Default.AccountBalanceWallet, "المالية"),
-    VOUCHERS("سندات القبض والصرف", Icons.Default.ReceiptLong, "المالية"),
-    JOURNAL("دفتر القيود اليومية", Icons.Default.MenuBook, "المالية"),
+    VOUCHERS("سندات القبض والصرف", Icons.AutoMirrored.Filled.ReceiptLong, "المالية"),
+    JOURNAL("دفتر القيود اليومية", Icons.AutoMirrored.Filled.MenuBook, "المالية"),
     ACCOUNTS("دليل الحسابات والبنوك", Icons.Default.AccountTree, "المالية"),
     BUDGETS("الموازنات الشهرية", Icons.Default.PieChart, "المالية"),
     FINANCIAL_REPORTS("القوائم المالية والعملات", Icons.Default.Assessment, "المالية"),

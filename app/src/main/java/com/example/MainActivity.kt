@@ -9,14 +9,10 @@ import androidx.compose.runtime.getValue
 import com.example.fund.data.FundRepository
 import com.example.fund.ui.HomeShell
 import com.example.ui.theme.FundAppTheme
-import com.google.firebase.FirebaseApp
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        try {
-            FirebaseApp.initializeApp(this)
-        } catch (_: Exception) {}
 
         enableEdgeToEdge()
 

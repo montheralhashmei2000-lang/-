@@ -94,10 +94,10 @@ fun VoucherPrintDialog(
                                     ${voucherTitle} رقم: ${voucher.voucherNo}
                                     التاريخ: ${voucher.date}
                                     المكرم: ${voucher.partyName}
-                                    المبلغ: %,d ﷼ (${voucher.amountWords})
+                                    المبلغ: ${"%,d".format(voucher.amountYer.toLong())} ﷼ (${voucher.amountWords})
                                     البيان: ${voucher.description}
                                     القيد المحاسبي: ${voucher.linkedJournalEntryId}
-                                """.trimIndent().format(voucher.amountYer.toLong())
+                                """.trimIndent()
                                 val intent = Intent(Intent.ACTION_SEND).apply {
                                     type = "text/plain"
                                     putExtra(Intent.EXTRA_TEXT, shareText)

@@ -11,6 +11,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.FactCheck
+import androidx.compose.material.icons.automirrored.filled.Login
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -241,7 +243,7 @@ fun LoginScreen(
                                                 imageVector = when (staff.role) {
                                                     UserRole.ADMIN -> Icons.Default.AdminPanelSettings
                                                     UserRole.ACCOUNTANT -> Icons.Default.Calculate
-                                                    UserRole.REVIEWER -> Icons.Default.FactCheck
+                                                    UserRole.REVIEWER -> Icons.AutoMirrored.Filled.FactCheck
                                                     UserRole.VIEWER -> Icons.Default.Visibility
                                                 },
                                                 contentDescription = null,
@@ -348,7 +350,7 @@ fun LoginScreen(
                                 colors = ButtonDefaults.buttonColors(containerColor = FundPrimary),
                                 shape = RoundedCornerShape(12.dp)
                             ) {
-                                Icon(Icons.Default.Login, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Icon(Icons.AutoMirrored.Filled.Login, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(Modifier.width(8.dp))
                                 Text("تسجيل الدخول إلى النظام", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                             }

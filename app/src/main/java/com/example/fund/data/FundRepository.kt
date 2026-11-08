@@ -2,6 +2,7 @@ package com.example.fund.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import androidx.core.content.edit
 import com.example.fund.model.*
 import com.example.fund.util.TafqeetEngine
 import kotlinx.coroutines.CoroutineScope
@@ -128,14 +129,14 @@ class FundRepository private constructor() {
 
     private fun saveToDisk() {
         val sp = prefs ?: return
-        sp.edit()
-            .putBoolean("is_dark_mode", isDarkMode.value)
-            .putFloat("font_scale", fontScale.value)
-            .putBoolean("auto_sync_on_connect", autoSyncOnConnect.value)
-            .putString("server_name", serverConfig.value.serverName)
-            .putString("server_host", serverConfig.value.serverHost)
-            .putString("full_database_json", exportDatabaseJson())
-            .apply()
+        sp.edit {
+            putBoolean("is_dark_mode", isDarkMode.value)
+            putFloat("font_scale", fontScale.value)
+            putBoolean("auto_sync_on_connect", autoSyncOnConnect.value)
+            putString("server_name", serverConfig.value.serverName)
+            putString("server_host", serverConfig.value.serverHost)
+            putString("full_database_json", exportDatabaseJson())
+        }
     }
 
     fun setDarkModePreference(enabled: Boolean) {

@@ -1,0 +1,6 @@
+{
+  "name": "صندوق الحبيلين",
+  "description": "نظام إدارة الصندوق الاجتماعي التنموي - صندوق الحبيلين الإصدار 9.0",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

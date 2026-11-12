@@ -506,8 +506,8 @@ fun LocalServerSyncDialog(
                                 )
 
                                 val presets = listOf(
-                                    Triple("الخادم المحلي الميداني - الحبيلين (LAN)", "192.168.1.100:8443", 8),
-                                    Triple("الخادم السحابي المركزي (ردفان / عدن)", "sync.alhubaylin-fund.org:443", 42),
+                                    Triple("الخادم المحلي الميداني (LAN)", "192.168.1.100:8443", 8),
+                                    Triple("الخادم السحابي المركزي للصندوق", "sync.social-fund.org:443", 42),
                                     Triple("محرك التخزين المحلي المستقل (Offline Engine)", "127.0.0.1:9000", 1)
                                 )
 

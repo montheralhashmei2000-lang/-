@@ -50,21 +50,23 @@ class FundRepository private constructor() {
                 batchNo = "SYNC-2026-019",
                 timestamp = "2026-11-08 10:45",
                 operationsCount = 6,
-                serverNode = "192.168.1.100:8443 (خادم الحبيلين)",
+                serverNode = "192.168.1.100:8443 (الخادم المحلي)",
                 durationMs = 380L
             ),
             SyncBatchRecord(
                 batchNo = "SYNC-2026-018",
                 timestamp = "2026-11-07 18:20",
                 operationsCount = 11,
-                serverNode = "sync.alhubaylin-fund.org (السحابة المركزية)",
+                serverNode = "sync.social-fund.org (السحابة المركزية)",
                 durationMs = 640L
             )
         )
     )
 
-    // Core Entities
+    // Core Entities & Configuration
     val fundInfo = MutableStateFlow(FundInfo())
+    val regions = MutableStateFlow(SeedData.regions)
+    val appSettings = MutableStateFlow(AppSettings())
     val accounts = MutableStateFlow(SeedData.accounts)
     val members = MutableStateFlow(SeedData.members)
     val subscriptions = MutableStateFlow(SeedData.subscriptions)
@@ -105,7 +107,7 @@ class FundRepository private constructor() {
     // ------------------------------------------------------------------------
     fun initStorage(context: Context) {
         if (prefs != null) return
-        val sp = context.getSharedPreferences("alhubaylin_fund_v9_storage", Context.MODE_PRIVATE)
+        val sp = context.getSharedPreferences("social_fund_v9_storage", Context.MODE_PRIVATE)
         prefs = sp
 
         isDarkMode.value = sp.getBoolean("is_dark_mode", false)
@@ -187,6 +189,8 @@ class FundRepository private constructor() {
 
     fun resetToDefaultSeedData() {
         fundInfo.value = FundInfo()
+        regions.value = SeedData.regions
+        appSettings.value = AppSettings()
         accounts.value = SeedData.accounts
         members.value = SeedData.members
         subscriptions.value = SeedData.subscriptions
@@ -229,15 +233,17 @@ class FundRepository private constructor() {
     fun logAudit(action: String, description: String) {
         val user = currentUser.value
         val ts = nowTimeStr()
-        val log = AuditLog(
-            timestamp = ts,
-            userName = "${user.fullName} (${user.username})",
-            userRole = user.role.title,
-            actionType = action,
-            description = description,
-            ipOrDevice = "${serverConfig.value.serverHost} • ${if (isOnline.value) "متصل" else "محلي Offline"}"
-        )
-        auditLogs.value = listOf(log) + auditLogs.value
+        if (appSettings.value.enableAuditTrail || action == "إعدادات النظام") {
+            val log = AuditLog(
+                timestamp = ts,
+                userName = "${user.fullName} (${user.username})",
+                userRole = user.role.title,
+                actionType = action,
+                description = description,
+                ipOrDevice = "${serverConfig.value.serverHost} • ${if (isOnline.value) "متصل" else "محلي Offline"}"
+            )
+            auditLogs.value = listOf(log) + auditLogs.value
+        }
 
         if (!isOnline.value && action != "انقطاع الاتصال" && action != "اتصال بالشبكة") {
             val hash = computeShortSha256("$ts|$action|$description")
@@ -262,7 +268,7 @@ class FundRepository private constructor() {
                 timestamp = ts,
                 entityName = "تحصيل اشتراك ميداني",
                 action = "سند قبض محلي",
-                summary = "تحصيل اشتراك ميداني بالحبيلين بمبلغ 20,000 ﷼ (محفوظ محلياً)",
+                summary = "تحصيل اشتراك ميداني بمبلغ 20,000 ﷼ (محفوظ محلياً)",
                 txHash = computeShortSha256("$ts-SUB-1"),
                 payloadBytes = 640
             ),
@@ -270,7 +276,7 @@ class FundRepository private constructor() {
                 timestamp = ts,
                 entityName = "طلب مساعدة علاجية",
                 action = "تسجيل استمارة ميدانية",
-                summary = "رفع استمارة بحث ميداني لحالة طارئة بمنطقة ردفان",
+                summary = "رفع استمارة بحث ميداني لحالة طارئة في القرى التابعة للصندوق",
                 txHash = computeShortSha256("$ts-AID-2"),
                 payloadBytes = 820
             ),
@@ -385,7 +391,8 @@ class FundRepository private constructor() {
     // Double-Entry Engine & Voucher Operations
     // ------------------------------------------------------------------------
     private fun nextVoucherNo(type: VoucherType): String {
-        val prefix = "V-${Calendar.getInstance().get(Calendar.YEAR)}-"
+        val customPrefix = appSettings.value.voucherNoPrefix.ifBlank { "V" }
+        val prefix = "$customPrefix-${Calendar.getInstance().get(Calendar.YEAR)}-"
         val count = vouchers.value.size + 1
         return "$prefix%03d".format(count)
     }
@@ -477,7 +484,7 @@ class FundRepository private constructor() {
         if (fromAccountCode == toAccountCode || amountYer <= 0) return false
         val fromAcc = accounts.value.find { it.code == fromAccountCode } ?: return false
         val toAcc = accounts.value.find { it.code == toAccountCode } ?: return false
-        if (fromAcc.balance < amountYer) return false
+        if (!appSettings.value.allowNegativeTreasury && fromAcc.balance < amountYer) return false
 
         val journalNo = nextJournalNo()
         val today = nowStr()
@@ -564,7 +571,7 @@ class FundRepository private constructor() {
     fun createManualJournalEntry(lines: List<JournalLine>, description: String): Boolean {
         val totalDebit = lines.sumOf { it.debit }
         val totalCredit = lines.sumOf { it.credit }
-        if (Math.abs(totalDebit - totalCredit) > 0.01) {
+        if (appSettings.value.enforceBalancedJournal && Math.abs(totalDebit - totalCredit) > 0.01) {
             return false
         }
 
@@ -974,6 +981,75 @@ class FundRepository private constructor() {
         logAudit("تحديث بيانات الصندوق", "تم حفظ وتحديث البيانات والترخيص الرسمي للصندوق")
     }
 
+    fun updateFundLogo(logoBase64: String) {
+        fundInfo.value = fundInfo.value.copy(customLogoBase64 = logoBase64)
+        logAudit(
+            "تحديث شعار الصندوق",
+            if (logoBase64.isBlank()) "استعادة الشعار الافتراضي للصندوق" else "تعيين شعار مخصص جديد للصندوق"
+        )
+    }
+
+    fun updateAppSettings(settings: AppSettings) {
+        appSettings.value = settings
+        logAudit("إعدادات النظام", "تحديث الإعدادات التشغيلية والمالية الشاملة لجميع الشاشات")
+    }
+
+    // ------------------------------------------------------------------------
+    // Regions & Villages Management (1 Region -> Multiple Villages)
+    // ------------------------------------------------------------------------
+    fun addRegion(regionName: String): Boolean {
+        val trimmed = regionName.trim()
+        if (trimmed.isBlank() || regions.value.any { it.name == trimmed }) return false
+        regions.value = regions.value + RegionGroup(name = trimmed, villages = emptyList())
+        logAudit("إضافة منطقة", "إضافة منطقة إدارية جديدة: $trimmed")
+        return true
+    }
+
+    fun deleteRegion(regionId: String) {
+        if (regions.value.size <= 1) return
+        val target = regions.value.find { it.id == regionId } ?: return
+        regions.value = regions.value.filterNot { it.id == regionId }
+        logAudit("حذف منطقة", "حذف المنطقة: ${target.name}")
+    }
+
+    fun addVillageToRegion(regionId: String, villageName: String): Boolean {
+        val trimmed = villageName.trim()
+        if (trimmed.isBlank()) return false
+        var added = false
+        regions.value = regions.value.map { r ->
+            if (r.id == regionId && !r.villages.contains(trimmed)) {
+                added = true
+                r.copy(villages = r.villages + trimmed)
+            } else r
+        }
+        if (added) {
+            val rName = regions.value.find { it.id == regionId }?.name ?: ""
+            logAudit("إضافة قرية", "إضافة قرية ($trimmed) ضمن نطاق ($rName)")
+        }
+        return added
+    }
+
+    fun addVillageByRegionName(regionName: String, villageName: String) {
+        val rName = regionName.trim()
+        val vName = villageName.trim()
+        if (rName.isBlank()) return
+        val existing = regions.value.find { it.name == rName }
+        if (existing == null) {
+            val list = if (vName.isNotBlank()) listOf(vName) else emptyList()
+            regions.value = regions.value + RegionGroup(name = rName, villages = list)
+            logAudit("إضافة منطقة وقرية", "إنشاء منطقة ($rName)${if (vName.isNotBlank()) " مع القرية ($vName)" else ""}")
+        } else if (vName.isNotBlank() && !existing.villages.contains(vName)) {
+            addVillageToRegion(existing.id, vName)
+        }
+    }
+
+    fun removeVillageFromRegion(regionId: String, villageName: String) {
+        regions.value = regions.value.map { r ->
+            if (r.id == regionId) r.copy(villages = r.villages.filterNot { it == villageName }) else r
+        }
+        logAudit("حذف قرية", "إزالة القرية: $villageName")
+    }
+
     // ------------------------------------------------------------------------
     // Full JSON Serialization & Deserialization (Including Sync Queue)
     // ------------------------------------------------------------------------
@@ -995,6 +1071,41 @@ class FundRepository private constructor() {
             put("bankAccountCAC", fi.bankAccountCAC)
             put("maxAidCeilingYer", fi.maxAidCeilingYer)
             put("fiscalYear", fi.fiscalYear)
+            put("customLogoBase64", fi.customLogoBase64)
+        })
+
+        // Regions & Villages
+        val regionsArr = JSONArray()
+        regions.value.forEach { r ->
+            regionsArr.put(JSONObject().apply {
+                put("id", r.id)
+                put("name", r.name)
+                put("villages", JSONArray(r.villages))
+            })
+        }
+        root.put("regions", regionsArr)
+
+        // AppSettings
+        val st = appSettings.value
+        root.put("appSettings", JSONObject().apply {
+            put("monthlySubscriptionFeeYer", st.monthlySubscriptionFeeYer)
+            put("autoSuspendMonths", st.autoSuspendMonths)
+            put("requireNationalId", st.requireNationalId)
+            put("memberNoPrefix", st.memberNoPrefix)
+            put("requireReviewerApproval", st.requireReviewerApproval)
+            put("periodicAidDisburseDay", st.periodicAidDisburseDay)
+            put("lowStockThreshold", st.lowStockThreshold)
+            put("defaultWarehouseName", st.defaultWarehouseName)
+            put("voucherNoPrefix", st.voucherNoPrefix)
+            put("defaultTreasuryAccountCode", st.defaultTreasuryAccountCode)
+            put("allowNegativeTreasury", st.allowNegativeTreasury)
+            put("enforceBalancedJournal", st.enforceBalancedJournal)
+            put("budgetAlertPercent", st.budgetAlertPercent)
+            put("autoPrintVoucher", st.autoPrintVoucher)
+            put("allowAnonymousDonors", st.allowAnonymousDonors)
+            put("defaultEventLocation", st.defaultEventLocation)
+            put("strictRolePermissions", st.strictRolePermissions)
+            put("enableAuditTrail", st.enableAuditTrail)
         })
 
         // Members
@@ -1011,11 +1122,31 @@ class FundRepository private constructor() {
                 put("totalPaidYer", m.totalPaidYer)
                 put("dueBalanceYer", m.dueBalanceYer)
                 put("job", m.job)
-                put("villageOrArea", m.villageOrArea)
+                put("region", m.region)
+                put("village", m.village)
                 put("notes", m.notes)
             })
         }
         root.put("members", membersArr)
+
+        // Beneficiaries
+        val benArr = JSONArray()
+        beneficiaries.value.forEach { b ->
+            benArr.put(JSONObject().apply {
+                put("id", b.id)
+                put("familyHeadName", b.familyHeadName)
+                put("nationalId", b.nationalId)
+                put("phone", b.phone)
+                put("membersCount", b.membersCount)
+                put("monthlyIncomeYer", b.monthlyIncomeYer)
+                put("povertyTier", b.povertyTier.name)
+                put("region", b.region)
+                put("village", b.village)
+                put("address", b.address)
+                put("aidHistoryCount", b.aidHistoryCount)
+            })
+        }
+        root.put("beneficiaries", benArr)
 
         // Accounts
         val accountsArr = JSONArray()
@@ -1091,7 +1222,49 @@ class FundRepository private constructor() {
                     bankAccountKareemi = fi.optString("bankAccountKareemi", fundInfo.value.bankAccountKareemi),
                     bankAccountCAC = fi.optString("bankAccountCAC", fundInfo.value.bankAccountCAC),
                     maxAidCeilingYer = fi.optDouble("maxAidCeilingYer", fundInfo.value.maxAidCeilingYer),
-                    fiscalYear = fi.optString("fiscalYear", fundInfo.value.fiscalYear)
+                    fiscalYear = fi.optString("fiscalYear", fundInfo.value.fiscalYear),
+                    customLogoBase64 = fi.optString("customLogoBase64", fundInfo.value.customLogoBase64)
+                )
+            }
+
+            root.optJSONArray("regions")?.let { arr ->
+                val list = mutableListOf<RegionGroup>()
+                for (i in 0 until arr.length()) {
+                    val o = arr.getJSONObject(i)
+                    val vArr = o.optJSONArray("villages")
+                    val villages = mutableListOf<String>()
+                    if (vArr != null) {
+                        for (j in 0 until vArr.length()) {
+                            val v = vArr.optString(j)
+                            if (v.isNotBlank()) villages.add(v)
+                        }
+                    }
+                    list.add(RegionGroup(id = o.optString("id"), name = o.optString("name"), villages = villages))
+                }
+                if (list.isNotEmpty()) regions.value = list
+            }
+
+            root.optJSONObject("appSettings")?.let { st ->
+                val cur = appSettings.value
+                appSettings.value = AppSettings(
+                    monthlySubscriptionFeeYer = st.optDouble("monthlySubscriptionFeeYer", cur.monthlySubscriptionFeeYer),
+                    autoSuspendMonths = st.optInt("autoSuspendMonths", cur.autoSuspendMonths),
+                    requireNationalId = st.optBoolean("requireNationalId", cur.requireNationalId),
+                    memberNoPrefix = st.optString("memberNoPrefix", cur.memberNoPrefix),
+                    requireReviewerApproval = st.optBoolean("requireReviewerApproval", cur.requireReviewerApproval),
+                    periodicAidDisburseDay = st.optInt("periodicAidDisburseDay", cur.periodicAidDisburseDay),
+                    lowStockThreshold = st.optInt("lowStockThreshold", cur.lowStockThreshold),
+                    defaultWarehouseName = st.optString("defaultWarehouseName", cur.defaultWarehouseName),
+                    voucherNoPrefix = st.optString("voucherNoPrefix", cur.voucherNoPrefix),
+                    defaultTreasuryAccountCode = st.optString("defaultTreasuryAccountCode", cur.defaultTreasuryAccountCode),
+                    allowNegativeTreasury = st.optBoolean("allowNegativeTreasury", cur.allowNegativeTreasury),
+                    enforceBalancedJournal = st.optBoolean("enforceBalancedJournal", cur.enforceBalancedJournal),
+                    budgetAlertPercent = st.optInt("budgetAlertPercent", cur.budgetAlertPercent),
+                    autoPrintVoucher = st.optBoolean("autoPrintVoucher", cur.autoPrintVoucher),
+                    allowAnonymousDonors = st.optBoolean("allowAnonymousDonors", cur.allowAnonymousDonors),
+                    defaultEventLocation = st.optString("defaultEventLocation", cur.defaultEventLocation),
+                    strictRolePermissions = st.optBoolean("strictRolePermissions", cur.strictRolePermissions),
+                    enableAuditTrail = st.optBoolean("enableAuditTrail", cur.enableAuditTrail)
                 )
             }
 
@@ -1099,6 +1272,13 @@ class FundRepository private constructor() {
                 val list = mutableListOf<Member>()
                 for (i in 0 until arr.length()) {
                     val o = arr.getJSONObject(i)
+                    val legacy = o.optString("villageOrArea")
+                    val regionVal = o.optString("region").ifBlank {
+                        legacy.substringBefore(" - ", "المنطقة الوسطى").trim()
+                    }
+                    val villageVal = o.optString("village").ifBlank {
+                        if (legacy.contains(" - ")) legacy.substringAfter(" - ").trim() else "القرية المركزية"
+                    }
                     list.add(
                         Member(
                             id = o.optString("id"),
@@ -1111,12 +1291,36 @@ class FundRepository private constructor() {
                             totalPaidYer = o.optDouble("totalPaidYer", 0.0),
                             dueBalanceYer = o.optDouble("dueBalanceYer", 0.0),
                             job = o.optString("job"),
-                            villageOrArea = o.optString("villageOrArea"),
+                            region = regionVal,
+                            village = villageVal,
                             notes = o.optString("notes")
                         )
                     )
                 }
                 if (list.isNotEmpty()) members.value = list
+            }
+
+            root.optJSONArray("beneficiaries")?.let { arr ->
+                val list = mutableListOf<Beneficiary>()
+                for (i in 0 until arr.length()) {
+                    val o = arr.getJSONObject(i)
+                    list.add(
+                        Beneficiary(
+                            id = o.optString("id"),
+                            familyHeadName = o.optString("familyHeadName"),
+                            nationalId = o.optString("nationalId"),
+                            phone = o.optString("phone"),
+                            membersCount = o.optInt("membersCount", 1),
+                            monthlyIncomeYer = o.optDouble("monthlyIncomeYer", 0.0),
+                            povertyTier = runCatching { PovertyTier.valueOf(o.optString("povertyTier")) }.getOrDefault(PovertyTier.MEDIUM),
+                            region = o.optString("region", "المنطقة الوسطى"),
+                            village = o.optString("village", "القرية المركزية"),
+                            address = o.optString("address"),
+                            aidHistoryCount = o.optInt("aidHistoryCount", 0)
+                        )
+                    )
+                }
+                if (list.isNotEmpty()) beneficiaries.value = list
             }
 
             root.optJSONArray("accounts")?.let { arr ->

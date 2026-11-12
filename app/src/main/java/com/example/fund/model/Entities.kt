@@ -61,6 +61,12 @@ enum class PovertyTier(val title: String) {
     LOW("احتياج خفيف")
 }
 
+data class RegionGroup(
+    val id: String = UUID.randomUUID().toString(),
+    val name: String,
+    val villages: List<String> = emptyList()
+)
+
 data class Member(
     val id: String = UUID.randomUUID().toString(),
     val memberNo: String,
@@ -72,9 +78,13 @@ data class Member(
     val totalPaidYer: Double = 0.0,
     val dueBalanceYer: Double = 0.0,
     val job: String = "",
-    val villageOrArea: String = "الحبيلين",
+    val region: String = "المنطقة الوسطى",
+    val village: String = "القرية المركزية",
     val notes: String = ""
-)
+) {
+    val villageOrArea: String
+        get() = listOf(region, village).filter { it.isNotBlank() }.joinToString(" - ")
+}
 
 data class Subscription(
     val id: String = UUID.randomUUID().toString(),
@@ -199,10 +209,14 @@ data class Beneficiary(
     val membersCount: Int,
     val monthlyIncomeYer: Double,
     val povertyTier: PovertyTier,
-    val villageOrArea: String = "الحبيلين",
+    val region: String = "المنطقة الوسطى",
+    val village: String = "القرية المركزية",
     val address: String = "",
     val aidHistoryCount: Int = 0
-)
+) {
+    val villageOrArea: String
+        get() = listOf(region, village).filter { it.isNotBlank() }.joinToString(" - ")
+}
 
 data class PeriodicAid(
     val id: String = UUID.randomUUID().toString(),
@@ -223,7 +237,7 @@ data class InKindItem(
     val quantityOnHand: Int,
     val reorderLevel: Int = 10,
     val unitCostYer: Double = 0.0,
-    val location: String = "مستودع الحبيلين الرئيسي"
+    val location: String = "المستودع المركزي للصندوق"
 )
 
 data class InKindMovement(
@@ -267,7 +281,7 @@ data class AuditLog(
     val userRole: String,
     val actionType: String,
     val description: String,
-    val ipOrDevice: String = "نظام محلي آمن - الحبيلين"
+    val ipOrDevice: String = "نظام محلي آمن"
 )
 
 data class AppUser(
@@ -280,16 +294,42 @@ data class AppUser(
 )
 
 data class FundInfo(
-    val name: String = "صندوق الحبيلين الاجتماعي التنموي",
-    val subtitle: String = "الإصدار 9.0 - نظام مالي ورقابي متكامل",
+    val name: String = "الصندوق الاجتماعي التنموي",
+    val subtitle: String = "الإصدار 9.0 - نظام مالي ورقابي شامل للمناطق والقرى",
     val licenseNo: String = "ترخيص وزارة الشؤون الاجتماعية رقم: 442/2018",
-    val address: String = "الجمهورية اليمنية - محافظة لحج - مديرية ردفان - الحبيلين",
+    val address: String = "المركز الرئيسي - الإدارة العامة",
     val phone: String = "+967 770 123 456",
-    val email: String = "info@alhubaylin-fund.org",
+    val email: String = "info@social-fund.org",
     val bankAccountKareemi: String = "بنك الكريمي - حساب رقم: 300455821",
     val bankAccountCAC: String = "بنك التسليف التعاوني CAC - حساب رقم: 102948201",
     val maxAidCeilingYer: Double = 500000.0,
-    val fiscalYear: String = "2026"
+    val fiscalYear: String = "2026",
+    val customLogoBase64: String = ""
+)
+
+data class AppSettings(
+    // إعدادات الأعضاء والاشتراكات
+    val monthlySubscriptionFeeYer: Double = 20000.0,
+    val autoSuspendMonths: Int = 3,
+    val requireNationalId: Boolean = true,
+    val memberNoPrefix: String = "M-",
+    // إعدادات المساعدات والأسر والمستودع
+    val requireReviewerApproval: Boolean = true,
+    val periodicAidDisburseDay: Int = 1,
+    val lowStockThreshold: Int = 15,
+    val defaultWarehouseName: String = "المستودع المركزي للصندوق",
+    // إعدادات المالية والسندات والموازنات
+    val voucherNoPrefix: String = "V",
+    val defaultTreasuryAccountCode: String = "1100",
+    val allowNegativeTreasury: Boolean = false,
+    val enforceBalancedJournal: Boolean = true,
+    val budgetAlertPercent: Int = 80,
+    val autoPrintVoucher: Boolean = false,
+    // إعدادات الحملات والمواعيد والرقابة
+    val allowAnonymousDonors: Boolean = true,
+    val defaultEventLocation: String = "مقر الصندوق - قاعة الاجتماعات",
+    val strictRolePermissions: Boolean = true,
+    val enableAuditTrail: Boolean = true
 )
 
 data class SyncQueueItem(
@@ -313,7 +353,7 @@ data class SyncBatchRecord(
 )
 
 data class LocalServerConfig(
-    val serverName: String = "الخادم المحلي الميداني - الحبيلين (LAN)",
+    val serverName: String = "الخادم المحلي الميداني (LAN)",
     val serverHost: String = "192.168.1.100:8443",
     val protocol: String = "TLS 1.3 / SQLite-JSON Engine",
     val latencyMs: Int = 8,

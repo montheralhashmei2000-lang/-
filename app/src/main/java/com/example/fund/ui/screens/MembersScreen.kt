@@ -2,11 +2,14 @@ package com.example.fund.ui.screens
 
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -23,6 +26,8 @@ import com.example.fund.model.Member
 import com.example.fund.model.UserRole
 import com.example.fund.ui.components.MemberCardDialog
 import com.example.ui.theme.*
+import java.text.SimpleDateFormat
+import java.util.*
 
 @Composable
 fun MembersScreen(
@@ -31,11 +36,13 @@ fun MembersScreen(
     val context = LocalContext.current
     val repo = FundRepository.getInstance()
     val members by repo.members.collectAsState()
+    val regions by repo.regions.collectAsState()
     val currentUser by repo.currentUser.collectAsState()
     val canEdit = currentUser.role != UserRole.VIEWER
 
     var searchQuery by remember { mutableStateOf("") }
-    var selectedFilter by remember { mutableStateOf("الكل") }
+    var selectedStatusFilter by remember { mutableStateOf("الكل") }
+    var selectedRegionFilter by remember { mutableStateOf("كل المناطق") }
     var selectedMemberForCard by remember { mutableStateOf<Member?>(null) }
     var memberToEdit by remember { mutableStateOf<Member?>(null) }
     var showAddDialog by remember { mutableStateOf(false) }
@@ -43,20 +50,23 @@ fun MembersScreen(
     val filteredMembers = members.filter { m ->
         val matchesSearch = m.fullName.contains(searchQuery, ignoreCase = true) ||
                 m.memberNo.contains(searchQuery, ignoreCase = true) ||
-                m.phone.contains(searchQuery)
-        val matchesFilter = when (selectedFilter) {
+                m.phone.contains(searchQuery) ||
+                m.region.contains(searchQuery, ignoreCase = true) ||
+                m.village.contains(searchQuery, ignoreCase = true)
+        val matchesStatus = when (selectedStatusFilter) {
             "نشط" -> m.status == "نشط"
             "معلق" -> m.status == "معلق"
             else -> true
         }
-        matchesSearch && matchesFilter
+        val matchesRegion = selectedRegionFilter == "كل المناطق" || m.region == selectedRegionFilter
+        matchesSearch && matchesStatus && matchesRegion
     }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         // Top Toolbar
         Row(
@@ -73,7 +83,7 @@ fun MembersScreen(
                     color = FundPrimary
                 )
                 Text(
-                    text = "إجمالي الأعضاء المنتظمين والمتأخرين",
+                    text = "موزعين حسب المناطق والقرى التابعة للصندوق",
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -102,27 +112,49 @@ fun MembersScreen(
         OutlinedTextField(
             value = searchQuery,
             onValueChange = { searchQuery = it },
-            placeholder = { Text("ابحث بالاسم، رقم العضوية، أو الهاتف...") },
+            placeholder = { Text("ابحث بالاسم، رقم العضوية، المنطقة أو القرية...") },
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp)
         )
 
-        // Filters Row
+        // Status + Region Filters Row
         Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.fillMaxWidth()
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
         ) {
             listOf("الكل", "نشط", "معلق").forEach { filter ->
-                val isSelected = selectedFilter == filter
                 FilterChip(
-                    selected = isSelected,
-                    onClick = { selectedFilter = filter },
-                    label = { Text(filter) },
+                    selected = selectedStatusFilter == filter,
+                    onClick = { selectedStatusFilter = filter },
+                    label = { Text(filter, fontSize = 11.sp) },
                     colors = FilterChipDefaults.filterChipColors(
                         selectedContainerColor = FundPrimary.copy(alpha = 0.15f),
                         selectedLabelColor = FundPrimary
+                    )
+                )
+            }
+            VerticalDivider(modifier = Modifier.height(24.dp).align(Alignment.CenterVertically))
+            FilterChip(
+                selected = selectedRegionFilter == "كل المناطق",
+                onClick = { selectedRegionFilter = "كل المناطق" },
+                label = { Text("كل المناطق", fontSize = 11.sp) },
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = FundGold.copy(alpha = 0.22f),
+                    selectedLabelColor = FundGoldDark
+                )
+            )
+            regions.forEach { reg ->
+                FilterChip(
+                    selected = selectedRegionFilter == reg.name,
+                    onClick = { selectedRegionFilter = reg.name },
+                    label = { Text(reg.name, fontSize = 11.sp) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = FundGold.copy(alpha = 0.22f),
+                        selectedLabelColor = FundGoldDark
                     )
                 )
             }
@@ -159,6 +191,7 @@ fun MembersScreen(
             initialMember = member,
             onDismiss = { memberToEdit = null },
             onSave = { updated ->
+                repo.addVillageByRegionName(updated.region, updated.village)
                 repo.updateMember(updated)
                 Toast.makeText(context, "تم تحديث بيانات العضو بنجاح", Toast.LENGTH_SHORT).show()
                 memberToEdit = null
@@ -172,6 +205,7 @@ fun MembersScreen(
             initialMember = null,
             onDismiss = { showAddDialog = false },
             onSave = { newMember ->
+                repo.addVillageByRegionName(newMember.region, newMember.village)
                 repo.addMember(newMember)
                 Toast.makeText(context, "تم تسجيل العضو الجديد بنجاح", Toast.LENGTH_SHORT).show()
                 showAddDialog = false
@@ -247,7 +281,18 @@ private fun MemberCardItem(
                 }
             }
 
-            Text("المهنة والمنطقة: ${member.job} - ${member.villageOrArea}", fontSize = 12.sp, color = Color.DarkGray)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Surface(color = FundPrimary.copy(alpha = 0.1f), shape = RoundedCornerShape(6.dp)) {
+                    Text("المنطقة: ${member.region}", fontSize = 10.sp, color = FundPrimary, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                }
+                Surface(color = FundGold.copy(alpha = 0.18f), shape = RoundedCornerShape(6.dp)) {
+                    Text("القرية: ${member.village}", fontSize = 10.sp, color = FundGoldDark, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                }
+            }
+
+            if (member.job.isNotBlank()) {
+                Text("المهنة / الصفة: ${member.job}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -314,13 +359,33 @@ private fun MemberFormDialog(
     onDismiss: () -> Unit,
     onSave: (Member) -> Unit
 ) {
+    val context = LocalContext.current
+    val repo = FundRepository.getInstance()
+    val regions by repo.regions.collectAsState()
+    val settings by repo.appSettings.collectAsState()
+
     val isEditing = initialMember != null
     var fullName by remember { mutableStateOf(initialMember?.fullName ?: "") }
     var phone by remember { mutableStateOf(initialMember?.phone ?: "") }
     var nationalId by remember { mutableStateOf(initialMember?.nationalId ?: "") }
     var job by remember { mutableStateOf(initialMember?.job ?: "") }
-    var village by remember { mutableStateOf(initialMember?.villageOrArea ?: "الحبيلين") }
+
+    val defaultRegion = initialMember?.region ?: regions.firstOrNull()?.name ?: ""
+    val defaultVillage = initialMember?.village ?: regions.firstOrNull()?.villages?.firstOrNull() ?: ""
+
+    var selectedRegion by remember { mutableStateOf(defaultRegion) }
+    var selectedVillage by remember { mutableStateOf(defaultVillage) }
+    var regionDropdownExpanded by remember { mutableStateOf(false) }
+    var villageDropdownExpanded by remember { mutableStateOf(false) }
+    var showNewRegionField by remember { mutableStateOf(false) }
+    var newRegionInput by remember { mutableStateOf("") }
+    var showNewVillageField by remember { mutableStateOf(false) }
+    var newVillageInput by remember { mutableStateOf("") }
+
     var dueStr by remember { mutableStateOf(initialMember?.dueBalanceYer?.toLong()?.toString() ?: "0") }
+
+    val activeRegionObj = regions.find { it.name == selectedRegion }
+    val villagesForRegion = activeRegionObj?.villages ?: emptyList()
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -332,7 +397,10 @@ private fun MemberFormDialog(
             )
         },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
                 OutlinedTextField(
                     value = fullName,
                     onValueChange = { fullName = it },
@@ -350,7 +418,7 @@ private fun MemberFormDialog(
                 OutlinedTextField(
                     value = nationalId,
                     onValueChange = { nationalId = it },
-                    label = { Text("رقم الهوية الوطنية") },
+                    label = { Text(if (settings.requireNationalId) "رقم الهوية الوطنية (إلزامي)" else "رقم الهوية الوطنية (اختياري)") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -361,13 +429,138 @@ private fun MemberFormDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
-                OutlinedTextField(
-                    value = village,
-                    onValueChange = { village = it },
-                    label = { Text("المنطقة / القرية بردفان") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
+
+                // Separate Region Selector + Quick Add
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("المنطقة (تضم عدة قرى):", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = FundPrimary)
+                    TextButton(
+                        onClick = { showNewRegionField = !showNewRegionField },
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
+                    ) {
+                        Text(if (showNewRegionField) "إلغاء" else "+ منطقة جديدة", fontSize = 11.sp)
+                    }
+                }
+
+                if (showNewRegionField) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedTextField(
+                            value = newRegionInput,
+                            onValueChange = { newRegionInput = it },
+                            label = { Text("اسم المنطقة الجديدة") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Button(
+                            onClick = {
+                                val r = newRegionInput.trim()
+                                if (r.isNotBlank()) {
+                                    repo.addRegion(r)
+                                    selectedRegion = r
+                                    selectedVillage = ""
+                                    newRegionInput = ""
+                                    showNewRegionField = false
+                                    showNewVillageField = true
+                                }
+                            },
+                            contentPadding = PaddingValues(horizontal = 10.dp)
+                        ) { Text("إضافة", fontSize = 11.sp) }
+                    }
+                } else {
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        OutlinedButton(
+                            onClick = { regionDropdownExpanded = true },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(selectedRegion.ifBlank { "اختر المنطقة..." })
+                                Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+                            }
+                        }
+                        DropdownMenu(
+                            expanded = regionDropdownExpanded,
+                            onDismissRequest = { regionDropdownExpanded = false }
+                        ) {
+                            regions.forEach { reg ->
+                                DropdownMenuItem(
+                                    text = { Text("${reg.name} (${reg.villages.size} قرى)") },
+                                    onClick = {
+                                        selectedRegion = reg.name
+                                        selectedVillage = reg.villages.firstOrNull() ?: ""
+                                        regionDropdownExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Separate Village Selector (filtered by Region) + Quick Add
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("القرية التابعة للمنطقة:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = FundPrimary)
+                    TextButton(
+                        onClick = { showNewVillageField = !showNewVillageField },
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
+                    ) {
+                        Text(if (showNewVillageField) "اختيار من القائمة" else "+ قرية جديدة", fontSize = 11.sp)
+                    }
+                }
+
+                if (showNewVillageField || villagesForRegion.isEmpty()) {
+                    OutlinedTextField(
+                        value = if (showNewVillageField) newVillageInput else selectedVillage,
+                        onValueChange = {
+                            if (showNewVillageField) newVillageInput = it else selectedVillage = it
+                        },
+                        label = { Text("اكتب اسم القرية") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                } else {
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        OutlinedButton(
+                            onClick = { villageDropdownExpanded = true },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(selectedVillage.ifBlank { "اختر القرية..." })
+                                Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+                            }
+                        }
+                        DropdownMenu(
+                            expanded = villageDropdownExpanded,
+                            onDismissRequest = { villageDropdownExpanded = false }
+                        ) {
+                            villagesForRegion.forEach { vName ->
+                                DropdownMenuItem(
+                                    text = { Text(vName) },
+                                    onClick = {
+                                        selectedVillage = vName
+                                        villageDropdownExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+
                 OutlinedTextField(
                     value = dueStr,
                     onValueChange = { dueStr = it },
@@ -380,33 +573,49 @@ private fun MemberFormDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    if (fullName.isNotBlank()) {
-                        val due = dueStr.toDoubleOrNull() ?: 0.0
-                        val member = if (initialMember != null) {
-                            initialMember.copy(
-                                fullName = fullName,
-                                phone = phone,
-                                nationalId = nationalId,
-                                job = job,
-                                villageOrArea = village,
-                                dueBalanceYer = due
-                            )
-                        } else {
-                            Member(
-                                memberNo = "M-${(1000..9999).random()}",
-                                fullName = fullName,
-                                phone = phone,
-                                nationalId = nationalId,
-                                joinDate = "2026-11-08",
-                                status = "نشط",
-                                totalPaidYer = 0.0,
-                                dueBalanceYer = due,
-                                job = job,
-                                villageOrArea = village
-                            )
-                        }
-                        onSave(member)
+                    val finalRegion = selectedRegion.trim()
+                    val finalVillage = (if (showNewVillageField) newVillageInput else selectedVillage).trim()
+                    if (fullName.isBlank()) {
+                        Toast.makeText(context, "يرجى إدخال اسم العضو", Toast.LENGTH_SHORT).show()
+                        return@Button
                     }
+                    if (settings.requireNationalId && nationalId.isBlank()) {
+                        Toast.makeText(context, "رقم الهوية الوطنية إلزامي حسب إعدادات النظام", Toast.LENGTH_SHORT).show()
+                        return@Button
+                    }
+                    if (finalRegion.isBlank() || finalVillage.isBlank()) {
+                        Toast.makeText(context, "يرجى تحديد المنطقة والقرية", Toast.LENGTH_SHORT).show()
+                        return@Button
+                    }
+                    val due = dueStr.toDoubleOrNull() ?: 0.0
+                    val today = SimpleDateFormat("yyyy-MM-dd", Locale.ENGLISH).format(Date())
+                    val prefix = settings.memberNoPrefix.ifBlank { "M-" }
+                    val member = if (initialMember != null) {
+                        initialMember.copy(
+                            fullName = fullName.trim(),
+                            phone = phone.trim(),
+                            nationalId = nationalId.trim(),
+                            job = job.trim(),
+                            region = finalRegion,
+                            village = finalVillage,
+                            dueBalanceYer = due
+                        )
+                    } else {
+                        Member(
+                            memberNo = "$prefix${(1000..9999).random()}",
+                            fullName = fullName.trim(),
+                            phone = phone.trim(),
+                            nationalId = nationalId.trim(),
+                            joinDate = today,
+                            status = "نشط",
+                            totalPaidYer = 0.0,
+                            dueBalanceYer = due,
+                            job = job.trim(),
+                            region = finalRegion,
+                            village = finalVillage
+                        )
+                    }
+                    onSave(member)
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = FundPrimary)
             ) {

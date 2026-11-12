@@ -305,7 +305,7 @@ private fun InKindMovementDialog(
     var qtyText by remember { mutableStateOf("5") }
     var party by remember {
         mutableStateOf(
-            if (isSupply) "فاعل خير - توريد مباشر" else "أسرة مستفيدة - الحبيلين"
+            if (isSupply) "فاعل خير - توريد مباشر" else "أسرة مستفيدة"
         )
     }
     var notes by remember { mutableStateOf("") }
@@ -403,12 +403,13 @@ private fun AddInKindItemDialog(
     onDismiss: () -> Unit,
     onSave: (InKindItem) -> Unit
 ) {
+    val appSettings = FundRepository.getInstance().appSettings.collectAsState().value
     var name by remember { mutableStateOf("") }
     var category by remember { mutableStateOf("مواد غذائية") }
     var unit by remember { mutableStateOf("كرتون") }
     var qtyText by remember { mutableStateOf("10") }
     var unitValText by remember { mutableStateOf("25000") }
-    var thresholdText by remember { mutableStateOf("5") }
+    var thresholdText by remember(appSettings.lowStockThreshold) { mutableStateOf(appSettings.lowStockThreshold.toString()) }
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surface) {
@@ -485,7 +486,8 @@ private fun AddInKindItemDialog(
                                         unit = unit.trim(),
                                         quantityOnHand = q,
                                         reorderLevel = t,
-                                        unitCostYer = v
+                                        unitCostYer = v,
+                                        location = appSettings.defaultWarehouseName
                                     )
                                 )
                             }

@@ -57,7 +57,7 @@ fun CampaignsScreen() {
                     fontSize = 18.sp,
                     color = FundPrimary
                 )
-                Text("مشاريع التنمية والإغاثة العاجلة بردفان", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("مشاريع التنمية والإغاثة العاجلة للمناطق والقرى", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
 
             if (canManage) {

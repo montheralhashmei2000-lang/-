@@ -102,8 +102,8 @@ fun MemberCardDialog(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Image(
-                                    painter = painterResource(id = R.drawable.ic_fund_logo),
+                                FundLogoImage(
+                                    customLogoBase64 = fundInfo.customLogoBase64,
                                     contentDescription = "شعار الصندوق",
                                     modifier = Modifier.size(36.dp)
                                 )
@@ -116,7 +116,7 @@ fun MemberCardDialog(
                                         fontSize = 12.sp
                                     )
                                     Text(
-                                        "بطاقة عضوية معتمدة - ردفان",
+                                        "بطاقة عضوية رسمية معتمدة",
                                         color = FundGoldLight,
                                         fontSize = 9.sp
                                     )
@@ -180,7 +180,7 @@ fun MemberCardDialog(
                                     fontSize = 10.sp
                                 )
                                 Text(
-                                    text = "المنطقة: ${member.villageOrArea}",
+                                    text = "المنطقة: ${member.region} | القرية: ${member.village}",
                                     color = Color.White.copy(alpha = 0.85f),
                                     fontSize = 10.sp
                                 )

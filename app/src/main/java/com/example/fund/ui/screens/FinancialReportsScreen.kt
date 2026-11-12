@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.fund.data.FundRepository
 import com.example.fund.model.*
+import com.example.fund.util.OfficialPrintHelper
 import com.example.ui.theme.*
 
 @Composable
@@ -32,6 +33,7 @@ fun FinancialReportsScreen() {
     val accounts by repo.accounts.collectAsState()
     val journalEntries by repo.journalEntries.collectAsState()
     val currencyRates by repo.currencyRates.collectAsState()
+    val fundInfo by repo.fundInfo.collectAsState()
 
     var activeTab by remember { mutableStateOf(0) }
     val tabTitles = listOf(
@@ -47,8 +49,48 @@ fun FinancialReportsScreen() {
         modifier = Modifier
             .fillMaxSize()
             .padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    "القوائم المالية الختامية والعملات",
+                    fontFamily = AmiriFontFamily,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 17.sp,
+                    color = FundPrimary
+                )
+                Text(
+                    "تقارير ختامية مطابقة للمعايير المحاسبية",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            Button(
+                onClick = {
+                    OfficialPrintHelper.printFinancialStatementPdf(
+                        context = context,
+                        statementTitle = "القائمة المالية المعتمدة: ${tabTitles[activeTab]}",
+                        accounts = accounts,
+                        fundInfo = fundInfo
+                    )
+                    Toast.makeText(context, "جاري فتح نافذة الطباعة الرسمية وحفظ PDF...", Toast.LENGTH_SHORT).show()
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = FundPrimary),
+                shape = RoundedCornerShape(10.dp),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+            ) {
+                Icon(Icons.Default.Print, contentDescription = null, modifier = Modifier.size(15.dp))
+                Spacer(modifier = Modifier.width(5.dp))
+                Text("طباعة القائمة PDF", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+
         // Scrollable Tabs
         ScrollableTabRow(
             selectedTabIndex = activeTab,
@@ -552,6 +594,15 @@ private fun ReconciliationTab(accounts: List<Account>, onAdjustEntry: (String, S
 // ----------------------------------------------------------------------------
 @Composable
 private fun CurrenciesTab(rates: Map<CurrencyCode, Double>, onUpdateRate: (CurrencyCode, Double) -> Unit) {
+    var calcAmountStr by remember { mutableStateOf("1000") }
+    var calcCurrency by remember { mutableStateOf(CurrencyCode.SAR) }
+
+    val calcAmount = calcAmountStr.toDoubleOrNull() ?: 0.0
+    val selectedRate = rates[calcCurrency] ?: 1.0
+    val equivalentYer = (calcAmount * selectedRate).toLong()
+    val usdRate = (rates[CurrencyCode.USD] ?: 2530.0).coerceAtLeast(1.0)
+    val sarRate = (rates[CurrencyCode.SAR] ?: 665.0).coerceAtLeast(1.0)
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -602,6 +653,67 @@ private fun CurrenciesTab(rates: Map<CurrencyCode, Double>, onUpdateRate: (Curre
                                 Text("تحديث", fontSize = 11.sp)
                             }
                         }
+                    }
+                }
+            }
+        }
+
+        // Instant Multi-Currency Calculator Card
+        Card(
+            shape = RoundedCornerShape(14.dp),
+            colors = CardDefaults.cardColors(containerColor = FundLightSurfaceSecondary),
+            border = androidx.compose.foundation.BorderStroke(1.dp, FundGold)
+        ) {
+            Column(
+                modifier = Modifier.padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(Icons.Default.Calculate, contentDescription = null, tint = FundPrimary, modifier = Modifier.size(18.dp))
+                    Text("حاسبة المعادلة الفورية للعملات", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = FundPrimary)
+                }
+
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    CurrencyCode.entries.forEach { code ->
+                        FilterChip(
+                            selected = calcCurrency == code,
+                            onClick = { calcCurrency = code },
+                            label = { Text("${code.title} (${code.symbol})", fontSize = 11.sp) }
+                        )
+                    }
+                }
+
+                OutlinedTextField(
+                    value = calcAmountStr,
+                    onValueChange = { calcAmountStr = it },
+                    label = { Text("أدخل المبلغ المراد تحويله (${calcCurrency.symbol})") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Surface(
+                    color = FundDeepHeader,
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = "المعادل بالريال اليمني: ${"%,d".format(equivalentYer)} ﷼",
+                            color = FundGoldLight,
+                            fontWeight = FontWeight.Black,
+                            fontSize = 15.sp
+                        )
+                        Text(
+                            text = "المعادل بالدولار: ${"%,.1f".format(equivalentYer / usdRate)} $  |  بالريال السعودي: ${"%,.1f".format(equivalentYer / sarRate)} ر.س",
+                            color = Color.White.copy(alpha = 0.85f),
+                            fontSize = 11.sp
+                        )
                     }
                 }
             }

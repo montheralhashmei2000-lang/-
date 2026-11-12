@@ -34,6 +34,7 @@ fun AppDrawer(
 ) {
     val repo = FundRepository.getInstance()
     val currentUser by repo.currentUser.collectAsState()
+    val fundInfo by repo.fundInfo.collectAsState()
     val isViewer = currentUser.role == UserRole.VIEWER
 
     ModalDrawerSheet(
@@ -61,20 +62,21 @@ fun AppDrawer(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Image(
-                            painter = painterResource(id = R.drawable.ic_fund_logo),
+                        FundLogoImage(
+                            customLogoBase64 = fundInfo.customLogoBase64,
                             contentDescription = "شعار الصندوق",
                             modifier = Modifier.size(54.dp)
                         )
                         Column {
                             Text(
-                                "صندوق الحبيلين",
+                                fundInfo.name,
                                 color = Color.White,
                                 fontWeight = FontWeight.Black,
-                                fontSize = 16.sp
+                                fontSize = 15.sp,
+                                maxLines = 2
                             )
                             Text(
-                                "الاجتماعي التنموي (الإصدار 9.0)",
+                                "نظام الإدارة المالية والرقابية",
                                 color = FundGoldLight,
                                 fontSize = 11.sp
                             )

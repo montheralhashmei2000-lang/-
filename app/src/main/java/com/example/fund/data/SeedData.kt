@@ -4,6 +4,24 @@ import com.example.fund.model.*
 
 object SeedData {
 
+    val regions = listOf(
+        RegionGroup(
+            id = "reg1",
+            name = "المنطقة الوسطى",
+            villages = listOf("القرية المركزية", "الحي الشرقي", "حي النهضة", "الربوة")
+        ),
+        RegionGroup(
+            id = "reg2",
+            name = "المنطقة الشرقية",
+            villages = listOf("قرية السلام", "وادي الخير", "الضاحية الشرقية")
+        ),
+        RegionGroup(
+            id = "reg3",
+            name = "المنطقة الغربية",
+            villages = listOf("قرية الأمل", "المجمع الغربي", "تجمع الروضة")
+        )
+    )
+
     val accounts = listOf(
         // Assets 1000
         Account("1000", "الأصول", AccountType.ASSET, true, 19620000.0),
@@ -40,7 +58,7 @@ object SeedData {
         Member(
             id = "m1",
             memberNo = "M-1001",
-            fullName = "الشيخ فضل عبدالكريم الردفاني",
+            fullName = "الشيخ فضل عبدالكريم المنصوري",
             phone = "771234501",
             nationalId = "1049281041",
             joinDate = "2020-01-15",
@@ -48,13 +66,14 @@ object SeedData {
             totalPaidYer = 420000.0,
             dueBalanceYer = 0.0,
             job = "شخصية اجتماعية ومربي فاضل",
-            villageOrArea = "الحبيلين - الوسط",
+            region = "المنطقة الوسطى",
+            village = "القرية المركزية",
             notes = "عضو مؤسس منتظم بالسداد"
         ),
         Member(
             id = "m2",
             memberNo = "M-1002",
-            fullName = "د. وضاح ناصر الحجيلي",
+            fullName = "د. وضاح ناصر السعيدي",
             phone = "772345602",
             nationalId = "1049281042",
             joinDate = "2020-03-10",
@@ -62,13 +81,14 @@ object SeedData {
             totalPaidYer = 380000.0,
             dueBalanceYer = 20000.0,
             job = "استشاري طب عام وجراحة",
-            villageOrArea = "الحبيلين - مخطط الأطباء",
+            region = "المنطقة الوسطى",
+            village = "حي النهضة",
             notes = "يقدم استشارات طبية مجانية للمستفيدين"
         ),
         Member(
             id = "m3",
             memberNo = "M-1003",
-            fullName = "أ. عبدالحميد قاسم القطيبي",
+            fullName = "أ. عبدالحميد قاسم المعمري",
             phone = "773456703",
             nationalId = "1049281043",
             joinDate = "2021-02-01",
@@ -76,7 +96,8 @@ object SeedData {
             totalPaidYer = 310000.0,
             dueBalanceYer = 0.0,
             job = "مدير مدرسة ثانوية",
-            villageOrArea = "ردفان - الجدعاء",
+            region = "المنطقة الشرقية",
+            village = "قرية السلام",
             notes = "منسق الأنشطة التعليمية"
         ),
         Member(
@@ -90,13 +111,14 @@ object SeedData {
             totalPaidYer = 290000.0,
             dueBalanceYer = 30000.0,
             job = "مهندس شبكات ومياه",
-            villageOrArea = "الحبيلين - السوق القديم",
+            region = "المنطقة الوسطى",
+            village = "الحي الشرقي",
             notes = "مشرف مشاريع الآبار التنموية"
         ),
         Member(
             id = "m5",
             memberNo = "M-1005",
-            fullName = "د. مريم أحمد الداعري",
+            fullName = "د. مريم أحمد العامري",
             phone = "775678905",
             nationalId = "1049281045",
             joinDate = "2021-08-20",
@@ -104,7 +126,8 @@ object SeedData {
             totalPaidYer = 340000.0,
             dueBalanceYer = 0.0,
             job = "طبيبة نساء وتوليد",
-            villageOrArea = "الحبيلين - حي الشهداء",
+            region = "المنطقة الغربية",
+            village = "قرية الأمل",
             notes = "عضو اللجنة الصحية"
         ),
         Member(
@@ -118,27 +141,29 @@ object SeedData {
             totalPaidYer = 180000.0,
             dueBalanceYer = 60000.0,
             job = "تاجر ومستورد مواد بناء",
-            villageOrArea = "الحبيلين - الخط العام",
+            region = "المنطقة الشرقية",
+            village = "وادي الخير",
             notes = "متأخر 3 أشهر - جارٍ التواصل"
         ),
         Member(
             id = "m7",
             memberNo = "M-1007",
-            fullName = "العقيد سالم نصر العيسائي",
+            fullName = "أ. سالم نصر الحمادي",
             phone = "777890107",
             nationalId = "1049281047",
             joinDate = "2022-04-14",
             status = "نشط",
             totalPaidYer = 260000.0,
             dueBalanceYer = 0.0,
-            job = "متقاعد أمني",
-            villageOrArea = "ردفان - الثمير",
-            notes = "داعم للأنشطة الأمنية والتنظيمية"
+            job = "موجه تربوي متقاعد",
+            region = "المنطقة الغربية",
+            village = "المجمع الغربي",
+            notes = "داعم للأنشطة التنظيمية والاجتماعية"
         ),
         Member(
             id = "m8",
             memberNo = "M-1008",
-            fullName = "فهد حسين المزاحمي",
+            fullName = "فهد حسين النعماني",
             phone = "778901208",
             nationalId = "1049281048",
             joinDate = "2022-07-01",
@@ -146,7 +171,8 @@ object SeedData {
             totalPaidYer = 220000.0,
             dueBalanceYer = 20000.0,
             job = "محاسب قانوني",
-            villageOrArea = "الحبيلين - الربوة",
+            region = "المنطقة الوسطى",
+            village = "الربوة",
             notes = "عضو لجنة الرقابة والتفتيش"
         )
     )
@@ -156,7 +182,7 @@ object SeedData {
             id = "sub1",
             receiptNo = "SUB-2026-001",
             memberId = "m1",
-            memberName = "الشيخ فضل عبدالكريم الردفاني",
+            memberName = "الشيخ فضل عبدالكريم المنصوري",
             amountOriginal = 20000.0,
             currency = CurrencyCode.YER,
             exchangeRate = 1.0,
@@ -171,7 +197,7 @@ object SeedData {
             id = "sub2",
             receiptNo = "SUB-2026-002",
             memberId = "m2",
-            memberName = "د. وضاح ناصر الحجيلي",
+            memberName = "د. وضاح ناصر السعيدي",
             amountOriginal = 100.0,
             currency = CurrencyCode.SAR,
             exchangeRate = 665.0,
@@ -186,7 +212,7 @@ object SeedData {
             id = "sub3",
             receiptNo = "SUB-2026-003",
             memberId = "m5",
-            memberName = "د. مريم أحمد الداعري",
+            memberName = "د. مريم أحمد العامري",
             amountOriginal = 20000.0,
             currency = CurrencyCode.YER,
             exchangeRate = 1.0,
@@ -211,7 +237,7 @@ object SeedData {
             status = AidStatus.DISBURSED,
             requestDate = "2026-10-15",
             decisionDate = "2026-10-18",
-            notes = "مساهمة في عملية جراحية بالقلب - مستشفى عدن الألماني",
+            notes = "مساهمة في عملية جراحية بالقلب - مستشفى التخصصي العام",
             voucherId = "v_pay_01"
         ),
         AidRequest(
@@ -232,7 +258,7 @@ object SeedData {
             id = "aid3",
             requestNo = "REQ-2026-013",
             memberId = "m3",
-            memberName = "أ. عبدالحميد قاسم القطيبي",
+            memberName = "أ. عبدالحميد قاسم المعمري",
             aidType = AidType.EDUCATION,
             requestedAmountYer = 150000.0,
             approvedAmountYer = 0.0,
@@ -246,7 +272,7 @@ object SeedData {
             id = "aid4",
             requestNo = "REQ-2026-014",
             memberId = "m8",
-            memberName = "فهد حسين المزاحمي",
+            memberName = "فهد حسين النعماني",
             aidType = AidType.EMERGENCY,
             requestedAmountYer = 100000.0,
             approvedAmountYer = 100000.0,
@@ -264,7 +290,7 @@ object SeedData {
             voucherNo = "V-2026-001",
             type = VoucherType.RECEIPT,
             status = VoucherStatus.POSTED,
-            partyName = "د. وضاح ناصر الحجيلي",
+            partyName = "د. وضاح ناصر السعيدي",
             amountOriginal = 100.0,
             currency = CurrencyCode.SAR,
             exchangeRate = 665.0,
@@ -278,14 +304,14 @@ object SeedData {
             description = "تحصيل اشتراك نوفمبر 2026 ودفعة مقدمة - حوالة الكريمي #994820",
             date = "2026-11-02",
             linkedJournalEntryId = "JE-000001",
-            receivedOrPaidBy = "د. وضاح الحجيلي"
+            receivedOrPaidBy = "د. وضاح السعيدي"
         ),
         Voucher(
             id = "v_rec_02",
             voucherNo = "V-2026-002",
             type = VoucherType.RECEIPT,
             status = VoucherStatus.POSTED,
-            partyName = "فاعل خير - مغترب بالمملكة",
+            partyName = "فاعل خير - مغترب بالخارج",
             amountOriginal = 200.0,
             currency = CurrencyCode.USD,
             exchangeRate = 2530.0,
@@ -296,7 +322,7 @@ object SeedData {
             accountName = "بنك الكريمي الإسلامي",
             counterpartAccountCode = "4200",
             counterpartAccountName = "التبرعات والمنح العامة",
-            description = "تبرع عام لدعم الأسر المحتاجة بالحبيلين",
+            description = "تبرع عام لدعم الأسر المحتاجة في المناطق والقرى",
             date = "2026-11-03",
             linkedJournalEntryId = "JE-000002",
             receivedOrPaidBy = "الكريمي اكسبرس"
@@ -405,20 +431,20 @@ object SeedData {
     )
 
     val donors = listOf(
-        Donor("d1", "مجموعة أبناء ردفان الخيرية (الرياض)", "009665012345", "مغتربين", 3500000.0, 5000000.0, 3500000.0, "2026-10-20"),
-        Donor("d2", "رجل الأعمال حزام عبد ربه الردفاني", "771992019", "فردي", 1800000.0, 2000000.0, 1800000.0, "2026-11-01"),
+        Donor("d1", "مجموعة المغتربين الخيرية", "009665012345", "مغتربين", 3500000.0, 5000000.0, 3500000.0, "2026-10-20"),
+        Donor("d2", "رجل الأعمال حزام عبد ربه السالمي", "771992019", "فردي", 1800000.0, 2000000.0, 1800000.0, "2026-11-01"),
         Donor("d3", "مؤسسة الأمل التنموية الاجتماعية", "02251092", "مؤسسي", 2500000.0, 3000000.0, 2500000.0, "2026-09-15")
     )
 
     val campaigns = listOf(
         Campaign(
             id = "c1",
-            title = "حملة علاج مرضى الغسيل الكلوي بردفان",
+            title = "حملة علاج مرضى الغسيل الكلوي",
             goalAmountYer = 4000000.0,
             collectedAmountYer = 3150000.0,
             spentAmountYer = 2400000.0,
             status = "نشطة",
-            description = "توفير جلسات الغسيل ومستلزمات الفلاتر بمستشفى ردفان العام",
+            description = "توفير جلسات الغسيل ومستلزمات الفلاتر بالمستشفى العام",
             targetCategory = "طبي عاجل"
         ),
         Campaign(
@@ -433,26 +459,26 @@ object SeedData {
         ),
         Campaign(
             id = "c3",
-            title = "مشروع تأهيل شبكة مياه الحبيلين الشرقية",
+            title = "مشروع تأهيل شبكة المياه بالطاقة الشمسية",
             goalAmountYer = 6000000.0,
             collectedAmountYer = 6000000.0,
             spentAmountYer = 5850000.0,
             status = "مكتملة",
-            description = "تمديد أنابيب بطول 2 كم وتركيب مضخة غاطسة تعمل بالطاقة الشمسية",
+            description = "تمديد أنابيب بطول 2 كم وتركيب مضخة غاطسة تعمل بالطاقة الشمسية للقرى المستفيدة",
             targetCategory = "مشاريع تنموية"
         )
     )
 
     val beneficiaries = listOf(
-        Beneficiary("ben1", "أم محمد صالح الشعيبي", "104928301", "770119283", 6, 45000.0, PovertyTier.EXTREME, "الحبيلين - حافة السلام", "أرملة تعول 5 أيتام", 4),
-        Beneficiary("ben2", "أحمد سالم مقبل الحالمي", "104928302", "771228391", 8, 55000.0, PovertyTier.EXTREME, "ردفان - الجدعاء", "عاجز عن العمل ولديه مريض مزمن", 5),
-        Beneficiary("ben3", "فاطمة ناصر عبد ربه", "104928303", "772339402", 4, 60000.0, PovertyTier.HIGH, "الحبيلين - السوق القديم", "أسرة شهيد بدون معيل دائم", 3),
-        Beneficiary("ben4", "محسن قاسم المشوشي", "104928304", "773440513", 7, 75000.0, PovertyTier.MEDIUM, "ردفان - الثمير", "دخل موسمي غير منتظم", 2)
+        Beneficiary("ben1", "أم محمد صالح السالمي", "104928301", "770119283", 6, 45000.0, PovertyTier.EXTREME, "المنطقة الوسطى", "القرية المركزية", "أرملة تعول 5 أيتام", 4),
+        Beneficiary("ben2", "أحمد سالم مقبل الناصري", "104928302", "771228391", 8, 55000.0, PovertyTier.EXTREME, "المنطقة الشرقية", "قرية السلام", "عاجز عن العمل ولديه مريض مزمن", 5),
+        Beneficiary("ben3", "فاطمة ناصر عبد ربه", "104928303", "772339402", 4, 60000.0, PovertyTier.HIGH, "المنطقة الوسطى", "الحي الشرقي", "أسرة شهيد بدون معيل دائم", 3),
+        Beneficiary("ben4", "محسن قاسم الصالحي", "104928304", "773440513", 7, 75000.0, PovertyTier.MEDIUM, "المنطقة الغربية", "قرية الأمل", "دخل موسمي غير منتظم", 2)
     )
 
     val periodicAids = listOf(
-        PeriodicAid("pa1", "ben1", "أم محمد صالح الشعيبي (كفالة أيتام)", 70000.0, "كفالة أيتام", "نشطة", "2026-10"),
-        PeriodicAid("pa2", "ben2", "أحمد سالم مقبل الحالمي (إعانة أسرة)", 60000.0, "إعانة عجز دائم", "نشطة", "2026-10"),
+        PeriodicAid("pa1", "ben1", "أم محمد صالح السالمي (كفالة أيتام)", 70000.0, "كفالة أيتام", "نشطة", "2026-10"),
+        PeriodicAid("pa2", "ben2", "أحمد سالم مقبل الناصري (إعانة أسرة)", 60000.0, "إعانة عجز دائم", "نشطة", "2026-10"),
         PeriodicAid("pa3", "ben3", "فاطمة ناصر عبد ربه (كفالة أسرة شهيد)", 50000.0, "كفالة أسرة شهيد", "نشطة", "2026-10")
     )
 
@@ -465,19 +491,19 @@ object SeedData {
 
     val inKindMovements = listOf(
         InKindMovement("ikm1", "MOV-2026-001", "توريد", "ik1", "سلة غذائية متكاملة", 50, "منحة مؤسسة الأمل الخيرية", "2026-10-10", "توريد لمستودع الصندوق"),
-        InKindMovement("ikm2", "MOV-2026-002", "صرف وتوزيع", "ik1", "سلة غذائية متكاملة", 5, "الأسر الأشد فقراً - حافة السلام", "2026-10-22", "بموجب كشف التوزيع الميداني")
+        InKindMovement("ikm2", "MOV-2026-002", "صرف وتوزيع", "ik1", "سلة غذائية متكاملة", 5, "الأسر الأشد فقراً - المنطقة الوسطى", "2026-10-22", "بموجب كشف التوزيع الميداني")
     )
 
     val schedulerEvents = listOf(
         SchedulerEvent("ev1", "اجتماع مجلس الإدارة الدوري لمناقشة موازنة 2027", "2026-11-15", "04:30 م", "مقر الصندوق - قاعة الاجتماعات", "مجلس الإدارة", "#1B5E20"),
-        SchedulerEvent("ev2", "تدشين حملة توزيع السلال الغذائية للأيتام", "2026-11-20", "09:00 ص", "مستودع الحبيلين المركزي", "ميداني", "#F9A825"),
+        SchedulerEvent("ev2", "تدشين حملة توزيع السلال الغذائية للأيتام", "2026-11-20", "09:00 ص", "المستودع المركزي للصندوق", "ميداني", "#F9A825"),
         SchedulerEvent("ev3", "جلسة التسوية المالية الشهرية مع بنك الكريمي", "2026-11-28", "11:00 ص", "الإدارة المالية", "مالي", "#0D47A1")
     )
 
     val internalMessages = listOf(
         InternalMessage("msg1", "أ. منصور المحاسب", "محاسب", "مدير النظام", "جاهزية القوائم المالية لشهر أكتوبر 2026", "تمت مطابقة ميزان المراجعة وكشف حركة بنك الكريمي بنجاح، ومستعدون للمصادقة.", "2026-11-06 10:30 ص", false),
-        InternalMessage("msg2", "د. وضاح الحجيلي", "مراجع", "محاسب", "مراجعة تقرير المساعدات الطبية", "نأمل إرفاق الفواتير الأصلية لطلب المساعدة الجراحية الخاصة بمستشفى عدن الألماني.", "2026-11-05 02:15 م", true),
-        InternalMessage("msg3", "م. ياسر البكري", "عضو هيئة إدارية", "الكل", "اكتمال المرحلة الأولى من بئر الماء", "بحمد الله وتوفيقه تم الانتهاء من ضخ التجربة في بئر الحبيلين الشرقية ونتائج العذوبة ممتازة.", "2026-11-04 06:40 م", true)
+        InternalMessage("msg2", "د. وضاح السعيدي", "مراجع", "محاسب", "مراجعة تقرير المساعدات الطبية", "نأمل إرفاق الفواتير الأصلية لطلب المساعدة الجراحية الخاصة بالمستشفى التخصصي.", "2026-11-05 02:15 م", true),
+        InternalMessage("msg3", "م. ياسر البكري", "عضو هيئة إدارية", "الكل", "اكتمال المرحلة الأولى من مشروع المياه", "بحمد الله وتوفيقه تم الانتهاء من ضخ التجربة في بئر المنطقة الشرقية ونتائج العذوبة ممتازة.", "2026-11-04 06:40 م", true)
     )
 
     val auditLogs = listOf(
@@ -488,10 +514,10 @@ object SeedData {
     )
 
     val users = listOf(
-        AppUser("u1", "admin", "المدير العام - عبدالحافظ القطيبي", UserRole.ADMIN, true, "2026-11-07 18:22"),
+        AppUser("u1", "admin", "المدير العام - عبدالحافظ المعمري", UserRole.ADMIN, true, "2026-11-07 18:22"),
         AppUser("u2", "accountant", "أمين الصندوق والمحاسب - صالح نصر", UserRole.ACCOUNTANT, true, "2026-11-07 16:10"),
-        AppUser("u3", "reviewer", "المراجع القانوني - فهد المزاحمي", UserRole.REVIEWER, true, "2026-11-06 12:00"),
-        AppUser("u4", "viewer", "المراقب الميداني - قاسم الحالمي", UserRole.VIEWER, true, "2026-11-05 09:30")
+        AppUser("u3", "reviewer", "المراجع القانوني - فهد النعماني", UserRole.REVIEWER, true, "2026-11-06 12:00"),
+        AppUser("u4", "viewer", "المراقب الميداني - قاسم الناصري", UserRole.VIEWER, true, "2026-11-05 09:30")
     )
 
     val currencyRates = mutableMapOf(

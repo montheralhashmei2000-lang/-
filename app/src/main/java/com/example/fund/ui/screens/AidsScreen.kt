@@ -326,8 +326,9 @@ private fun NewAidRequestDialog(
     var amountStr by remember { mutableStateOf("150000") }
     var notes by remember { mutableStateOf("") }
 
+    val ceiling = FundRepository.getInstance().fundInfo.collectAsState().value.maxAidCeilingYer
     val amount = amountStr.toDoubleOrNull() ?: 0.0
-    val isOverCeiling = amount > 500000.0
+    val isOverCeiling = amount > ceiling
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -395,7 +396,7 @@ private fun NewAidRequestDialog(
 
                 if (isOverCeiling) {
                     Text(
-                        "تنبيه: المبلغ يتجاوز السقف الأعلى المسموح به (500,000 ﷼) ويلزم استثناء خاص من مجلس الإدارة.",
+                        "تنبيه: المبلغ يتجاوز السقف الأعلى المسموح به (${"%,d".format(ceiling.toLong())} ﷼) ويلزم استثناء خاص من مجلس الإدارة.",
                         color = StatusDanger,
                         fontSize = 11.sp
                     )

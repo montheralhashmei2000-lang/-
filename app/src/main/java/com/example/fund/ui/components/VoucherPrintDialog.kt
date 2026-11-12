@@ -154,8 +154,8 @@ fun VoucherPrintDialog(
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 modifier = Modifier.weight(1f)
                             ) {
-                                Image(
-                                    painter = painterResource(id = R.drawable.ic_fund_logo),
+                                FundLogoImage(
+                                    customLogoBase64 = fundInfo.customLogoBase64,
                                     contentDescription = "شعار الصندوق",
                                     modifier = Modifier.size(56.dp)
                                 )
@@ -267,7 +267,7 @@ fun VoucherPrintDialog(
                             // QR Verification Badge
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 QrCodeView(
-                                    content = "ALHUBAYLIN|${voucher.voucherNo}|${voucher.amountYer}|${voucher.date}|${voucher.status.name}",
+                                    content = "SOCIALFUND|${voucher.voucherNo}|${voucher.amountYer}|${voucher.date}|${voucher.status.name}",
                                     sizeDp = 86.dp
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))

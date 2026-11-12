@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "AlHubaylinFund"
+rootProject.name = "SocialFundApp"
 
 include(":app")

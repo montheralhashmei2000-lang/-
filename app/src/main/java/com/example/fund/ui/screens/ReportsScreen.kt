@@ -77,10 +77,10 @@ fun ReportsScreen() {
                         csvBuilder.append("تقرير,${fundInfo.name}\n")
                         when (selectedTab) {
                             0, 1 -> {
-                                csvBuilder.append("الكود,اسم العضو,المنطقة,إجمالي المسدد (ريال)\n")
+                                csvBuilder.append("الكود,اسم العضو,المنطقة,القرية,إجمالي المسدد (ريال)\n")
                                 members.forEach { m ->
                                     val totalPaid = subscriptions.filter { it.memberId == m.id }.sumOf { it.amountYer }.toLong()
-                                    csvBuilder.append("${m.memberNo},${m.fullName},${m.villageOrArea},$totalPaid\n")
+                                    csvBuilder.append("${m.memberNo},${m.fullName},${m.region},${m.village},$totalPaid\n")
                                 }
                             }
                             2 -> {
@@ -114,6 +114,7 @@ fun ReportsScreen() {
                         printAnalyticalReportPdf(
                             context = context,
                             fundName = fundInfo.name,
+                            logoBase64 = fundInfo.customLogoBase64,
                             totalRev = totalRev,
                             totalExp = totalExp,
                             membersCount = members.size,
@@ -362,12 +363,17 @@ private fun ReportKpiCard(title: String, value: String, color: Color, modifier: 
 private fun printAnalyticalReportPdf(
     context: Context,
     fundName: String,
+    logoBase64: String,
     totalRev: Long,
     totalExp: Long,
     membersCount: Int,
     disbursedAidsCount: Int
 ) {
     try {
+        val logoHtml = if (logoBase64.isNotBlank()) {
+            """<img src="data:image/png;base64,$logoBase64" style="width:52px;height:52px;border-radius:50%;object-fit:cover;border:2px solid #F9A825;margin-bottom:6px;" />"""
+        } else ""
+
         val html = """
             <!DOCTYPE html>
             <html dir="rtl" lang="ar">
@@ -383,6 +389,7 @@ private fun printAnalyticalReportPdf(
             </head>
             <body>
                 <div class="header">
+                    $logoHtml
                     <h2>$fundName</h2>
                     <p>التقرير المالي والإحصائي المعتمد</p>
                 </div>
@@ -404,7 +411,7 @@ private fun printAnalyticalReportPdf(
                 val printManager = context.getSystemService(Context.PRINT_SERVICE) as? PrintManager
                 if (printManager != null) {
                     val adapter = view.createPrintDocumentAdapter("Analytical_Report")
-                    printManager.print("تقرير_صندوق_الحبيلين", adapter, PrintAttributes.Builder().build())
+                    printManager.print("تقرير_الصندوق_المالي", adapter, PrintAttributes.Builder().build())
                 }
             }
         }

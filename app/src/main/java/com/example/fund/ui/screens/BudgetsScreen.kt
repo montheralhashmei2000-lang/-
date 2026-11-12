@@ -27,6 +27,7 @@ fun BudgetsScreen() {
     val context = LocalContext.current
     val repo = FundRepository.getInstance()
     val budgets by repo.budgets.collectAsState()
+    val settings by repo.appSettings.collectAsState()
     val currentUser by repo.currentUser.collectAsState()
     val canManage = currentUser.role == UserRole.ADMIN || currentUser.role == UserRole.ACCOUNTANT
 
@@ -142,7 +143,7 @@ fun BudgetsScreen() {
                         LinearProgressIndicator(
                             progress = { ratio.coerceIn(0f, 1f) },
                             modifier = Modifier.fillMaxWidth().height(8.dp),
-                            color = if (isOver) StatusDanger else if (ratio > 0.8f) FundGoldDark else FundPrimary,
+                            color = if (isOver) StatusDanger else if (ratio >= settings.budgetAlertPercent / 100f) FundGoldDark else FundPrimary,
                             trackColor = Color(0xFFEEEEEE)
                         )
 

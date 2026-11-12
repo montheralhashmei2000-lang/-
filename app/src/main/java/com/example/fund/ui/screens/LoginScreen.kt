@@ -29,9 +29,9 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.R
 import com.example.fund.data.FundRepository
 import com.example.fund.model.UserRole
+import com.example.fund.ui.components.FundLogoImage
 import com.example.ui.theme.*
 
 enum class LoginMode(val title: String) {
@@ -47,6 +47,7 @@ fun LoginScreen(
 ) {
     val context = LocalContext.current
     val repo = FundRepository.getInstance()
+    val fundInfo by repo.fundInfo.collectAsState()
     val users by repo.users.collectAsState()
     val serverConfig by repo.serverConfig.collectAsState()
     val isOnline by repo.isOnline.collectAsState()
@@ -93,8 +94,8 @@ fun LoginScreen(
                         .border(2.dp, FundGold, CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
-                    Image(
-                        painter = painterResource(id = R.drawable.ic_fund_logo),
+                    FundLogoImage(
+                        customLogoBase64 = fundInfo.customLogoBase64,
                         contentDescription = "شعار الصندوق",
                         modifier = Modifier.size(62.dp)
                     )
@@ -103,7 +104,7 @@ fun LoginScreen(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
-                    text = "صندوق الحبيلين الاجتماعي التنموي",
+                    text = fundInfo.name,
                     fontFamily = AmiriFontFamily,
                     fontWeight = FontWeight.Black,
                     fontSize = 20.sp,
@@ -494,8 +495,8 @@ fun LoginScreen(
                             )
 
                             val nodes = listOf(
-                                Triple("الخادم المحلي الميداني - الحبيلين (LAN)", "192.168.1.100:8443", 8),
-                                Triple("الخادم السحابي المركزي (ردفان / عدن)", "sync.alhubaylin-fund.org:443", 42),
+                                Triple("الخادم المحلي الميداني (LAN)", "192.168.1.100:8443", 8),
+                                Triple("الخادم السحابي المركزي للصندوق", "sync.social-fund.org:443", 42),
                                 Triple("محرك التخزين المحلي المستقل (Offline-First)", "127.0.0.1:9000", 1)
                             )
 

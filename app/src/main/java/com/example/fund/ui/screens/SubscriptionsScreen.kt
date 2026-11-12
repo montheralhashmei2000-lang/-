@@ -182,7 +182,8 @@ private fun CollectSubscriptionDialog(
     var selectedMember by remember { mutableStateOf(members.firstOrNull()) }
     var memberDropdownExpanded by remember { mutableStateOf(false) }
 
-    var amountStr by remember { mutableStateOf("20000") }
+    val defaultFee = FundRepository.getInstance().appSettings.collectAsState().value.monthlySubscriptionFeeYer.toLong().toString()
+    var amountStr by remember(defaultFee) { mutableStateOf(defaultFee) }
     var selectedCurrency by remember { mutableStateOf(CurrencyCode.YER) }
     var monthYear by remember { mutableStateOf("2026-11") }
     var selectedMethod by remember { mutableStateOf(PaymentMethod.CASH) }

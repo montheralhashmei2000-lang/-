@@ -156,7 +156,7 @@ fun QrScannerDialog(
                                     }
 
                                     Text("رقم العضوية: ${m.memberNo} | الهوية: ${m.nationalId}", fontSize = 12.sp)
-                                    Text("المهنة والمنطقة: ${m.job} - ${m.villageOrArea}", fontSize = 12.sp)
+                                    Text("المهنة: ${m.job} | المنطقة: ${m.region} | القرية: ${m.village}", fontSize = 12.sp)
                                     Text("إجمالي المدفوع: %,d ﷼".format(m.totalPaidYer.toLong()), fontWeight = FontWeight.Bold, color = FundPrimary, fontSize = 12.sp)
                                     Text("المتأخرات المستحقة: %,d ﷼".format(m.dueBalanceYer.toLong()), color = if (m.dueBalanceYer > 0) StatusDanger else StatusSuccess, fontSize = 12.sp)
                                     Text(

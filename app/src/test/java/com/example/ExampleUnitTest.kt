@@ -103,4 +103,28 @@ class ExampleUnitTest {
         assertEquals(cashBefore - 100000.0, repo.accounts.value.first { it.code == "1100" }.balance, 0.001)
         assertEquals(bankBefore + 100000.0, repo.accounts.value.first { it.code == "1200" }.balance, 0.001)
     }
+
+    @Test
+    fun testRegionsVillagesSeparationAndSettings() {
+        val repo = FundRepository.getInstance()
+        val initialRegions = repo.regions.value.size
+        assertTrue(repo.addRegion("منطقة الشمال"))
+        assertEquals(initialRegions + 1, repo.regions.value.size)
+
+        val newRegion = repo.regions.value.first { it.name == "منطقة الشمال" }
+        assertTrue(repo.addVillageToRegion(newRegion.id, "قرية الوادي"))
+        assertTrue(repo.addVillageToRegion(newRegion.id, "قرية الجبل"))
+        assertEquals(2, repo.regions.value.first { it.id == newRegion.id }.villages.size)
+
+        repo.updateFundLogo("BASE64_SAMPLE_LOGO")
+        assertEquals("BASE64_SAMPLE_LOGO", repo.fundInfo.value.customLogoBase64)
+
+        val updatedSettings = repo.appSettings.value.copy(monthlySubscriptionFeeYer = 35000.0, voucherNoPrefix = "REC")
+        repo.updateAppSettings(updatedSettings)
+        assertEquals(35000.0, repo.appSettings.value.monthlySubscriptionFeeYer, 0.001)
+        assertEquals("REC", repo.appSettings.value.voucherNoPrefix)
+
+        repo.resetToDefaultSeedData()
+        assertEquals("", repo.fundInfo.value.customLogoBase64)
+    }
 }

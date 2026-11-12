@@ -332,6 +332,81 @@ data class AppSettings(
     val enableAuditTrail: Boolean = true
 )
 
+enum class PrintFontOption(val title: String, val cssName: String, val resName: String) {
+    AMIRI("أميري الكلاسيكي الرسمي", "Amiri", "amiri.ttf"),
+    TAJAWAL("تجوال العصري الواضح", "Tajawal", "tajawal.ttf"),
+    CAIRO("القاهرة الهندسي الحديث", "Cairo", "cairo.ttf"),
+    NASKH("نسخ العربي المعتمد", "Noto Naskh Arabic", "noto_naskh_arabic.ttf")
+}
+
+enum class PrintBorderStyle(val title: String) {
+    DOUBLE_CLASSIC("إطار مزدوج كلاسيكي"),
+    MODERN_MINIMAL("تصميم عصري أنيق"),
+    OFFICIAL_BOXED("جدول رسمي مؤطر")
+}
+
+enum class PrintPaperSize(val title: String) {
+    A4("A4 قياسي"),
+    A5("A5 سند مكتبي"),
+    THERMAL_80("إيصال حراري 80mm")
+}
+
+data class PrintSettings(
+    // رؤوس النماذج والترويسات
+    val showCountryHeader: Boolean = true,
+    val countryHeaderText: String = "الجمهورية اليمنية",
+    val showDepartmentHeader: Boolean = true,
+    val departmentHeaderText: String = "الإدارة المالية والحسابات",
+    val showLogoInPrint: Boolean = true,
+    val showLicenseAndAddress: Boolean = true,
+    // عناوين المستندات والنماذج
+    val receiptVoucherTitle: String = "سـنـد قـبـض رسـمـي",
+    val paymentVoucherTitle: String = "سـنـد صـرف رسـمـي",
+    val journalVoucherTitle: String = "سند قيد يومية مزدوج",
+    val financialStatementSubtitle: String = "مستخرج رسمي معتمد من النظام المحاسبي",
+    val analyticalReportSubtitle: String = "التقرير المالي والإحصائي المعتمد",
+    // تسميات الحقول داخل السند
+    val receiptPartyLabel: String = "استلمنا من المكرم:",
+    val paymentPartyLabel: String = "يصرف للمكرم:",
+    val amountWordsLabel: String = "مبلغ وقدره كتابةً:",
+    val paymentMethodLabel: String = "طريقة الدفع:",
+    val accountLabel: String = "الحساب المالي:",
+    val descriptionLabel: String = "وذلك مقابل (البيان):",
+    // الخطوط والأحجام والألوان ونمط الإطار
+    val fontFamily: PrintFontOption = PrintFontOption.AMIRI,
+    val headerFontSizeSp: Int = 16,
+    val bodyFontSizeSp: Int = 13,
+    val signatureFontSizeSp: Int = 11,
+    val borderStyle: PrintBorderStyle = PrintBorderStyle.DOUBLE_CLASSIC,
+    val paperSize: PrintPaperSize = PrintPaperSize.A4,
+    val accentColorHex: String = "#1B5E20",
+    // حقول التوقيعات والختم
+    val showSignaturesSection: Boolean = true,
+    val sig1Enabled: Boolean = true,
+    val sig1Title: String = "المستلم / الطرف",
+    val sig1DefaultName: String = "",
+    val sig2Enabled: Boolean = true,
+    val sig2Title: String = "المحاسب / أمين الصندوق",
+    val sig2DefaultName: String = "أمين الصندوق / المحاسب",
+    val sig3Enabled: Boolean = true,
+    val sig3Title: String = "المراجع المالي",
+    val sig3DefaultName: String = "المراجع المالي",
+    val sig4Enabled: Boolean = true,
+    val sig4Title: String = "يعتمد / رئيس الصندوق",
+    val sig4DefaultName: String = "رئيس مجلس الإدارة",
+    val showSignatureLine: Boolean = true,
+    val showOfficialStampBox: Boolean = true,
+    val officialStampLabel: String = "الختم الرسمي",
+    // التذييل ورمز التحقق
+    val showQrVerification: Boolean = true,
+    val qrCaptionText: String = "رمز التحقق الرقمي",
+    val showJournalReference: Boolean = true,
+    val showCurrencyDetails: Boolean = true,
+    val showFundContactInFooter: Boolean = true,
+    val footerNote: String = "هذا السند معتمد إلكترونياً ولا يعتد بأي كشط أو تعديل يدوي.",
+    val footerSubNote: String = "شكراً لمساهمتكم في دعم التكافل والتنمية المجتمعية."
+)
+
 data class SyncQueueItem(
     val id: String = UUID.randomUUID().toString(),
     val timestamp: String,

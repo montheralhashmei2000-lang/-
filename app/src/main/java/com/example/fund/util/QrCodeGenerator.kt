@@ -4,6 +4,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -34,6 +35,7 @@ fun QrCodeView(
             .size(sizeDp)
             .background(bgColor, RoundedCornerShape(8.dp))
             .border(1.dp, Color(0xFFD8E4D2), RoundedCornerShape(8.dp))
+            .padding(5.dp)
     ) {
         Canvas(modifier = Modifier.matchParentSize()) {
             val cellW = size.width / matrixSize
@@ -54,7 +56,21 @@ fun QrCodeView(
     }
 }
 
-private fun generateQrMatrix(text: String, size: Int): Array<BooleanArray> {
+fun generateQrSvg(content: String, sizePx: Int = 78, dotColorHex: String = "#003300"): String {
+    val matrixSize = 25
+    val grid = generateQrMatrix(content, matrixSize)
+    val rects = StringBuilder()
+    for (r in 0 until matrixSize) {
+        for (c in 0 until matrixSize) {
+            if (grid[r][c]) {
+                rects.append("<rect x=\"$c\" y=\"$r\" width=\"1\" height=\"1\" fill=\"$dotColorHex\"/>")
+            }
+        }
+    }
+    return """<svg xmlns="http://www.w3.org/2000/svg" width="$sizePx" height="$sizePx" viewBox="-1 -1 ${matrixSize + 2} ${matrixSize + 2}" style="background:#FFFFFF;border:1px solid #D8E4D2;border-radius:6px;">$rects</svg>"""
+}
+
+fun generateQrMatrix(text: String, size: Int = 25): Array<BooleanArray> {
     val matrix = Array(size) { BooleanArray(size) { false } }
 
     fun drawFinder(top: Int, left: Int) {

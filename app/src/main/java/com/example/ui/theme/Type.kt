@@ -20,6 +20,25 @@ val TajawalFontFamily = FontFamily(
     Font(R.font.tajawal, FontWeight.ExtraBold)
 )
 
+val CairoFontFamily = FontFamily(
+    Font(R.font.cairo, FontWeight.Normal),
+    Font(R.font.cairo, FontWeight.Medium),
+    Font(R.font.cairo, FontWeight.Bold),
+    Font(R.font.cairo, FontWeight.ExtraBold)
+)
+
+val NotoNaskhFontFamily = FontFamily(
+    Font(R.font.noto_naskh_arabic, FontWeight.Normal),
+    Font(R.font.noto_naskh_arabic, FontWeight.Bold)
+)
+
+fun printFontFamilyFor(option: com.example.fund.model.PrintFontOption): FontFamily = when (option) {
+    com.example.fund.model.PrintFontOption.AMIRI -> AmiriFontFamily
+    com.example.fund.model.PrintFontOption.TAJAWAL -> TajawalFontFamily
+    com.example.fund.model.PrintFontOption.CAIRO -> CairoFontFamily
+    com.example.fund.model.PrintFontOption.NASKH -> NotoNaskhFontFamily
+}
+
 val Typography = Typography(
     displayLarge = TextStyle(
         fontFamily = AmiriFontFamily,

@@ -67,6 +67,7 @@ class FundRepository private constructor() {
     val fundInfo = MutableStateFlow(FundInfo())
     val regions = MutableStateFlow(SeedData.regions)
     val appSettings = MutableStateFlow(AppSettings())
+    val printSettings = MutableStateFlow(PrintSettings())
     val accounts = MutableStateFlow(SeedData.accounts)
     val members = MutableStateFlow(SeedData.members)
     val subscriptions = MutableStateFlow(SeedData.subscriptions)
@@ -191,6 +192,7 @@ class FundRepository private constructor() {
         fundInfo.value = FundInfo()
         regions.value = SeedData.regions
         appSettings.value = AppSettings()
+        printSettings.value = PrintSettings()
         accounts.value = SeedData.accounts
         members.value = SeedData.members
         subscriptions.value = SeedData.subscriptions
@@ -449,6 +451,7 @@ class FundRepository private constructor() {
         updateAccountBalance(accountCode, if (type == VoucherType.RECEIPT) amountYer else -amountYer)
         updateAccountBalance(counterpartAccountCode, if (type == VoucherType.RECEIPT) amountYer else -amountYer)
 
+        val ps = printSettings.value
         val newVoucher = Voucher(
             voucherNo = voucherNo,
             type = type,
@@ -467,7 +470,10 @@ class FundRepository private constructor() {
             description = description,
             date = today,
             linkedJournalEntryId = journalNo,
-            receivedOrPaidBy = partyName
+            receivedOrPaidBy = ps.sig1DefaultName.ifBlank { partyName },
+            accountantName = ps.sig2DefaultName.ifBlank { "أمين الصندوق / المحاسب" },
+            auditorName = ps.sig3DefaultName.ifBlank { "المراجع المالي" },
+            managerName = ps.sig4DefaultName.ifBlank { "رئيس مجلس الإدارة" }
         )
         vouchers.value = listOf(newVoucher) + vouchers.value
 
@@ -994,6 +1000,16 @@ class FundRepository private constructor() {
         logAudit("إعدادات النظام", "تحديث الإعدادات التشغيلية والمالية الشاملة لجميع الشاشات")
     }
 
+    fun updatePrintSettings(settings: PrintSettings) {
+        printSettings.value = settings
+        logAudit("إعدادات الطباعة والسندات", "تحديث قوالب الترويسة والتذييل والخطوط وحقول التوقيعات")
+    }
+
+    fun resetPrintSettingsToDefault() {
+        printSettings.value = PrintSettings()
+        logAudit("إعدادات الطباعة والسندات", "استعادة الإعدادات الافتراضية لقوالب الطباعة والسندات")
+    }
+
     // ------------------------------------------------------------------------
     // Regions & Villages Management (1 Region -> Multiple Villages)
     // ------------------------------------------------------------------------
@@ -1106,6 +1122,58 @@ class FundRepository private constructor() {
             put("defaultEventLocation", st.defaultEventLocation)
             put("strictRolePermissions", st.strictRolePermissions)
             put("enableAuditTrail", st.enableAuditTrail)
+        })
+
+        // PrintSettings
+        val ps = printSettings.value
+        root.put("printSettings", JSONObject().apply {
+            put("showCountryHeader", ps.showCountryHeader)
+            put("countryHeaderText", ps.countryHeaderText)
+            put("showDepartmentHeader", ps.showDepartmentHeader)
+            put("departmentHeaderText", ps.departmentHeaderText)
+            put("showLogoInPrint", ps.showLogoInPrint)
+            put("showLicenseAndAddress", ps.showLicenseAndAddress)
+            put("receiptVoucherTitle", ps.receiptVoucherTitle)
+            put("paymentVoucherTitle", ps.paymentVoucherTitle)
+            put("journalVoucherTitle", ps.journalVoucherTitle)
+            put("financialStatementSubtitle", ps.financialStatementSubtitle)
+            put("analyticalReportSubtitle", ps.analyticalReportSubtitle)
+            put("receiptPartyLabel", ps.receiptPartyLabel)
+            put("paymentPartyLabel", ps.paymentPartyLabel)
+            put("amountWordsLabel", ps.amountWordsLabel)
+            put("paymentMethodLabel", ps.paymentMethodLabel)
+            put("accountLabel", ps.accountLabel)
+            put("descriptionLabel", ps.descriptionLabel)
+            put("fontFamily", ps.fontFamily.name)
+            put("headerFontSizeSp", ps.headerFontSizeSp)
+            put("bodyFontSizeSp", ps.bodyFontSizeSp)
+            put("signatureFontSizeSp", ps.signatureFontSizeSp)
+            put("borderStyle", ps.borderStyle.name)
+            put("paperSize", ps.paperSize.name)
+            put("accentColorHex", ps.accentColorHex)
+            put("showSignaturesSection", ps.showSignaturesSection)
+            put("sig1Enabled", ps.sig1Enabled)
+            put("sig1Title", ps.sig1Title)
+            put("sig1DefaultName", ps.sig1DefaultName)
+            put("sig2Enabled", ps.sig2Enabled)
+            put("sig2Title", ps.sig2Title)
+            put("sig2DefaultName", ps.sig2DefaultName)
+            put("sig3Enabled", ps.sig3Enabled)
+            put("sig3Title", ps.sig3Title)
+            put("sig3DefaultName", ps.sig3DefaultName)
+            put("sig4Enabled", ps.sig4Enabled)
+            put("sig4Title", ps.sig4Title)
+            put("sig4DefaultName", ps.sig4DefaultName)
+            put("showSignatureLine", ps.showSignatureLine)
+            put("showOfficialStampBox", ps.showOfficialStampBox)
+            put("officialStampLabel", ps.officialStampLabel)
+            put("showQrVerification", ps.showQrVerification)
+            put("qrCaptionText", ps.qrCaptionText)
+            put("showJournalReference", ps.showJournalReference)
+            put("showCurrencyDetails", ps.showCurrencyDetails)
+            put("showFundContactInFooter", ps.showFundContactInFooter)
+            put("footerNote", ps.footerNote)
+            put("footerSubNote", ps.footerSubNote)
         })
 
         // Members
@@ -1265,6 +1333,59 @@ class FundRepository private constructor() {
                     defaultEventLocation = st.optString("defaultEventLocation", cur.defaultEventLocation),
                     strictRolePermissions = st.optBoolean("strictRolePermissions", cur.strictRolePermissions),
                     enableAuditTrail = st.optBoolean("enableAuditTrail", cur.enableAuditTrail)
+                )
+            }
+
+            root.optJSONObject("printSettings")?.let { psObj ->
+                val cur = printSettings.value
+                printSettings.value = PrintSettings(
+                    showCountryHeader = psObj.optBoolean("showCountryHeader", cur.showCountryHeader),
+                    countryHeaderText = psObj.optString("countryHeaderText", cur.countryHeaderText),
+                    showDepartmentHeader = psObj.optBoolean("showDepartmentHeader", cur.showDepartmentHeader),
+                    departmentHeaderText = psObj.optString("departmentHeaderText", cur.departmentHeaderText),
+                    showLogoInPrint = psObj.optBoolean("showLogoInPrint", cur.showLogoInPrint),
+                    showLicenseAndAddress = psObj.optBoolean("showLicenseAndAddress", cur.showLicenseAndAddress),
+                    receiptVoucherTitle = psObj.optString("receiptVoucherTitle", cur.receiptVoucherTitle),
+                    paymentVoucherTitle = psObj.optString("paymentVoucherTitle", cur.paymentVoucherTitle),
+                    journalVoucherTitle = psObj.optString("journalVoucherTitle", cur.journalVoucherTitle),
+                    financialStatementSubtitle = psObj.optString("financialStatementSubtitle", cur.financialStatementSubtitle),
+                    analyticalReportSubtitle = psObj.optString("analyticalReportSubtitle", cur.analyticalReportSubtitle),
+                    receiptPartyLabel = psObj.optString("receiptPartyLabel", cur.receiptPartyLabel),
+                    paymentPartyLabel = psObj.optString("paymentPartyLabel", cur.paymentPartyLabel),
+                    amountWordsLabel = psObj.optString("amountWordsLabel", cur.amountWordsLabel),
+                    paymentMethodLabel = psObj.optString("paymentMethodLabel", cur.paymentMethodLabel),
+                    accountLabel = psObj.optString("accountLabel", cur.accountLabel),
+                    descriptionLabel = psObj.optString("descriptionLabel", cur.descriptionLabel),
+                    fontFamily = runCatching { PrintFontOption.valueOf(psObj.optString("fontFamily")) }.getOrDefault(cur.fontFamily),
+                    headerFontSizeSp = psObj.optInt("headerFontSizeSp", cur.headerFontSizeSp),
+                    bodyFontSizeSp = psObj.optInt("bodyFontSizeSp", cur.bodyFontSizeSp),
+                    signatureFontSizeSp = psObj.optInt("signatureFontSizeSp", cur.signatureFontSizeSp),
+                    borderStyle = runCatching { PrintBorderStyle.valueOf(psObj.optString("borderStyle")) }.getOrDefault(cur.borderStyle),
+                    paperSize = runCatching { PrintPaperSize.valueOf(psObj.optString("paperSize")) }.getOrDefault(cur.paperSize),
+                    accentColorHex = psObj.optString("accentColorHex", cur.accentColorHex),
+                    showSignaturesSection = psObj.optBoolean("showSignaturesSection", cur.showSignaturesSection),
+                    sig1Enabled = psObj.optBoolean("sig1Enabled", cur.sig1Enabled),
+                    sig1Title = psObj.optString("sig1Title", cur.sig1Title),
+                    sig1DefaultName = psObj.optString("sig1DefaultName", cur.sig1DefaultName),
+                    sig2Enabled = psObj.optBoolean("sig2Enabled", cur.sig2Enabled),
+                    sig2Title = psObj.optString("sig2Title", cur.sig2Title),
+                    sig2DefaultName = psObj.optString("sig2DefaultName", cur.sig2DefaultName),
+                    sig3Enabled = psObj.optBoolean("sig3Enabled", cur.sig3Enabled),
+                    sig3Title = psObj.optString("sig3Title", cur.sig3Title),
+                    sig3DefaultName = psObj.optString("sig3DefaultName", cur.sig3DefaultName),
+                    sig4Enabled = psObj.optBoolean("sig4Enabled", cur.sig4Enabled),
+                    sig4Title = psObj.optString("sig4Title", cur.sig4Title),
+                    sig4DefaultName = psObj.optString("sig4DefaultName", cur.sig4DefaultName),
+                    showSignatureLine = psObj.optBoolean("showSignatureLine", cur.showSignatureLine),
+                    showOfficialStampBox = psObj.optBoolean("showOfficialStampBox", cur.showOfficialStampBox),
+                    officialStampLabel = psObj.optString("officialStampLabel", cur.officialStampLabel),
+                    showQrVerification = psObj.optBoolean("showQrVerification", cur.showQrVerification),
+                    qrCaptionText = psObj.optString("qrCaptionText", cur.qrCaptionText),
+                    showJournalReference = psObj.optBoolean("showJournalReference", cur.showJournalReference),
+                    showCurrencyDetails = psObj.optBoolean("showCurrencyDetails", cur.showCurrencyDetails),
+                    showFundContactInFooter = psObj.optBoolean("showFundContactInFooter", cur.showFundContactInFooter),
+                    footerNote = psObj.optString("footerNote", cur.footerNote),
+                    footerSubNote = psObj.optString("footerSubNote", cur.footerSubNote)
                 )
             }
 

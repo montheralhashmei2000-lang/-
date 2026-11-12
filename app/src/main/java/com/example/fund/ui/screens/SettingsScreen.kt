@@ -38,6 +38,8 @@ fun SettingsScreen() {
     val members by repo.members.collectAsState()
     val beneficiaries by repo.beneficiaries.collectAsState()
     val appSettings by repo.appSettings.collectAsState()
+    val printSettings by repo.printSettings.collectAsState()
+    val vouchers by repo.vouchers.collectAsState()
     val rates by repo.currencyRates.collectAsState()
     val isDark by repo.isDarkMode.collectAsState()
     val fontScale by repo.fontScale.collectAsState()
@@ -53,6 +55,7 @@ fun SettingsScreen() {
         "المناطق والقرى",
         "الأعضاء والمساعدات",
         "المالية والعملات",
+        "الطباعة والسندات",
         "النظام والنسخ"
     )
 
@@ -174,7 +177,21 @@ fun SettingsScreen() {
                     }
                 )
 
-                4 -> SystemServerBackupTab(
+                4 -> PrintSettingsTab(
+                    fundInfo = fundInfo,
+                    printSettings = printSettings,
+                    sampleVoucher = vouchers.firstOrNull(),
+                    onSave = { updated ->
+                        repo.updatePrintSettings(updated)
+                        Toast.makeText(context, "تم حفظ إعدادات الطباعة والسندات بنجاح", Toast.LENGTH_SHORT).show()
+                    },
+                    onResetDefault = {
+                        repo.resetPrintSettingsToDefault()
+                        Toast.makeText(context, "تمت استعادة القالب الافتراضي للطباعة", Toast.LENGTH_SHORT).show()
+                    }
+                )
+
+                5 -> SystemServerBackupTab(
                     repo = repo,
                     fundInfo = fundInfo,
                     appSettings = appSettings,

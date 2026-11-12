@@ -1,11 +1,6 @@
 package com.example.fund.ui.screens
 
-import android.content.Context
 import android.content.Intent
-import android.print.PrintAttributes
-import android.print.PrintManager
-import android.webkit.WebView
-import android.webkit.WebViewClient
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -29,6 +24,7 @@ import com.example.fund.data.FundRepository
 import com.example.fund.model.AidStatus
 import com.example.fund.model.VoucherStatus
 import com.example.fund.model.VoucherType
+import com.example.fund.util.OfficialPrintHelper
 import com.example.ui.theme.*
 
 @Composable
@@ -111,10 +107,9 @@ fun ReportsScreen() {
                 }
                 Button(
                     onClick = {
-                        printAnalyticalReportPdf(
+                        OfficialPrintHelper.printAnalyticalReportPdf(
                             context = context,
-                            fundName = fundInfo.name,
-                            logoBase64 = fundInfo.customLogoBase64,
+                            fundInfo = fundInfo,
                             totalRev = totalRev,
                             totalExp = totalExp,
                             membersCount = members.size,
@@ -357,66 +352,5 @@ private fun ReportKpiCard(title: String, value: String, color: Color, modifier: 
             Text(title, style = MaterialTheme.typography.labelSmall, color = color)
             Text(value, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.ExtraBold, color = color)
         }
-    }
-}
-
-private fun printAnalyticalReportPdf(
-    context: Context,
-    fundName: String,
-    logoBase64: String,
-    totalRev: Long,
-    totalExp: Long,
-    membersCount: Int,
-    disbursedAidsCount: Int
-) {
-    try {
-        val logoHtml = if (logoBase64.isNotBlank()) {
-            """<img src="data:image/png;base64,$logoBase64" style="width:52px;height:52px;border-radius:50%;object-fit:cover;border:2px solid #F9A825;margin-bottom:6px;" />"""
-        } else ""
-
-        val html = """
-            <!DOCTYPE html>
-            <html dir="rtl" lang="ar">
-            <head>
-                <meta charset="utf-8"/>
-                <style>
-                    body { font-family: sans-serif; direction: rtl; padding: 24px; color: #14210F; }
-                    .header { background: #003300; color: white; padding: 16px; border-radius: 8px; text-align: center; }
-                    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-                    th, td { border: 1px solid #D8E4D2; padding: 12px; text-align: right; }
-                    th { background: #1B5E20; color: white; }
-                </style>
-            </head>
-            <body>
-                <div class="header">
-                    $logoHtml
-                    <h2>$fundName</h2>
-                    <p>التقرير المالي والإحصائي المعتمد</p>
-                </div>
-                <table>
-                    <tr><th>البيان الإحصائي / المالي</th><th>القيمة المعتمدة</th></tr>
-                    <tr><td>إجمالي المقبوضات المعتمدة</td><td>${"%,d ﷼".format(totalRev)}</td></tr>
-                    <tr><td>إجمالي المصروفات المعتمدة</td><td>${"%,d ﷼".format(totalExp)}</td></tr>
-                    <tr><td>صافي الفائض النقدي والبنكي</td><td><b>${"%,d ﷼".format(totalRev - totalExp)}</b></td></tr>
-                    <tr><td>إجمالي الأعضاء المسجلين</td><td>$membersCount عضو</td></tr>
-                    <tr><td>عدد حالات المساعدات المنفذة</td><td>$disbursedAidsCount حالة</td></tr>
-                </table>
-            </body>
-            </html>
-        """.trimIndent()
-
-        val webView = WebView(context)
-        webView.webViewClient = object : WebViewClient() {
-            override fun onPageFinished(view: WebView, url: String?) {
-                val printManager = context.getSystemService(Context.PRINT_SERVICE) as? PrintManager
-                if (printManager != null) {
-                    val adapter = view.createPrintDocumentAdapter("Analytical_Report")
-                    printManager.print("تقرير_الصندوق_المالي", adapter, PrintAttributes.Builder().build())
-                }
-            }
-        }
-        webView.loadDataWithBaseURL(null, html, "text/HTML", "UTF-8", null)
-    } catch (e: Exception) {
-        Toast.makeText(context, "تم تجهيز التقرير للطباعة", Toast.LENGTH_SHORT).show()
     }
 }

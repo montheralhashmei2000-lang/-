@@ -43,17 +43,34 @@ class ExampleRobolectricTest {
     )
     repo.updateAppSettings(updatedSettings)
 
+    val updatedPrintSettings = repo.printSettings.value.copy(
+      countryHeaderText = "إدارة التنمية المجتمعية",
+      receiptVoucherTitle = "إيصال قبض مخصص",
+      footerNote = "تذييل اختباري مخصص",
+      fontFamily = com.example.fund.model.PrintFontOption.CAIRO,
+      sig2Title = "أمين الصندوق العام",
+      sig2DefaultName = "سالم عبدالله"
+    )
+    repo.updatePrintSettings(updatedPrintSettings)
+
     val exportedJson = repo.exportDatabaseJson()
     assertTrue(exportedJson.contains("منطقة الشمال"))
     assertTrue(exportedJson.contains("BASE64_SAMPLE_LOGO"))
+    assertTrue(exportedJson.contains("إيصال قبض مخصص"))
 
     repo.resetToDefaultSeedData()
     assertEquals("", repo.fundInfo.value.customLogoBase64)
+    assertEquals(com.example.fund.model.PrintFontOption.AMIRI, repo.printSettings.value.fontFamily)
 
     assertTrue(repo.importDatabaseFromJson(exportedJson))
     assertEquals("BASE64_SAMPLE_LOGO", repo.fundInfo.value.customLogoBase64)
     assertEquals(35000.0, repo.appSettings.value.monthlySubscriptionFeeYer, 0.001)
     assertEquals("REC", repo.appSettings.value.voucherNoPrefix)
+    assertEquals("إيصال قبض مخصص", repo.printSettings.value.receiptVoucherTitle)
+    assertEquals("تذييل اختباري مخصص", repo.printSettings.value.footerNote)
+    assertEquals(com.example.fund.model.PrintFontOption.CAIRO, repo.printSettings.value.fontFamily)
+    assertEquals("سالم عبدالله", repo.printSettings.value.sig2DefaultName)
     assertTrue(repo.regions.value.any { it.name == "منطقة الشمال" && it.villages.contains("قرية الجبل") })
+    assertTrue(com.example.fund.util.generateQrSvg("TEST").contains("<svg"))
   }
 }

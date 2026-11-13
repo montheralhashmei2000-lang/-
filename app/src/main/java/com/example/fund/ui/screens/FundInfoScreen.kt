@@ -31,12 +31,15 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.fund.data.FundRepository
 import com.example.fund.ui.components.FundLogoImage
 import com.example.fund.ui.components.encodeImageUriToBase64
+import com.example.fund.util.FormatUtils
+import com.example.fund.util.LocalScreenFormat
 import com.example.ui.theme.*
 
 @Composable
 fun FundInfoScreen() {
     val context = LocalContext.current
     val repo = FundRepository.getInstance()
+    val screenFormat = LocalScreenFormat.current
     val fundInfo by repo.fundInfo.collectAsStateWithLifecycle()
     val regions by repo.regions.collectAsStateWithLifecycle()
 
@@ -48,6 +51,7 @@ fun FundInfoScreen() {
     var email by remember(fundInfo) { mutableStateOf(fundInfo.email) }
     var bankKareemi by remember(fundInfo) { mutableStateOf(fundInfo.bankAccountKareemi) }
     var bankCAC by remember(fundInfo) { mutableStateOf(fundInfo.bankAccountCAC) }
+    var fiscalYear by remember(fundInfo) { mutableStateOf(fundInfo.fiscalYear) }
     var ceilingStr by remember(fundInfo) { mutableStateOf(fundInfo.maxAidCeilingYer.toLong().toString()) }
 
     val logoPickerLauncher = rememberLauncherForActivityResult(
@@ -138,7 +142,7 @@ fun FundInfoScreen() {
                         Text("معاينة حية للترويسة الرسمية", fontSize = 10.sp, color = FundPrimary, fontWeight = FontWeight.Bold)
                     }
                     Text(
-                        "السقف الفردي: ${"%,d".format(ceilingStr.toLongOrNull() ?: 500000L)} ﷼",
+                        "السقف الفردي: ${FormatUtils.formatAmount(ceilingStr.toDoubleOrNull() ?: fundInfo.maxAidCeilingYer, screenFormat)}",
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
                         color = FundGoldDark
@@ -253,7 +257,22 @@ fun FundInfoScreen() {
                 OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text("البريد الإلكتروني الرسمي") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                 OutlinedTextField(value = bankKareemi, onValueChange = { bankKareemi = it }, label = { Text("بيانات حساب بنك الكريمي الإسلامي") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                 OutlinedTextField(value = bankCAC, onValueChange = { bankCAC = it }, label = { Text("بيانات حساب بنك التسليف CAC") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-                OutlinedTextField(value = ceilingStr, onValueChange = { ceilingStr = it }, label = { Text("السقف الأعلى الافتراضي للمساعدات الفردية (﷼)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = ceilingStr,
+                        onValueChange = { ceilingStr = it.filter { c -> c.isDigit() } },
+                        label = { Text("السقف الأعلى للمساعدة (${screenFormat.resolvedCurrencySymbol()})") },
+                        modifier = Modifier.weight(1.3f),
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = fiscalYear,
+                        onValueChange = { fiscalYear = it },
+                        label = { Text("السنة المالية") },
+                        modifier = Modifier.weight(0.7f),
+                        singleLine = true
+                    )
+                }
 
                 Button(
                     onClick = {
@@ -268,6 +287,7 @@ fun FundInfoScreen() {
                                 email = email,
                                 bankAccountKareemi = bankKareemi,
                                 bankAccountCAC = bankCAC,
+                                fiscalYear = fiscalYear,
                                 maxAidCeilingYer = c
                             )
                         )

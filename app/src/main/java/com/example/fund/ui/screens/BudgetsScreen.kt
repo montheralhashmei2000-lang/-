@@ -21,11 +21,15 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.fund.data.FundRepository
 import com.example.fund.model.Budget
 import com.example.fund.model.UserRole
+import com.example.fund.util.FormatUtils
+import com.example.fund.util.LocalScreenFormat
 import com.example.ui.theme.*
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun BudgetsScreen() {
     val context = LocalContext.current
+    val screenFormat = LocalScreenFormat.current
     val repo = FundRepository.getInstance()
     val budgets by repo.budgets.collectAsStateWithLifecycle()
     val settings by repo.appSettings.collectAsStateWithLifecycle()
@@ -39,129 +43,140 @@ fun BudgetsScreen() {
     val totalSpent = budgets.sumOf { it.actualSpent }
     val overallRatio = (totalSpent / totalBudget.coerceAtLeast(1.0)).toFloat().coerceIn(0f, 1f)
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(14.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         // Master Card
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = FundPrimary)
-        ) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("الموازنة التقديرية العامة لعام 2026", color = Color.White.copy(alpha = 0.85f), fontSize = 12.sp)
-                    if (canManage) {
-                        Button(
-                            onClick = { showAddDialog = true },
-                            colors = ButtonDefaults.buttonColors(containerColor = FundGold),
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Icon(Icons.Default.Add, contentDescription = null, tint = Color.Black, modifier = Modifier.size(14.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("بند موازنة جديد", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+        item(key = "budgets_master_card") {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = FundPrimary)
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "الموازنة التقديرية العامة لعام ${FormatUtils.formatCodeOrNumber("2026", screenFormat)}",
+                            color = Color.White.copy(alpha = 0.9f),
+                            fontSize = 12.sp,
+                            modifier = Modifier.weight(1f)
+                        )
+                        if (canManage) {
+                            Button(
+                                onClick = { showAddDialog = true },
+                                colors = ButtonDefaults.buttonColors(containerColor = FundGold),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = null, tint = Color.Black, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("بند موازنة جديد", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 11.sp, maxLines = 1, softWrap = false)
+                            }
                         }
                     }
-                }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Bottom
-                ) {
-                    Column {
-                        Text("المنصرف الفعلي: %,d ﷼".format(totalSpent.toLong()), color = Color.White, fontWeight = FontWeight.Black, fontSize = 18.sp, style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"))
-                        Text("من أصل معتمد: %,d ﷼".format(totalBudget.toLong()), color = FundGoldLight, fontSize = 12.sp, style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.Bottom
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("المنصرف الفعلي: ${FormatUtils.formatAmount(totalSpent, screenFormat)}", color = Color.White, fontWeight = FontWeight.Black, fontSize = 17.sp, style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"))
+                            Text("من أصل معتمد: ${FormatUtils.formatAmount(totalBudget, screenFormat)}", color = FundGoldLight, fontSize = 12.sp, style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"))
+                        }
+                        Text("${FormatUtils.formatCodeOrNumber((overallRatio * 100).toInt().toString(), screenFormat)}%", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp, style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"))
                     }
-                    Text("${(overallRatio * 100).toInt()}%", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp, style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"))
-                }
 
-                LinearProgressIndicator(
-                    progress = { overallRatio },
-                    modifier = Modifier.fillMaxWidth().height(10.dp),
-                    color = FundGold,
-                    trackColor = Color.White.copy(alpha = 0.3f)
-                )
+                    LinearProgressIndicator(
+                        progress = { overallRatio },
+                        modifier = Modifier.fillMaxWidth().height(10.dp),
+                        color = FundGold,
+                        trackColor = Color.White.copy(alpha = 0.3f)
+                    )
+                }
             }
         }
 
-        Text(
-            "بنود المصروفات والموازنات الفرعية",
-            fontFamily = AmiriFontFamily,
-            fontWeight = FontWeight.Bold,
-            fontSize = 16.sp,
-            color = FundPrimary
-        )
+        item(key = "budgets_list_header") {
+            Text(
+                "بنود المصروفات والموازنات الفرعية",
+                fontFamily = AmiriFontFamily,
+                fontWeight = FontWeight.Bold,
+                fontSize = 16.sp,
+                color = FundPrimary
+            )
+        }
 
-        LazyColumn(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            items(budgets, key = { it.id }) { b ->
-                val ratio = (b.actualSpent / b.budgetedAmount.coerceAtLeast(1.0)).toFloat()
-                val isOver = b.actualSpent > b.budgetedAmount
-                val remaining = b.budgetedAmount - b.actualSpent
+        items(budgets, key = { it.id }) { b ->
+            val ratio = (b.actualSpent / b.budgetedAmount.coerceAtLeast(1.0)).toFloat()
+            val isOver = b.actualSpent > b.budgetedAmount
+            val remaining = b.budgetedAmount - b.actualSpent
 
-                Card(
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, if (isOver) StatusDanger else MaterialTheme.colorScheme.outline),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("${b.category} (${b.accountCode})", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Text(
-                                    text = "${(ratio * 100).toInt()}%",
-                                    fontWeight = FontWeight.Black,
-                                    color = if (isOver) StatusDanger else FundPrimary,
-                                    fontSize = 13.sp
-                                )
-                                if (canManage) {
-                                    IconButton(
-                                        onClick = { budgetToEdit = b },
-                                        modifier = Modifier.size(24.dp)
-                                    ) {
-                                        Icon(Icons.Default.Edit, contentDescription = "تعديل السقف", tint = FundPrimary, modifier = Modifier.size(16.dp))
-                                    }
+            Card(
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = androidx.compose.foundation.BorderStroke(1.dp, if (isOver) StatusDanger else MaterialTheme.colorScheme.outline),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "${b.category} (${FormatUtils.formatCodeOrNumber(b.accountCode, screenFormat)})",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                            modifier = Modifier.weight(1f),
+                            style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
+                        )
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text(
+                                text = "${FormatUtils.formatCodeOrNumber((ratio * 100).toInt().toString(), screenFormat)}%",
+                                fontWeight = FontWeight.Black,
+                                color = if (isOver) StatusDanger else FundPrimary,
+                                fontSize = 13.sp,
+                                style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
+                            )
+                            if (canManage) {
+                                IconButton(
+                                    onClick = { budgetToEdit = b },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(Icons.Default.Edit, contentDescription = "تعديل السقف", tint = FundPrimary, modifier = Modifier.size(16.dp))
                                 }
                             }
                         }
+                    }
 
-                        LinearProgressIndicator(
-                            progress = { ratio.coerceIn(0f, 1f) },
-                            modifier = Modifier.fillMaxWidth().height(8.dp),
-                            color = if (isOver) StatusDanger else if (ratio >= settings.budgetAlertPercent / 100f) FundGoldDark else FundPrimary,
-                            trackColor = MaterialTheme.colorScheme.surfaceVariant
+                    LinearProgressIndicator(
+                        progress = { ratio.coerceIn(0f, 1f) },
+                        modifier = Modifier.fillMaxWidth().height(8.dp),
+                        color = if (isOver) StatusDanger else if (ratio >= settings.budgetAlertPercent / 100f) FundGoldDark else FundPrimary,
+                        trackColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text("المنصرف: ${FormatUtils.formatAmount(b.actualSpent, screenFormat)}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"))
+                        Text("المعتمد: ${FormatUtils.formatAmount(b.budgetedAmount, screenFormat)}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"))
+                        Text(
+                            text = if (remaining >= 0) "المتبقي: ${FormatUtils.formatAmount(remaining, screenFormat)}" else "تجاوز السقف: ${FormatUtils.formatAmount(-remaining, screenFormat)}",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (remaining >= 0) StatusSuccess else StatusDanger,
+                            style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
                         )
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text("المنصرف: %,d ﷼".format(b.actualSpent.toLong()), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"))
-                            Text("المعتمد: %,d ﷼".format(b.budgetedAmount.toLong()), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"))
-                            Text(
-                                text = if (remaining >= 0) "المتبقي: %,d ﷼".format(remaining.toLong()) else "تجاوز السقف: %,d ﷼".format(-remaining.toLong()),
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (remaining >= 0) StatusSuccess else StatusDanger,
-                                style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
-                            )
-                        }
                     }
                 }
             }
@@ -177,7 +192,7 @@ fun BudgetsScreen() {
                 OutlinedTextField(
                     value = newAmtStr,
                     onValueChange = { newAmtStr = it },
-                    label = { Text("المبلغ التقديري المعتمد (﷼)") },
+                    label = { Text("المبلغ التقديري المعتمد (${screenFormat.resolvedCurrencySymbol()})") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -215,7 +230,7 @@ fun BudgetsScreen() {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     OutlinedTextField(value = category, onValueChange = { category = it }, label = { Text("اسم بند الصرف / النشاط") }, modifier = Modifier.fillMaxWidth())
                     OutlinedTextField(value = accCode, onValueChange = { accCode = it }, label = { Text("رمز الحساب المحاسبي المرتبط") }, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(value = amountStr, onValueChange = { amountStr = it }, label = { Text("السقف التقديري المعتمد (﷼)") }, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = amountStr, onValueChange = { amountStr = it }, label = { Text("السقف التقديري المعتمد (${screenFormat.resolvedCurrencySymbol()})") }, modifier = Modifier.fillMaxWidth())
                 }
             },
             confirmButton = {

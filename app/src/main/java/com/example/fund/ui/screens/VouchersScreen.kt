@@ -30,6 +30,7 @@ import com.example.fund.ui.components.MoneyInput
 import com.example.fund.ui.components.SensitiveActionConfirmDialog
 import com.example.fund.ui.components.VoucherPrintDialog
 import com.example.fund.ui.viewmodel.AccountingViewModel
+import com.example.fund.util.FormatUtils
 import com.example.ui.theme.*
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -43,6 +44,7 @@ fun VouchersScreen(
     val vouchers by accountingViewModel.vouchers.collectAsStateWithLifecycle()
     val accounts by accountingViewModel.accounts.collectAsStateWithLifecycle()
     val currentUser by accountingViewModel.currentUser.collectAsStateWithLifecycle()
+    val screenFormat by accountingViewModel.screenFormat.collectAsStateWithLifecycle()
     val canIssue = currentUser.role != UserRole.VIEWER
 
     var selectedFilter by remember(initialFilter) { mutableStateOf(initialFilter) }
@@ -87,12 +89,12 @@ fun VouchersScreen(
         // Header Row
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "سندات القبض والصرف الرسمية (${filteredVouchers.size})",
+                    text = "سندات القبض والصرف الرسمية (${FormatUtils.formatCodeOrNumber(filteredVouchers.size.toString(), screenFormat)})",
                     fontWeight = FontWeight.Bold,
                     fontSize = 16.sp,
                     color = FundPrimary
@@ -113,7 +115,7 @@ fun VouchersScreen(
                 ) {
                     Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("إصدار سند", fontSize = 12.sp)
+                    Text("إصدار سند", fontSize = 12.sp, maxLines = 1, softWrap = false)
                 }
             }
         }
@@ -210,7 +212,7 @@ fun VouchersScreen(
                                     shape = RoundedCornerShape(8.dp)
                                 ) {
                                     Text(
-                                        text = "📅 تاريخ: $date",
+                                        text = "📅 تاريخ: ${FormatUtils.formatDate(date, screenFormat)}",
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = FundPrimary,
@@ -218,10 +220,9 @@ fun VouchersScreen(
                                         style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
                                     )
                                 }
+                                val dayTotal = dayVouchers.filter { it.status == VoucherStatus.POSTED }.sumOf { it.amountYer }
                                 Text(
-                                    text = "${dayVouchers.size} سند • إجمالي %,d ﷼".format(
-                                        dayVouchers.filter { it.status == VoucherStatus.POSTED }.sumOf { it.amountYer }.toLong()
-                                    ),
+                                    text = "${FormatUtils.toArabicDigitsIfNeeded(dayVouchers.size.toString(), screenFormat.digitLanguage)} سند • إجمالي ${FormatUtils.formatAmount(dayTotal, screenFormat)}",
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -234,6 +235,7 @@ fun VouchersScreen(
                     items(dayVouchers, key = { it.id }) { voucher ->
                         VoucherListItem(
                             voucher = voucher,
+                            screenFormat = screenFormat,
                             canIssue = canIssue,
                             onPrint = { voucherToPrint = voucher },
                             onVoidRequest = { pendingVoidVoucher = voucher }
@@ -248,7 +250,7 @@ fun VouchersScreen(
     pendingVoidVoucher?.let { voucher ->
         SensitiveActionConfirmDialog(
             title = "تأكيد إلغاء السند المالي",
-            message = "هل أنت متأكد من إلغاء السند رقم (${voucher.voucherNo}) بمبلغ ${"%,d".format(voucher.amountYer.toLong())} ﷼؟ سيتم توليد قيد عكسي آلي وتعديل الأرصدة.",
+            message = "هل أنت متأكد من إلغاء السند رقم (${FormatUtils.formatCodeOrNumber(voucher.voucherNo, screenFormat)}) بمبلغ ${FormatUtils.formatAmount(voucher.amountYer, screenFormat)}؟ سيتم توليد قيد عكسي آلي وتعديل الأرصدة.",
             confirmText = "تأكيد الإلغاء والقيد العكسي",
             confirmColor = StatusDanger,
             icon = Icons.Default.Cancel,
@@ -289,7 +291,7 @@ fun VouchersScreen(
                         counterpartAccountCode = counterpartCode,
                         description = desc
                     )
-                    Toast.makeText(context, "تم إصدار السند ${v.voucherNo} وترحيل القيد المحاسبي", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "تم إصدار السند ${FormatUtils.formatCodeOrNumber(v.voucherNo, screenFormat)} وترحيل القيد المحاسبي", Toast.LENGTH_SHORT).show()
                     showNewVoucherDialog = false
                     voucherToPrint = v
                 }
@@ -301,6 +303,7 @@ fun VouchersScreen(
 @Composable
 private fun VoucherListItem(
     voucher: Voucher,
+    screenFormat: DisplayFormatConfig,
     canIssue: Boolean,
     onPrint: () -> Unit,
     onVoidRequest: () -> Unit
@@ -318,10 +321,11 @@ private fun VoucherListItem(
         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(
+                    modifier = Modifier.weight(1f),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
@@ -334,12 +338,14 @@ private fun VoucherListItem(
                             text = if (isVoid) "ملغي - VOID" else voucher.type.title,
                             color = color,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 11.sp
+                            fontSize = 11.sp,
+                            maxLines = 1,
+                            softWrap = false
                         )
                     }
 
                     Text(
-                        text = voucher.voucherNo,
+                        text = FormatUtils.formatCodeOrNumber(voucher.voucherNo, screenFormat),
                         fontWeight = FontWeight.Bold,
                         fontSize = 13.sp,
                         color = MaterialTheme.colorScheme.onSurface,
@@ -348,10 +354,12 @@ private fun VoucherListItem(
                 }
 
                 Text(
-                    text = "%,d ﷼".format(voucher.amountYer.toLong()),
+                    text = FormatUtils.formatAmount(voucher.amountYer, screenFormat),
                     fontWeight = FontWeight.Black,
                     fontSize = 15.sp,
                     color = color,
+                    maxLines = 1,
+                    softWrap = false,
                     style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
                 )
             }
@@ -370,12 +378,23 @@ private fun VoucherListItem(
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("الحساب: ${voucher.accountName}", fontSize = 11.sp, color = Color.Gray)
-                Text("القيد: ${voucher.linkedJournalEntryId}", fontSize = 11.sp, color = FundPrimary)
                 Text(
-                    voucher.date,
+                    "الحساب: ${voucher.accountName}",
+                    fontSize = 11.sp,
+                    color = Color.Gray,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(
+                    "القيد: ${FormatUtils.formatCodeOrNumber(voucher.linkedJournalEntryId, screenFormat)}",
+                    fontSize = 11.sp,
+                    color = FundPrimary,
+                    style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
+                )
+                Text(
+                    FormatUtils.formatDate(voucher.date, screenFormat),
                     fontSize = 11.sp,
                     color = Color.Gray,
                     style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")

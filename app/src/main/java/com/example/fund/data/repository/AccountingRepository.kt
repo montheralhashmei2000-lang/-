@@ -88,7 +88,7 @@ class AccountingRepository(
             v.voucherNo.substringAfterLast("-").toIntOrNull()
         }.maxOrNull() ?: 0
         val nextNum = maxOf(maxExisting, _vouchers.value.size) + 1
-        return "$yearPrefix%03d".format(nextNum)
+        return String.format(Locale.US, "%s%03d", yearPrefix, nextNum)
     }
 
     private fun nextJournalNo(): String {
@@ -97,7 +97,7 @@ class AccountingRepository(
             clean.substringAfterLast("-").toIntOrNull()
         }.maxOrNull() ?: 0
         val nextNum = maxOf(maxExisting, _journalEntries.value.size) + 1
-        return "JE-%06d".format(nextNum)
+        return String.format(Locale.US, "JE-%06d", nextNum)
     }
 
     fun issueVoucher(

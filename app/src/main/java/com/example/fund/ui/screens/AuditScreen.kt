@@ -52,63 +52,9 @@ fun AuditScreen() {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    "سجل العمليات والرقابة المحاسبية (Audit Trail)",
-                    fontFamily = AmiriFontFamily,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp,
-                    color = FundPrimary
-                )
-                Text(
-                    "سجل زمني محمي وغير قابل للتعديل يوثق كل حركة في النظام",
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Icon(Icons.Default.Security, contentDescription = null, tint = FundGoldDark, modifier = Modifier.size(26.dp))
-        }
-
-        // Security Summary Banner
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(14.dp),
-            colors = CardDefaults.cardColors(containerColor = FundDeepHeader)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Icon(Icons.Default.VerifiedUser, contentDescription = null, tint = FundGoldLight, modifier = Modifier.size(20.dp))
-                    Column {
-                        Text("إجمالي العمليات الموثقة: ${logs.size} حركة", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                        Text("الجلسة النشطة: ${currentUser.fullName} | العقدة: ${serverConfig.serverHost}", color = Color.White.copy(alpha = 0.75f), fontSize = 10.sp)
-                    }
-                }
-                Surface(color = FundGold.copy(alpha = 0.2f), shape = RoundedCornerShape(6.dp)) {
-                    Text(
-                        "SHA-256 مؤمّن",
-                        color = FundGoldLight,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                    )
-                }
-            }
-        }
-
         OutlinedTextField(
             value = searchQuery,
             onValueChange = { searchQuery = it },
@@ -145,24 +91,87 @@ fun AuditScreen() {
             }
         }
 
-        if (filteredLogs.isEmpty()) {
-            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.TopCenter) {
-                FundEmptyState(
-                    icon = Icons.Default.Security,
-                    title = "لا توجد سجلات رقابية مطابقة",
-                    subtitle = "جرّب تغيير تصنيف السجل أو مسح عبارة البحث.",
-                    actionLabel = "إعادة ضبط الفلترة",
-                    onAction = {
-                        searchQuery = ""
-                        selectedFilter = "الكل"
+        LazyColumn(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            item(key = "audit_header") {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "سجل العمليات والرقابة المحاسبية (Audit Trail)",
+                            fontFamily = AmiriFontFamily,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp,
+                            color = FundPrimary
+                        )
+                        Text(
+                            "سجل زمني محمي وغير قابل للتعديل يوثق كل حركة في النظام",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
-                )
+                    Icon(Icons.Default.Security, contentDescription = null, tint = FundGoldDark, modifier = Modifier.size(26.dp))
+                }
             }
-        } else {
-            LazyColumn(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
+
+            item(key = "audit_security_banner") {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = FundDeepHeader)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(Icons.Default.VerifiedUser, contentDescription = null, tint = FundGoldLight, modifier = Modifier.size(20.dp))
+                            Column {
+                                Text("إجمالي العمليات الموثقة: ${logs.size} حركة", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                Text("الجلسة النشطة: ${currentUser.fullName} | العقدة: ${serverConfig.serverHost}", color = Color.White.copy(alpha = 0.75f), fontSize = 10.sp)
+                            }
+                        }
+                        Surface(color = FundGold.copy(alpha = 0.2f), shape = RoundedCornerShape(6.dp)) {
+                            Text(
+                                "SHA-256 مؤمّن",
+                                color = FundGoldLight,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                softWrap = false,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (filteredLogs.isEmpty()) {
+                item(key = "audit_empty") {
+                    FundEmptyState(
+                        icon = Icons.Default.Security,
+                        title = "لا توجد سجلات رقابية مطابقة",
+                        subtitle = "جرّب تغيير تصنيف السجل أو مسح عبارة البحث.",
+                        actionLabel = "إعادة ضبط الفلترة",
+                        onAction = {
+                            searchQuery = ""
+                            selectedFilter = "الكل"
+                        }
+                    )
+                }
+            } else {
                 items(filteredLogs, key = { it.id }) { log ->
                     val badgeColor = when {
                         log.actionType.contains("إلغاء") || log.actionType.contains("تصفير") || log.actionType.contains("رفض") -> StatusDanger
@@ -179,12 +188,13 @@ fun AuditScreen() {
                         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Surface(
                                     color = badgeColor.copy(alpha = 0.12f),
-                                    shape = RoundedCornerShape(6.dp)
+                                    shape = RoundedCornerShape(6.dp),
+                                    modifier = Modifier.weight(1f, fill = false)
                                 ) {
                                     Text(
                                         text = log.actionType,
@@ -194,10 +204,13 @@ fun AuditScreen() {
                                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
                                     )
                                 }
+                                Spacer(Modifier.weight(1f))
                                 Text(
                                     log.timestamp,
                                     fontSize = 10.sp,
                                     color = Color.Gray,
+                                    maxLines = 1,
+                                    softWrap = false,
                                     style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
                                 )
                             }
@@ -206,9 +219,15 @@ fun AuditScreen() {
 
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Text("الموظف المنفذ: ${log.userName}", fontSize = 10.sp, color = FundPrimary, fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    "الموظف المنفذ: ${log.userName}",
+                                    fontSize = 10.sp,
+                                    color = FundPrimary,
+                                    fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier.weight(1f)
+                                )
                                 Text("العقدة: ${log.ipOrDevice}", fontSize = 10.sp, color = Color.Gray)
                             }
                         }

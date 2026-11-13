@@ -22,10 +22,16 @@ class MainActivity : FragmentActivity() {
         setContent {
             val isDarkMode by repo.isDarkMode.collectAsStateWithLifecycle()
             val fontScale by repo.fontScale.collectAsStateWithLifecycle()
+            val appFont by repo.appFontFamily.collectAsStateWithLifecycle()
+            val screenFormat by repo.screenFormat.collectAsStateWithLifecycle()
+            val printFormat by repo.printFormat.collectAsStateWithLifecycle()
 
             FundAppTheme(
                 darkTheme = isDarkMode,
-                fontScale = fontScale
+                fontScale = fontScale,
+                appFont = appFont,
+                screenFormat = screenFormat,
+                printFormat = printFormat
             ) {
                 HomeShell()
             }

@@ -30,6 +30,8 @@ import com.example.fund.model.PaymentMethod
 import com.example.fund.model.UserRole
 import com.example.fund.ui.components.FundEmptyState
 import com.example.fund.ui.components.MoneyInput
+import com.example.fund.util.FormatUtils
+import com.example.fund.util.LocalScreenFormat
 import com.example.ui.theme.*
 
 @Composable
@@ -38,6 +40,7 @@ fun SubscriptionsScreen(
     preselectedMemberId: String = ""
 ) {
     val context = LocalContext.current
+    val screenFormat = LocalScreenFormat.current
     val repo = FundRepository.getInstance()
     val subscriptions by repo.subscriptions.collectAsStateWithLifecycle()
     val members by repo.members.collectAsStateWithLifecycle()
@@ -68,55 +71,10 @@ fun SubscriptionsScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        // Summary Card
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = FundPrimary)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column {
-                    Text("إجمالي تحصيلات الاشتراكات المسجلة", color = Color.White.copy(alpha = 0.85f), fontSize = 12.sp)
-                    Text(
-                        "%,d ﷼".format(totalCollected.toLong()),
-                        color = Color.White,
-                        fontWeight = FontWeight.Black,
-                        fontSize = 20.sp,
-                        style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
-                    )
-                    Text(
-                        "عدد العمليات: ${subscriptions.size} اشتراك",
-                        color = FundGoldLight,
-                        fontSize = 11.sp,
-                        style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
-                    )
-                }
-
-                if (canCollect) {
-                    Button(
-                        onClick = { showCollectDialog = true },
-                        colors = ButtonDefaults.buttonColors(containerColor = FundGold),
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.testTag("collect_subscription_button")
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = null, tint = Color.Black)
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("تحصيل اشتراك", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                    }
-                }
-            }
-        }
-
-        // Search
+        // Search pinned cleanly at top
         OutlinedTextField(
             value = searchQuery,
             onValueChange = { searchQuery = it },
@@ -134,29 +92,72 @@ fun SubscriptionsScreen(
             shape = RoundedCornerShape(12.dp)
         )
 
-        // Subscriptions List or Empty State
-        if (filteredSubs.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-                contentAlignment = Alignment.TopCenter
-            ) {
-                FundEmptyState(
-                    icon = Icons.Default.Payments,
-                    title = "لا توجد تحصيلات اشتراكات مطابقة",
-                    subtitle = "لم يتم العثور على إيصالات تحصيل مطابقة لبحثك، يمكنك مسح البحث أو تسجيل تحصيل جديد.",
-                    actionLabel = if (canCollect) "تحصيل اشتراك جديد" else null,
-                    onAction = if (canCollect) ({ showCollectDialog = true }) else null,
-                    secondaryActionLabel = if (searchQuery.isNotBlank()) "مسح البحث" else null,
-                    onSecondaryAction = if (searchQuery.isNotBlank()) ({ searchQuery = "" }) else null
-                )
+        LazyColumn(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            // Summary Card inside scrollable list
+            item(key = "subs_summary_card") {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = FundPrimary)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("إجمالي تحصيلات الاشتراكات المسجلة", color = Color.White.copy(alpha = 0.9f), fontSize = 12.sp)
+                            Text(
+                                FormatUtils.formatAmount(totalCollected, screenFormat),
+                                color = Color.White,
+                                fontWeight = FontWeight.Black,
+                                fontSize = 20.sp,
+                                style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
+                            )
+                            Text(
+                                "عدد العمليات: ${FormatUtils.formatCodeOrNumber(subscriptions.size.toString(), screenFormat)} اشتراك",
+                                color = FundGoldLight,
+                                fontSize = 11.sp,
+                                style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
+                            )
+                        }
+
+                        if (canCollect) {
+                            Button(
+                                onClick = { showCollectDialog = true },
+                                colors = ButtonDefaults.buttonColors(containerColor = FundGold),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier
+                                    .heightIn(min = 44.dp)
+                                    .testTag("collect_subscription_button")
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("تحصيل اشتراك", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1, softWrap = false)
+                            }
+                        }
+                    }
+                }
             }
-        } else {
-            LazyColumn(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
+
+            if (filteredSubs.isEmpty()) {
+                item(key = "subs_empty_state") {
+                    FundEmptyState(
+                        icon = Icons.Default.Payments,
+                        title = "لا توجد تحصيلات اشتراكات مطابقة",
+                        subtitle = "لم يتم العثور على إيصالات تحصيل مطابقة لبحثك، يمكنك مسح البحث أو تسجيل تحصيل جديد.",
+                        actionLabel = if (canCollect) "تحصيل اشتراك جديد" else null,
+                        onAction = if (canCollect) ({ showCollectDialog = true }) else null,
+                        secondaryActionLabel = if (searchQuery.isNotBlank()) "مسح البحث" else null,
+                        onSecondaryAction = if (searchQuery.isNotBlank()) ({ searchQuery = "" }) else null
+                    )
+                }
+            } else {
                 items(filteredSubs, key = { it.id }) { sub ->
                     Card(
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -167,12 +168,12 @@ fun SubscriptionsScreen(
                         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(sub.memberName, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                Text(sub.memberName, fontWeight = FontWeight.Bold, fontSize = 13.sp, modifier = Modifier.weight(1f))
                                 Text(
-                                    "%,d ﷼".format(sub.amountYer.toLong()),
+                                    FormatUtils.formatAmount(sub.amountYer, screenFormat),
                                     fontWeight = FontWeight.Bold,
                                     color = FundPrimary,
                                     fontSize = 14.sp,
@@ -182,15 +183,21 @@ fun SubscriptionsScreen(
 
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Text("إيصال: ${sub.receiptNo} | شهر: ${sub.monthYear}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(
+                                    "إيصال: ${FormatUtils.formatCodeOrNumber(sub.receiptNo, screenFormat)} | شهر: ${FormatUtils.formatCodeOrNumber(sub.monthYear, screenFormat)}",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.weight(1f),
+                                    style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
+                                )
                                 Text(sub.paymentMethod.title, fontSize = 11.sp, color = FundGoldDark)
                             }
 
                             if (sub.currency != CurrencyCode.YER) {
                                 Text(
-                                    "أصل المبلغ: ${sub.amountOriginal} ${sub.currency.name} (سعر الصرف: %,.0f)".format(sub.exchangeRate),
+                                    "أصل المبلغ: ${FormatUtils.formatNumber(sub.amountOriginal, screenFormat)} ${sub.currency.symbol} (سعر الصرف: ${FormatUtils.formatNumber(sub.exchangeRate, screenFormat, decimalsOverride = 0)})",
                                     fontSize = 10.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")

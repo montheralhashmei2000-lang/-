@@ -28,12 +28,14 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.fund.model.Account
+import com.example.fund.model.DisplayFormatConfig
 import com.example.fund.model.JournalEntry
 import com.example.fund.model.JournalLine
 import com.example.fund.model.UserRole
 import com.example.fund.ui.components.FundEmptyState
 import com.example.fund.ui.components.SensitiveActionConfirmDialog
 import com.example.fund.ui.viewmodel.AccountingViewModel
+import com.example.fund.util.FormatUtils
 import com.example.fund.util.OfficialPrintHelper
 import com.example.ui.theme.*
 import kotlin.math.abs
@@ -46,6 +48,7 @@ fun JournalScreen(accountingViewModel: AccountingViewModel = viewModel()) {
     val accounts by accountingViewModel.accounts.collectAsStateWithLifecycle()
     val fundInfo by accountingViewModel.fundInfo.collectAsStateWithLifecycle()
     val currentUser by accountingViewModel.currentUser.collectAsStateWithLifecycle()
+    val screenFormat by accountingViewModel.screenFormat.collectAsStateWithLifecycle()
     val canAdd = currentUser.role == UserRole.ADMIN || currentUser.role == UserRole.ACCOUNTANT
 
     var searchQuery by remember { mutableStateOf("") }
@@ -92,7 +95,7 @@ fun JournalScreen(accountingViewModel: AccountingViewModel = viewModel()) {
         // Header Row
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
@@ -120,7 +123,7 @@ fun JournalScreen(accountingViewModel: AccountingViewModel = viewModel()) {
                 ) {
                     Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("قيد تسوية يدوي", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text("قيد تسوية يدوي", fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
                 }
             }
         }
@@ -135,23 +138,23 @@ fun JournalScreen(accountingViewModel: AccountingViewModel = viewModel()) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 14.dp, vertical = 10.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text("إجمالي المدين (Debit)", color = Color.White.copy(alpha = 0.75f), fontSize = 10.sp)
                     Text(
-                        "%,d ﷼".format(totalAllDebits.toLong()),
+                        FormatUtils.formatAmount(totalAllDebits, screenFormat),
                         color = FundGoldLight,
                         fontWeight = FontWeight.Black,
                         fontSize = 14.sp,
                         style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
                     )
                 }
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text("إجمالي الدائن (Credit)", color = Color.White.copy(alpha = 0.75f), fontSize = 10.sp)
                     Text(
-                        "%,d ﷼".format(totalAllCredits.toLong()),
+                        FormatUtils.formatAmount(totalAllCredits, screenFormat),
                         color = Color.White,
                         fontWeight = FontWeight.Black,
                         fontSize = 14.sp,
@@ -164,10 +167,12 @@ fun JournalScreen(accountingViewModel: AccountingViewModel = viewModel()) {
                     border = BorderStroke(1.dp, if (isLedgerBalanced) Color(0xFF81C784) else StatusDanger)
                 ) {
                     Text(
-                        text = if (isLedgerBalanced) "متوازن (${journalEntries.size} قيد) ✔" else "غير متوازن ❌",
+                        text = if (isLedgerBalanced) "متوازن (${FormatUtils.formatCodeOrNumber(journalEntries.size.toString(), screenFormat)} قيد) ✔" else "غير متوازن ❌",
                         color = Color.White,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        softWrap = false,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                         style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
                     )
@@ -265,7 +270,7 @@ fun JournalScreen(accountingViewModel: AccountingViewModel = viewModel()) {
                                     shape = RoundedCornerShape(8.dp)
                                 ) {
                                     Text(
-                                        text = "📅 قيود تاريخ: $date",
+                                        text = "📅 قيود تاريخ: ${FormatUtils.formatDate(date, screenFormat)}",
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = FundPrimary,
@@ -274,7 +279,7 @@ fun JournalScreen(accountingViewModel: AccountingViewModel = viewModel()) {
                                     )
                                 }
                                 Text(
-                                    text = "${dayEntries.size} قيد",
+                                    text = "${FormatUtils.toArabicDigitsIfNeeded(dayEntries.size.toString(), screenFormat.digitLanguage)} قيد",
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -287,9 +292,10 @@ fun JournalScreen(accountingViewModel: AccountingViewModel = viewModel()) {
                     items(dayEntries, key = { it.id }) { entry ->
                         JournalEntryCardItem(
                             entry = entry,
+                            screenFormat = screenFormat,
                             onPrint = {
                                 OfficialPrintHelper.printJournalEntryPdf(context, entry, fundInfo)
-                                Toast.makeText(context, "جاري فتح معاينة طباعة سند القيد ${entry.entryNo}...", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "جاري فتح معاينة طباعة سند القيد ${FormatUtils.formatCodeOrNumber(entry.entryNo, screenFormat)}...", Toast.LENGTH_SHORT).show()
                             }
                         )
                     }
@@ -301,6 +307,7 @@ fun JournalScreen(accountingViewModel: AccountingViewModel = viewModel()) {
     if (showManualDialog) {
         ManualJournalEntryDialog(
             accounts = accounts,
+            screenFormat = screenFormat,
             onDismiss = { showManualDialog = false },
             onSubmit = { lines, desc ->
                 pendingManualPost = lines to desc
@@ -309,10 +316,10 @@ fun JournalScreen(accountingViewModel: AccountingViewModel = viewModel()) {
     }
 
     pendingManualPost?.let { (lines, desc) ->
-        val total = lines.sumOf { it.debit }.toLong()
+        val total = lines.sumOf { it.debit }
         SensitiveActionConfirmDialog(
             title = "تأكيد ترحيل قيد التسوية اليدوي",
-            message = "سيتم ترحيل قيد محاسبي مزدوج بمبلغ ${"%,d".format(total)} ﷼ ($desc) وتحديث أرصدة الحسابات مباشرة.",
+            message = "سيتم ترحيل قيد محاسبي مزدوج بمبلغ ${FormatUtils.formatAmount(total, screenFormat)} ($desc) وتحديث أرصدة الحسابات مباشرة.",
             confirmText = "اعتماد وترحيل القيد",
             confirmColor = FundPrimary,
             icon = Icons.Default.Verified,
@@ -335,6 +342,7 @@ fun JournalScreen(accountingViewModel: AccountingViewModel = viewModel()) {
 @Composable
 private fun JournalEntryCardItem(
     entry: JournalEntry,
+    screenFormat: DisplayFormatConfig,
     onPrint: () -> Unit
 ) {
     val totalDebit = entry.lines.sumOf { it.debit }
@@ -353,19 +361,30 @@ private fun JournalEntryCardItem(
         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(entry.entryNo, fontWeight = FontWeight.Black, fontSize = 13.sp, color = FundPrimary)
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        FormatUtils.formatCodeOrNumber(entry.entryNo, screenFormat),
+                        fontWeight = FontWeight.Black,
+                        fontSize = 13.sp,
+                        color = FundPrimary,
+                        style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
+                    )
                     if (entry.originalVoucherNo != null) {
                         Surface(color = FundPrimary.copy(alpha = 0.1f), shape = RoundedCornerShape(6.dp)) {
                             Text(
-                                text = "سند: ${entry.originalVoucherNo}",
+                                text = "سند: ${FormatUtils.formatCodeOrNumber(entry.originalVoucherNo, screenFormat)}",
                                 color = FundPrimary,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
                             )
                         }
                     } else {
@@ -392,7 +411,7 @@ private fun JournalEntryCardItem(
                     }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(entry.date, fontSize = 11.sp, color = Color.Gray)
+                    Text(FormatUtils.formatDate(entry.date, screenFormat), fontSize = 11.sp, color = Color.Gray)
                     IconButton(
                         onClick = onPrint,
                         modifier = Modifier.size(28.dp)
@@ -430,9 +449,9 @@ private fun JournalEntryCardItem(
                             .padding(vertical = 3.dp),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text("${line.accountName} (${line.accountCode})", fontSize = 10.sp, modifier = Modifier.weight(2.2f))
+                        Text("${line.accountName} (${FormatUtils.formatCodeOrNumber(line.accountCode, screenFormat)})", fontSize = 10.sp, modifier = Modifier.weight(2.2f))
                         Text(
-                            if (line.debit > 0) "%,d".format(line.debit.toLong()) else "-",
+                            if (line.debit > 0) FormatUtils.formatAmount(line.debit, screenFormat, inTable = true) else "-",
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             color = FundPrimary,
@@ -440,7 +459,7 @@ private fun JournalEntryCardItem(
                             style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
                         )
                         Text(
-                            if (line.credit > 0) "%,d".format(line.credit.toLong()) else "-",
+                            if (line.credit > 0) FormatUtils.formatAmount(line.credit, screenFormat, inTable = true) else "-",
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             color = FundGoldDark,
@@ -463,7 +482,7 @@ private fun JournalEntryCardItem(
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    "إجمالي القيد: %,d ﷼".format(totalDebit.toLong()),
+                    "إجمالي القيد: ${FormatUtils.formatAmount(totalDebit, screenFormat)}",
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Black,
                     color = FundPrimary,
@@ -477,6 +496,7 @@ private fun JournalEntryCardItem(
 @Composable
 private fun ManualJournalEntryDialog(
     accounts: List<Account>,
+    screenFormat: DisplayFormatConfig,
     onDismiss: () -> Unit,
     onSubmit: (List<JournalLine>, String) -> Unit
 ) {
@@ -533,7 +553,7 @@ private fun ManualJournalEntryDialog(
                         debitAmountStr = it
                         creditAmountStr = it
                     },
-                    label = { Text("مبلغ المدين (ريال يمني)") },
+                    label = { Text("مبلغ المدين (${screenFormat.resolvedCurrencySymbol()})") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
@@ -550,14 +570,14 @@ private fun ManualJournalEntryDialog(
                         FilterChip(
                             selected = creditCode == acc.code,
                             onClick = { creditCode = acc.code },
-                            label = { Text("${acc.name} (${acc.code})", fontSize = 10.sp) }
+                            label = { Text("${acc.name} (${FormatUtils.formatCodeOrNumber(acc.code, screenFormat)})", fontSize = 10.sp) }
                         )
                     }
                 }
                 OutlinedTextField(
                     value = creditAmountStr,
                     onValueChange = { creditAmountStr = it },
-                    label = { Text("مبلغ الدائن المطابق (ريال يمني)") },
+                    label = { Text("مبلغ الدائن المطابق (${screenFormat.resolvedCurrencySymbol()})") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
@@ -571,8 +591,8 @@ private fun ManualJournalEntryDialog(
                     Text(
                         text = when {
                             debitCode == creditCode -> "تنبيه: يجب اختيار حسابين مختلفين للطرفين المدين والدائن"
-                            isBalanced -> "القيد متوازن تماماً (%,d ﷼) وجاهز للترحيل ✔".format(debitAmt.toLong())
-                            else -> "الفرق بين المدين والدائن: %,d ﷼ (يجب أن يكون صفراً)".format(diff.toLong())
+                            isBalanced -> "القيد متوازن تماماً (${FormatUtils.formatAmount(debitAmt, screenFormat)}) وجاهز للترحيل ✔"
+                            else -> "الفرق بين المدين والدائن: ${FormatUtils.formatAmount(diff, screenFormat)} (يجب أن يكون صفراً)"
                         },
                         color = if (isBalanced) StatusSuccess else StatusDanger,
                         fontSize = 11.sp,

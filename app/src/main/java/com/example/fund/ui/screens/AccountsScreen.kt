@@ -26,11 +26,14 @@ import com.example.fund.data.FundRepository
 import com.example.fund.model.AccountType
 import com.example.fund.model.UserRole
 import com.example.fund.ui.components.FundEmptyState
+import com.example.fund.util.FormatUtils
+import com.example.fund.util.LocalScreenFormat
 import com.example.ui.theme.*
 
 @Composable
 fun AccountsScreen() {
     val context = LocalContext.current
+    val screenFormat = LocalScreenFormat.current
     val repo = FundRepository.getInstance()
     val accounts by repo.accounts.collectAsStateWithLifecycle()
     val currentUser by repo.currentUser.collectAsStateWithLifecycle()
@@ -61,10 +64,10 @@ fun AccountsScreen() {
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     "دليل الحسابات المحاسبي القياسي",
                     fontFamily = AmiriFontFamily,
@@ -83,7 +86,7 @@ fun AccountsScreen() {
                 ) {
                     Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("حساب فرعي جديد", fontSize = 12.sp)
+                    Text("حساب فرعي جديد", fontSize = 12.sp, maxLines = 1, softWrap = false)
                 }
             }
         }
@@ -151,23 +154,37 @@ fun AccountsScreen() {
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 14.dp, vertical = 10.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Column(modifier = Modifier.padding(start = if (isParent) 0.dp else 14.dp)) {
+                            Column(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .padding(start = if (isParent) 0.dp else 14.dp)
+                            ) {
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    Text(acc.name, fontWeight = if (isParent) FontWeight.Black else FontWeight.Bold, fontSize = 13.sp)
+                                    Text(
+                                        acc.name,
+                                        fontWeight = if (isParent) FontWeight.Black else FontWeight.Bold,
+                                        fontSize = 13.sp,
+                                        modifier = Modifier.weight(1f, fill = false)
+                                    )
                                     if (isParent) {
                                         Surface(color = FundPrimary.copy(alpha = 0.1f), shape = RoundedCornerShape(4.dp)) {
-                                            Text("حساب رئيسي", fontSize = 9.sp, color = FundPrimary, modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp))
+                                            Text("حساب رئيسي", fontSize = 9.sp, color = FundPrimary, modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp), maxLines = 1, softWrap = false)
                                         }
                                     }
                                 }
-                                Text("رمز الحساب: ${acc.code} | النوع: ${acc.type.title} | الطبيعة: ${if (acc.isDebitNormal) "مدين" else "دائن"}", fontSize = 10.sp, color = Color.Gray)
+                                Text(
+                                    "رمز الحساب: ${FormatUtils.formatCodeOrNumber(acc.code, screenFormat)} | النوع: ${acc.type.title} | الطبيعة: ${if (acc.isDebitNormal) "مدين" else "دائن"}",
+                                    fontSize = 10.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
+                                )
                             }
 
                             Text(
-                                text = "%,d ﷼".format(acc.balance.toLong()),
+                                text = FormatUtils.formatAmount(acc.balance, screenFormat),
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 13.sp,
                                 color = FundPrimary,
@@ -266,10 +283,11 @@ private fun AddSubAccountDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
+                val dialogFormat = LocalScreenFormat.current
                 OutlinedTextField(
                     value = openingBalStr,
                     onValueChange = { openingBalStr = it },
-                    label = { Text("الرصيد الافتتاحي (ريال يمني)") },
+                    label = { Text("الرصيد الافتتاحي (${dialogFormat.resolvedCurrencySymbol()})") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )

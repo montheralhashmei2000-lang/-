@@ -30,15 +30,15 @@ import com.example.fund.model.VoucherType
 import com.example.fund.ui.components.FundEmptyState
 import com.example.fund.ui.components.SensitiveActionConfirmDialog
 import com.example.fund.ui.components.VoucherPrintDialog
-import com.example.fund.ui.navigation.Screen
+import com.example.fund.util.FormatUtils
+import com.example.fund.util.LocalScreenFormat
 import com.example.ui.theme.*
 
 @Composable
-fun TreasuryScreen(
-    onNavigate: (Screen) -> Unit
-) {
+fun TreasuryScreen() {
     val context = LocalContext.current
     val repo = FundRepository.getInstance()
+    val screenFormat = LocalScreenFormat.current
     val accounts by repo.accounts.collectAsStateWithLifecycle()
     val vouchers by repo.vouchers.collectAsStateWithLifecycle()
 
@@ -70,125 +70,121 @@ fun TreasuryScreen(
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(14.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         // Summary Card
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = FundPrimary)
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+        item(key = "treasury_summary_card") {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = FundPrimary)
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("إجمالي السيولة النقدية والمصرفية", color = Color.White.copy(alpha = 0.85f), fontSize = 12.sp)
-                        Text(
-                            text = "%,d ﷼".format(totalLiquidity.toLong()),
-                            color = Color.White,
-                            fontWeight = FontWeight.Black,
-                            fontSize = 22.sp,
-                            style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
-                        )
-                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("إجمالي السيولة النقدية والمصرفية", color = Color.White.copy(alpha = 0.85f), fontSize = 12.sp)
+                            Text(
+                                text = FormatUtils.formatAmount(totalLiquidity, screenFormat),
+                                color = Color.White,
+                                fontWeight = FontWeight.Black,
+                                fontSize = 22.sp,
+                                style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
+                            )
+                        }
 
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         OutlinedButton(
                             onClick = { showTransferDialog = true },
                             colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
                             border = androidx.compose.foundation.BorderStroke(1.dp, FundGoldLight),
                             shape = RoundedCornerShape(8.dp),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
                         ) {
                             Icon(Icons.Default.SwapHoriz, contentDescription = null, modifier = Modifier.size(15.dp))
                             Spacer(Modifier.width(4.dp))
-                            Text("تحويل داخلي", fontWeight = FontWeight.Bold, fontSize = 11.sp)
-                        }
-
-                        Button(
-                            onClick = { onNavigate(Screen.VOUCHERS) },
-                            colors = ButtonDefaults.buttonColors(containerColor = FundGold),
-                            shape = RoundedCornerShape(8.dp),
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
-                        ) {
-                            Text("إصدار سند", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                            Text("تحويل داخلي", fontWeight = FontWeight.Bold, fontSize = 11.sp, maxLines = 1, softWrap = false)
                         }
                     }
-                }
 
-                HorizontalDivider(color = Color.White.copy(alpha = 0.2f))
+                    HorizontalDivider(color = Color.White.copy(alpha = 0.2f))
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column {
-                        Text("إجمالي المقبوضات", color = Color.White.copy(alpha = 0.75f), fontSize = 10.sp)
-                        Text("%,d ﷼".format(totalReceipts.toLong()), color = FundGoldLight, fontWeight = FontWeight.Bold, fontSize = 12.sp, style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"))
-                    }
-                    Column {
-                        Text("إجمالي المدفوعات", color = Color.White.copy(alpha = 0.75f), fontSize = 10.sp)
-                        Text("%,d ﷼".format(totalPayments.toLong()), color = Color(0xFFFFCDD2), fontWeight = FontWeight.Bold, fontSize = 12.sp, style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"))
-                    }
-                    Column {
-                        Text("صافي التدفق النقدي", color = Color.White.copy(alpha = 0.75f), fontSize = 10.sp)
-                        Text("%,d ﷼".format((totalReceipts - totalPayments).toLong()), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp, style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("إجمالي المقبوضات", color = Color.White.copy(alpha = 0.75f), fontSize = 10.sp)
+                            Text(FormatUtils.formatAmount(totalReceipts, screenFormat), color = FundGoldLight, fontWeight = FontWeight.Bold, fontSize = 12.sp, style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"))
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("إجمالي المدفوعات", color = Color.White.copy(alpha = 0.75f), fontSize = 10.sp)
+                            Text(FormatUtils.formatAmount(totalPayments, screenFormat), color = Color(0xFFFFCDD2), fontWeight = FontWeight.Bold, fontSize = 12.sp, style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"))
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("صافي التدفق النقدي", color = Color.White.copy(alpha = 0.75f), fontSize = 10.sp)
+                            Text(FormatUtils.formatAmount(totalReceipts - totalPayments, screenFormat), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp, style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"))
+                        }
                     }
                 }
             }
         }
 
         // Account Balances 3 Cards
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            AccountBalancePill("الخزينة النقدية (1100)", totalCash, Icons.Default.Savings, Modifier.weight(1f))
-            AccountBalancePill("بنك الكريمي (1200)", totalBank, Icons.Default.AccountBalance, Modifier.weight(1f))
-            AccountBalancePill("المحافظ (1300)", totalWallet, Icons.Default.PhoneIphone, Modifier.weight(1f))
-        }
-
-        // Filters
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            listOf("الكل", "الصندوق النقدي", "بنك الكريمي", "المحافظ الإلكترونية").forEach { filter ->
-                val isSelected = selectedAccountFilter == filter
-                FilterChip(
-                    selected = isSelected,
-                    onClick = { selectedAccountFilter = filter },
-                    label = { Text(filter, fontSize = 11.sp) },
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = FundPrimary.copy(alpha = 0.15f),
-                        selectedLabelColor = FundPrimary
-                    )
-                )
+        item(key = "treasury_account_pills") {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                AccountBalancePill("الخزينة النقدية (${FormatUtils.formatCodeOrNumber("1100", screenFormat)})", totalCash, Icons.Default.Savings, Modifier.weight(1f))
+                AccountBalancePill("بنك الكريمي (${FormatUtils.formatCodeOrNumber("1200", screenFormat)})", totalBank, Icons.Default.AccountBalance, Modifier.weight(1f))
+                AccountBalancePill("المحافظ (${FormatUtils.formatCodeOrNumber("1300", screenFormat)})", totalWallet, Icons.Default.PhoneIphone, Modifier.weight(1f))
             }
         }
 
-        Text(
-            "سجل حركات الخزينة والحسابات (${filteredVouchers.size} حركة - اضغط على أي حركة لمعاينة وطباعة السند)",
-            fontWeight = FontWeight.Bold,
-            fontSize = 12.sp,
-            color = MaterialTheme.colorScheme.onSurface
-        )
+        // Filters
+        item(key = "treasury_filters") {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                listOf("الكل", "الصندوق النقدي", "بنك الكريمي", "المحافظ الإلكترونية").forEach { filter ->
+                    val isSelected = selectedAccountFilter == filter
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = { selectedAccountFilter = filter },
+                        label = { Text(filter, fontSize = 11.sp) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = FundPrimary.copy(alpha = 0.15f),
+                            selectedLabelColor = FundPrimary
+                        )
+                    )
+                }
+            }
+        }
+
+        item(key = "treasury_list_header") {
+            Text(
+                "سجل حركات الخزينة والحسابات (${FormatUtils.formatCodeOrNumber(filteredVouchers.size.toString(), screenFormat)} حركة - اضغط على أي حركة لمعاينة وطباعة السند)",
+                fontWeight = FontWeight.Bold,
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
 
         // Transactions List
         if (filteredVouchers.isEmpty()) {
-            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.TopCenter) {
+            item(key = "treasury_empty_state") {
                 FundEmptyState(
                     icon = Icons.Default.AccountBalanceWallet,
                     title = "لا توجد حركات مالية مطابقة",
@@ -198,66 +194,61 @@ fun TreasuryScreen(
                 )
             }
         } else {
-            LazyColumn(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(filteredVouchers, key = { it.id }) { v ->
-                    val isReceipt = v.type == VoucherType.RECEIPT
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                        shape = RoundedCornerShape(12.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+            items(filteredVouchers, key = { it.id }) { v ->
+                val isReceipt = v.type == VoucherType.RECEIPT
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    shape = RoundedCornerShape(12.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { selectedVoucherForPrint = v }
+                ) {
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { selectedVoucherForPrint = v }
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(12.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.weight(1f)
                         ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                modifier = Modifier.weight(1f)
+                            Box(
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .background(
+                                        if (isReceipt) StatusSuccess.copy(alpha = 0.12f) else StatusDanger.copy(alpha = 0.12f),
+                                        RoundedCornerShape(8.dp)
+                                    ),
+                                contentAlignment = Alignment.Center
                             ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(34.dp)
-                                        .background(
-                                            if (isReceipt) StatusSuccess.copy(alpha = 0.12f) else StatusDanger.copy(alpha = 0.12f),
-                                            RoundedCornerShape(8.dp)
-                                        ),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = if (isReceipt) Icons.Default.ArrowDownward else Icons.Default.ArrowUpward,
-                                        contentDescription = null,
-                                        tint = if (isReceipt) StatusSuccess else StatusDanger,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-
-                                Column {
-                                    Text(v.partyName, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                    Text("${v.voucherNo} | ${v.date} | ${v.paymentMethod.title}", fontSize = 11.sp, color = Color.Gray)
-                                    Text(v.description, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-                                }
-                            }
-
-                            Column(horizontalAlignment = Alignment.End) {
-                                Text(
-                                    text = "${if (isReceipt) "+" else "-"} %,d ﷼".format(v.amountYer.toLong()),
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (isReceipt) StatusSuccess else StatusDanger,
-                                    fontSize = 13.sp,
-                                    style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
+                                Icon(
+                                    imageVector = if (isReceipt) Icons.Default.ArrowDownward else Icons.Default.ArrowUpward,
+                                    contentDescription = null,
+                                    tint = if (isReceipt) StatusSuccess else StatusDanger,
+                                    modifier = Modifier.size(18.dp)
                                 )
-                                Text("معاينة السند 🖨", fontSize = 10.sp, color = FundPrimary)
                             }
+
+                            Column {
+                                Text(v.partyName, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                Text("${FormatUtils.formatCodeOrNumber(v.voucherNo, screenFormat)} | ${FormatUtils.formatDate(v.date, screenFormat)} | ${v.paymentMethod.title}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(v.description, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                            }
+                        }
+
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(
+                                text = "${if (isReceipt) "+" else "-"} ${FormatUtils.formatAmount(v.amountYer, screenFormat)}",
+                                fontWeight = FontWeight.Bold,
+                                color = if (isReceipt) StatusSuccess else StatusDanger,
+                                fontSize = 13.sp,
+                                style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
+                            )
+                            Text("معاينة السند 🖨", fontSize = 10.sp, color = FundPrimary)
                         }
                     }
                 }
@@ -279,7 +270,7 @@ fun TreasuryScreen(
         val (amount, notes) = amountNotes
         SensitiveActionConfirmDialog(
             title = "تأكيد التحويل الداخلي وترحيل القيد",
-            message = "سيتم تحويل مبلغ %,d ﷼ من حساب ($fromCode) إلى حساب ($toCode) وترحيل القيد المزدوج في الدفتر المحاسبي.".format(amount.toLong()),
+            message = "سيتم تحويل مبلغ ${FormatUtils.formatAmount(amount, screenFormat)} من حساب ($fromCode) إلى حساب ($toCode) وترحيل القيد المزدوج في الدفتر المحاسبي.",
             confirmText = "تأكيد وترحيل التحويل",
             confirmColor = FundPrimary,
             icon = Icons.Default.SwapHoriz,
@@ -347,10 +338,11 @@ private fun TreasuryInternalTransferDialog(
                     }
                 }
 
+                val screenFormat = LocalScreenFormat.current
                 OutlinedTextField(
                     value = amountStr,
                     onValueChange = { amountStr = it.filter { c -> c.isDigit() } },
-                    label = { Text("المبلغ المحول بالريال اليمني (﷼)") },
+                    label = { Text("المبلغ المحول (${screenFormat.resolvedCurrencySymbol()})") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
@@ -384,6 +376,7 @@ private fun TreasuryInternalTransferDialog(
 
 @Composable
 private fun AccountBalancePill(label: String, balance: Double, icon: androidx.compose.ui.graphics.vector.ImageVector, modifier: Modifier) {
+    val screenFormat = LocalScreenFormat.current
     Card(
         modifier = modifier,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
@@ -393,7 +386,7 @@ private fun AccountBalancePill(label: String, balance: Double, icon: androidx.co
         Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Icon(icon, contentDescription = null, tint = FundPrimary, modifier = Modifier.size(16.dp))
             Text(label, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-            Text("%,d ﷼".format(balance.toLong()), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = FundPrimary, style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"))
+            Text(FormatUtils.formatAmount(balance, screenFormat), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = FundPrimary, style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"))
         }
     }
 }

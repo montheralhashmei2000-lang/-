@@ -27,11 +27,15 @@ import com.example.fund.model.PaymentMethod
 import com.example.fund.model.UserRole
 import com.example.fund.ui.components.FundEmptyState
 import com.example.fund.ui.components.MoneyInput
+import com.example.fund.util.FormatUtils
+import com.example.fund.util.LocalScreenFormat
 import com.example.ui.theme.*
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun CampaignsScreen() {
     val context = LocalContext.current
+    val screenFormat = LocalScreenFormat.current
     val repo = FundRepository.getInstance()
     val campaigns by repo.campaigns.collectAsStateWithLifecycle()
     val currentUser by repo.currentUser.collectAsStateWithLifecycle()
@@ -49,10 +53,10 @@ fun CampaignsScreen() {
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     "حملات التبرعات والمشاريع الخيرية",
                     fontFamily = AmiriFontFamily,
@@ -71,7 +75,7 @@ fun CampaignsScreen() {
                 ) {
                     Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("حملة جديدة", fontSize = 12.sp)
+                    Text("حملة جديدة", fontSize = 12.sp, maxLines = 1, softWrap = false)
                 }
             }
         }
@@ -105,10 +109,10 @@ fun CampaignsScreen() {
                     Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(c.title, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Text(c.title, fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.weight(1f))
                             Surface(
                                 color = if (isCompleted) StatusSuccess else StatusInfo,
                                 shape = RoundedCornerShape(8.dp)
@@ -132,16 +136,17 @@ fun CampaignsScreen() {
                             trackColor = MaterialTheme.colorScheme.surfaceVariant
                         )
 
-                        Row(
+                        FlowRow(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            Text("المحصل: ${"%,d".format(c.collectedAmountYer.toLong())} ﷼ (${(ratio * 100).toInt()}%)", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = FundPrimary, style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"))
-                            Text("المصروف: %,d ﷼".format(c.spentAmountYer.toLong()), fontSize = 11.sp, color = StatusDanger, style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"))
-                            Text("المتبقي: %,d ﷼".format(remaining.toLong()), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = FundGoldDark, style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"))
+                            Text("المحصل: ${FormatUtils.formatAmount(c.collectedAmountYer, screenFormat)} (${(ratio * 100).toInt()}%)", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = FundPrimary, style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"))
+                            Text("المصروف: ${FormatUtils.formatAmount(c.spentAmountYer, screenFormat)}", fontSize = 11.sp, color = StatusDanger, style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"))
+                            Text("المتبقي: ${FormatUtils.formatAmount(remaining, screenFormat)}", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = FundGoldDark, style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"))
                         }
 
-                        Text("المبلغ المستهدف الكلي: %,d ﷼".format(c.goalAmountYer.toLong()), fontSize = 11.sp, color = Color.Gray, style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"))
+                        Text("المبلغ المستهدف الكلي: ${FormatUtils.formatAmount(c.goalAmountYer, screenFormat)}", fontSize = 11.sp, color = Color.Gray, style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"))
 
                         if (canManage) {
                             HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
@@ -301,10 +306,11 @@ private fun DisburseFromCampaignDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
+                val dialogFormat = LocalScreenFormat.current
                 OutlinedTextField(
                     value = amountStr,
                     onValueChange = { amountStr = it },
-                    label = { Text("المبلغ المصروف (ريال يمني)") },
+                    label = { Text("المبلغ المصروف (${dialogFormat.resolvedCurrencySymbol()})") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -353,10 +359,11 @@ private fun NewCampaignDialog(
                     label = { Text("عنوان الحملة") },
                     modifier = Modifier.fillMaxWidth()
                 )
+                val dialogFormat = LocalScreenFormat.current
                 OutlinedTextField(
                     value = goalStr,
                     onValueChange = { goalStr = it },
-                    label = { Text("المبلغ المستهدف (ريال يمني)") },
+                    label = { Text("المبلغ المستهدف (${dialogFormat.resolvedCurrencySymbol()})") },
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(

@@ -29,6 +29,8 @@ import androidx.compose.ui.window.Dialog
 import com.example.R
 import com.example.fund.data.FundRepository
 import com.example.fund.model.Member
+import com.example.fund.util.FormatUtils
+import com.example.fund.util.LocalScreenFormat
 import com.example.fund.util.OfficialPrintHelper
 import com.example.fund.util.QrCodeView
 import com.example.ui.theme.*
@@ -39,6 +41,7 @@ fun MemberCardDialog(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+    val screenFormat = LocalScreenFormat.current
     val repo = FundRepository.getInstance()
     val fundInfo by repo.fundInfo.collectAsStateWithLifecycle()
 
@@ -200,7 +203,7 @@ fun MemberCardDialog(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text(
-                                "تاريخ الانتساب: ${member.joinDate}",
+                                "تاريخ الانتساب: ${FormatUtils.formatDate(member.joinDate, screenFormat)}",
                                 color = Color.White.copy(alpha = 0.75f),
                                 fontSize = 9.sp
                             )
@@ -209,7 +212,7 @@ fun MemberCardDialog(
                                 horizontalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
                                 Icon(Icons.Default.Verified, contentDescription = null, tint = FundGoldLight, modifier = Modifier.size(12.dp))
-                                Text("إجمالي السداد: %,d ﷼".format(member.totalPaidYer.toLong()), color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                Text("إجمالي السداد: ${FormatUtils.formatAmount(member.totalPaidYer, screenFormat)}", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                             }
                         }
                     }

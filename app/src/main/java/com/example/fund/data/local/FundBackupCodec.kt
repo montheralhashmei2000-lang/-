@@ -107,6 +107,7 @@ object FundBackupCodec {
             put("defaultEventLocation", appSettings.defaultEventLocation)
             put("strictRolePermissions", appSettings.strictRolePermissions)
             put("enableAuditTrail", appSettings.enableAuditTrail)
+            put("screenFormat", com.example.fund.util.FormatUtils.displayFormatToJson(appSettings.screenFormat))
         })
 
         // PrintSettings
@@ -158,6 +159,8 @@ object FundBackupCodec {
             put("showFundContactInFooter", printSettings.showFundContactInFooter)
             put("footerNote", printSettings.footerNote)
             put("footerSubNote", printSettings.footerSubNote)
+            put("screenFormat", com.example.fund.util.FormatUtils.displayFormatToJson(printSettings.screenFormat))
+            put("printFormat", com.example.fund.util.FormatUtils.displayFormatToJson(printSettings.printFormat))
         })
 
         // Members
@@ -519,7 +522,11 @@ object FundBackupCodec {
                     allowAnonymousDonors = st.optBoolean("allowAnonymousDonors", cur.allowAnonymousDonors),
                     defaultEventLocation = st.optString("defaultEventLocation", cur.defaultEventLocation),
                     strictRolePermissions = st.optBoolean("strictRolePermissions", cur.strictRolePermissions),
-                    enableAuditTrail = st.optBoolean("enableAuditTrail", cur.enableAuditTrail)
+                    enableAuditTrail = st.optBoolean("enableAuditTrail", cur.enableAuditTrail),
+                    screenFormat = com.example.fund.util.FormatUtils.displayFormatFromJson(
+                        st.optJSONObject("screenFormat"),
+                        cur.screenFormat
+                    )
                 )
             }
 
@@ -572,7 +579,15 @@ object FundBackupCodec {
                     showCurrencyDetails = psObj.optBoolean("showCurrencyDetails", cur.showCurrencyDetails),
                     showFundContactInFooter = psObj.optBoolean("showFundContactInFooter", cur.showFundContactInFooter),
                     footerNote = psObj.optString("footerNote", cur.footerNote),
-                    footerSubNote = psObj.optString("footerSubNote", cur.footerSubNote)
+                    footerSubNote = psObj.optString("footerSubNote", cur.footerSubNote),
+                    screenFormat = com.example.fund.util.FormatUtils.displayFormatFromJson(
+                        psObj.optJSONObject("screenFormat") ?: root.optJSONObject("appSettings")?.optJSONObject("screenFormat"),
+                        cur.screenFormat
+                    ),
+                    printFormat = com.example.fund.util.FormatUtils.displayFormatFromJson(
+                        psObj.optJSONObject("printFormat"),
+                        cur.printFormat
+                    )
                 )
             }
 

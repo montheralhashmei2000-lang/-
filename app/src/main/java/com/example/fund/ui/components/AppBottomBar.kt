@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.QrCodeScanner
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -93,7 +92,6 @@ fun AppNavigationRail(
     activeHub: BottomHub,
     onSelectHub: (BottomHub) -> Unit,
     onOpenQuickScanner: () -> Unit,
-    onOpenGlobalSearch: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val repo = FundRepository.getInstance()
@@ -103,20 +101,6 @@ fun AppNavigationRail(
 
     NavigationRail(
         containerColor = MaterialTheme.colorScheme.surface,
-        header = {
-            IconButton(
-                onClick = onOpenGlobalSearch,
-                modifier = Modifier
-                    .padding(top = 8.dp)
-                    .minimumInteractiveComponentSize()
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Search,
-                    contentDescription = "البحث والتنقل السريع",
-                    tint = FundPrimary
-                )
-            }
-        },
         modifier = modifier
     ) {
         Spacer(modifier = Modifier.weight(0.15f))

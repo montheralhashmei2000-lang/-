@@ -41,6 +41,15 @@ class SettingsRepository(
     private val _fontScale = MutableStateFlow(1.0f)
     val fontScale: StateFlow<Float> = _fontScale.asStateFlow()
 
+    private val _appFontFamily = MutableStateFlow(AppFontOption.TAJAWAL)
+    val appFontFamily: StateFlow<AppFontOption> = _appFontFamily.asStateFlow()
+
+    private val _screenFormat = MutableStateFlow(DisplayFormatConfig())
+    val screenFormat: StateFlow<DisplayFormatConfig> = _screenFormat.asStateFlow()
+
+    private val _printFormat = MutableStateFlow(DisplayFormatConfig())
+    val printFormat: StateFlow<DisplayFormatConfig> = _printFormat.asStateFlow()
+
     private var db: FundDatabase? = null
     private var sessionManager: EncryptedSessionManager? = null
 
@@ -53,10 +62,26 @@ class SettingsRepository(
 
         _isDarkMode.value = session.isDarkMode
         _fontScale.value = session.fontScale
+        _appFontFamily.value = runCatching { AppFontOption.valueOf(session.appFontFamily) }
+            .getOrDefault(AppFontOption.TAJAWAL)
 
         database.settingsDao().getFundInfo()?.toDomain()?.let { _fundInfo.value = it }
-        database.settingsDao().getAppSettings()?.toDomain()?.let { _appSettings.value = it }
-        database.settingsDao().getPrintSettings()?.toDomain()?.let { _printSettings.value = it }
+        val loadedApp = database.settingsDao().getAppSettings()?.toDomain()?.also {
+            _appSettings.value = it
+        }
+        database.settingsDao().getPrintSettings()?.toDomain()?.let { loadedPrint ->
+            val resolvedScreen = if (loadedPrint.screenFormat == DisplayFormatConfig() && loadedApp != null) {
+                loadedApp.screenFormat
+            } else {
+                loadedPrint.screenFormat
+            }
+            val syncedPrint = loadedPrint.copy(screenFormat = resolvedScreen)
+            _printSettings.value = syncedPrint
+            _screenFormat.value = syncedPrint.screenFormat
+            _printFormat.value = syncedPrint.printFormat
+        } ?: loadedApp?.let {
+            _screenFormat.value = it.screenFormat
+        }
 
         val dbEvents = database.settingsDao().observeSchedulerEvents().first().map { it.toDomain() }
         if (dbEvents.isNotEmpty()) _schedulerEvents.value = dbEvents
@@ -73,6 +98,12 @@ class SettingsRepository(
     fun setFontScalePreference(scale: Float) {
         _fontScale.value = scale
         sessionManager?.fontScale = scale
+    }
+
+    fun setAppFontPreference(fontOption: AppFontOption) {
+        _appFontFamily.value = fontOption
+        sessionManager?.appFontFamily = fontOption.name
+        userRepository.logAudit("مظهر النظام والخطوط", "تغيير خط الواجهة المعتمد إلى: ${fontOption.title}")
     }
 
     fun updateFundInfo(info: FundInfo) {
@@ -100,34 +131,53 @@ class SettingsRepository(
     }
 
     fun updateAppSettings(settings: AppSettings) {
-        _appSettings.value = settings
+        val synced = settings.copy(screenFormat = _screenFormat.value)
+        _appSettings.value = synced
         db?.let { database ->
             dbScope.launch(dbDispatcher) {
-                database.settingsDao().upsertAppSettings(AppSettingsEntity.fromDomain(settings))
+                database.settingsDao().upsertAppSettings(AppSettingsEntity.fromDomain(synced))
             }
         }
         userRepository.logAudit("إعدادات النظام", "تحديث الإعدادات التشغيلية والمالية الشاملة لجميع الشاشات")
     }
 
+    fun updateScreenFormat(config: DisplayFormatConfig) {
+        updatePrintSettings(_printSettings.value.copy(screenFormat = config))
+    }
+
     fun updatePrintSettings(settings: PrintSettings) {
         _printSettings.value = settings
+        _screenFormat.value = settings.screenFormat
+        _printFormat.value = settings.printFormat
+        val syncedApp = _appSettings.value.copy(screenFormat = settings.screenFormat)
+        _appSettings.value = syncedApp
         db?.let { database ->
             dbScope.launch(dbDispatcher) {
                 database.settingsDao().upsertPrintSettings(PrintSettingsEntity.fromDomain(settings))
+                database.settingsDao().upsertAppSettings(AppSettingsEntity.fromDomain(syncedApp))
             }
         }
-        userRepository.logAudit("إعدادات الطباعة والسندات", "تحديث قوالب الترويسة والتذييل والخطوط وحقول التوقيعات")
+        userRepository.logAudit("إعدادات الطباعة والسندات", "تحديث قوالب الطباعة وتنسيقات الأرقام والعملات والتواريخ")
+    }
+
+    fun updatePrintFormat(config: DisplayFormatConfig) {
+        updatePrintSettings(_printSettings.value.copy(printFormat = config))
     }
 
     fun resetPrintSettingsToDefault() {
         val defaultPs = PrintSettings()
         _printSettings.value = defaultPs
+        _screenFormat.value = defaultPs.screenFormat
+        _printFormat.value = defaultPs.printFormat
+        val syncedApp = _appSettings.value.copy(screenFormat = defaultPs.screenFormat)
+        _appSettings.value = syncedApp
         db?.let { database ->
             dbScope.launch(dbDispatcher) {
                 database.settingsDao().upsertPrintSettings(PrintSettingsEntity.fromDomain(defaultPs))
+                database.settingsDao().upsertAppSettings(AppSettingsEntity.fromDomain(syncedApp))
             }
         }
-        userRepository.logAudit("إعدادات الطباعة والسندات", "استعادة الإعدادات الافتراضية لقوالب الطباعة والسندات")
+        userRepository.logAudit("إعدادات الطباعة والسندات", "استعادة الإعدادات الافتراضية لقوالب الطباعة والسندات والأرقام")
     }
 
     fun addSchedulerEvent(event: SchedulerEvent) {
@@ -183,15 +233,31 @@ class SettingsRepository(
     ) {
         fundInfo?.let { _fundInfo.value = it }
         appSettings?.let { _appSettings.value = it }
-        printSettings?.let { _printSettings.value = it }
+        printSettings?.let { ps ->
+            val resolvedScreen = if (ps.screenFormat == DisplayFormatConfig() && appSettings != null) {
+                appSettings.screenFormat
+            } else {
+                ps.screenFormat
+            }
+            val syncedPrint = ps.copy(screenFormat = resolvedScreen)
+            _printSettings.value = syncedPrint
+            _screenFormat.value = syncedPrint.screenFormat
+            _printFormat.value = syncedPrint.printFormat
+        } ?: appSettings?.let {
+            _screenFormat.value = it.screenFormat
+        }
         schedulerEvents?.let { _schedulerEvents.value = it }
         internalMessages?.let { _internalMessages.value = it }
     }
 
     fun resetToSeed() {
         _fundInfo.value = FundInfo()
-        _appSettings.value = AppSettings()
-        _printSettings.value = PrintSettings()
+        val defApp = AppSettings()
+        val defPrint = PrintSettings()
+        _appSettings.value = defApp
+        _printSettings.value = defPrint
+        _screenFormat.value = defPrint.screenFormat
+        _printFormat.value = defPrint.printFormat
         _schedulerEvents.value = SeedData.schedulerEvents
         _internalMessages.value = SeedData.internalMessages
     }

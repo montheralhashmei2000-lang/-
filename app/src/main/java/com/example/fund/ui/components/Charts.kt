@@ -23,6 +23,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.fund.util.FormatUtils
+import com.example.fund.util.LocalScreenFormat
 import com.example.ui.theme.*
 import kotlin.math.abs
 
@@ -42,6 +44,7 @@ fun TrendLineChart(
     yearlyDataPoints: List<Pair<String, Double>>? = null
 ) {
     if (dataPoints.isEmpty()) return
+    val screenFormat = LocalScreenFormat.current
 
     var activeTimeframe by remember { mutableStateOf(ChartTimeframe.MONTHLY) }
     val resolvedPoints = remember(activeTimeframe, dataPoints, weeklyDataPoints, yearlyDataPoints) {
@@ -91,7 +94,7 @@ fun TrendLineChart(
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    text = "الأعلى: %,d ﷼ (اضغط على أي نقطة للتفاصيل)".format(maxVal.toLong()),
+                    text = "الأعلى: ${FormatUtils.formatAmount(maxVal, screenFormat)} (اضغط على أي نقطة للتفاصيل)",
                     fontSize = 10.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = FundPrimary,
@@ -144,7 +147,7 @@ fun TrendLineChart(
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "%,d ﷼".format(periodVal.toLong()),
+                            text = FormatUtils.formatAmount(periodVal, screenFormat),
                             color = FundGoldLight,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Black,
@@ -297,6 +300,7 @@ fun DonutChart(
     centerText: String = "",
     centerSubtext: String = ""
 ) {
+    val screenFormat = LocalScreenFormat.current
     val total = items.sumOf { it.second }.coerceAtLeast(1.0)
     var selectedSliceIdx by remember { mutableStateOf<Int?>(null) }
 
@@ -415,7 +419,7 @@ fun DonutChart(
                             )
                         }
                         Text(
-                            text = "${"%,d".format(item.second.toLong())} ﷼ ($percent%)",
+                            text = "${FormatUtils.formatAmount(item.second, screenFormat)} (${FormatUtils.toArabicDigitsIfNeeded(percent.toString(), screenFormat.digitLanguage)}%)",
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             color = item.third,
@@ -519,6 +523,7 @@ fun RegionalComparisonBarChart(
     modifier: Modifier = Modifier
 ) {
     if (regionsData.isEmpty()) return
+    val screenFormat = LocalScreenFormat.current
     val maxVal = regionsData.maxOfOrNull { maxOf(it.second, it.third) }?.coerceAtLeast(1.0) ?: 1.0
     var selectedRegionIdx by remember { mutableStateOf<Int?>(0) }
 
@@ -570,7 +575,7 @@ fun RegionalComparisonBarChart(
                     ) {
                         Text(name, fontWeight = FontWeight.Bold, fontSize = 11.sp, color = FundPrimary)
                         Text(
-                            text = "قبض: %,d | صرف: %,d | صافي: %,d ﷼".format(rev.toLong(), exp.toLong(), net.toLong()),
+                            text = "قبض: ${FormatUtils.formatNumber(rev, screenFormat)} | صرف: ${FormatUtils.formatNumber(exp, screenFormat)} | صافي: ${FormatUtils.formatAmount(net, screenFormat)}",
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             color = if (net >= 0) StatusSuccess else StatusDanger,

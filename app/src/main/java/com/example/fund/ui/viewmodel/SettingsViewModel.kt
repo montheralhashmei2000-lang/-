@@ -25,6 +25,9 @@ class SettingsViewModel : ViewModel() {
     val currencyRates: StateFlow<Map<CurrencyCode, Double>> = accountingRepo.currencyRates
     val isDarkMode: StateFlow<Boolean> = settingsRepo.isDarkMode
     val fontScale: StateFlow<Float> = settingsRepo.fontScale
+    val appFontFamily: StateFlow<AppFontOption> = settingsRepo.appFontFamily
+    val screenFormat: StateFlow<DisplayFormatConfig> = settingsRepo.screenFormat
+    val printFormat: StateFlow<DisplayFormatConfig> = settingsRepo.printFormat
     val serverConfig: StateFlow<LocalServerConfig> = syncRepo.serverConfig
     val autoSyncOnConnect: StateFlow<Boolean> = syncRepo.autoSyncOnConnect
     val isOnline: StateFlow<Boolean> = syncRepo.isOnline
@@ -35,6 +38,9 @@ class SettingsViewModel : ViewModel() {
 
     fun setDarkModePreference(enabled: Boolean) = settingsRepo.setDarkModePreference(enabled)
     fun setFontScalePreference(scale: Float) = settingsRepo.setFontScalePreference(scale)
+    fun setAppFontPreference(fontOption: AppFontOption) = settingsRepo.setAppFontPreference(fontOption)
+    fun updateScreenFormat(config: DisplayFormatConfig) = settingsRepo.updateScreenFormat(config)
+    fun updatePrintFormat(config: DisplayFormatConfig) = settingsRepo.updatePrintFormat(config)
     fun updateFundLogo(base64: String) = settingsRepo.updateFundLogo(base64)
     fun updateFundInfo(info: FundInfo) = settingsRepo.updateFundInfo(info)
     fun updateAppSettings(settings: AppSettings) = settingsRepo.updateAppSettings(settings)

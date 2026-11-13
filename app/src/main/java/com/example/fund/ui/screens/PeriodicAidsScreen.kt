@@ -16,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -25,11 +26,15 @@ import com.example.fund.model.Beneficiary
 import com.example.fund.model.UserRole
 import com.example.fund.ui.components.FundEmptyState
 import com.example.fund.ui.components.SensitiveActionConfirmDialog
+import com.example.fund.util.FormatUtils
+import com.example.fund.util.LocalScreenFormat
 import com.example.ui.theme.*
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun PeriodicAidsScreen() {
     val context = LocalContext.current
+    val screenFormat = LocalScreenFormat.current
     val repo = FundRepository.getInstance()
     val periodicAids by repo.periodicAids.collectAsStateWithLifecycle()
     val beneficiaries by repo.beneficiaries.collectAsStateWithLifecycle()
@@ -41,83 +46,118 @@ fun PeriodicAidsScreen() {
     var showAddDialog by remember { mutableStateOf(false) }
     var showBatchConfirmDialog by remember { mutableStateOf(false) }
 
-    Column(
+    LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+            .testTag("periodic_aids_screen"),
+        contentPadding = PaddingValues(14.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Master Card
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = FundPrimary)
-        ) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+        // Master Summary Card (scrolls naturally with the list so list items are never compressed)
+        item(key = "periodic_master_card") {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = FundPrimary)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Text("المساعدات والكفالات الدورية الشهرية", color = Color.White.copy(alpha = 0.85f), fontSize = 12.sp)
-                    if (canManage) {
-                        OutlinedButton(
-                            onClick = { showAddDialog = true },
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, FundGoldLight),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(14.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("إضافة كفالة", fontSize = 11.sp)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "المساعدات والكفالات الدورية الشهرية",
+                            color = Color.White.copy(alpha = 0.9f),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.weight(1f)
+                        )
+                        if (canManage) {
+                            OutlinedButton(
+                                onClick = { showAddDialog = true },
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, FundGoldLight),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.heightIn(min = 38.dp)
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(15.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("إضافة كفالة", fontSize = 11.sp, maxLines = 1, softWrap = false)
+                            }
                         }
                     }
-                }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text(
-                            "إجمالي الكفالات: %,d ﷼ / شهرياً".format(totalMonthly.toLong()),
-                            color = Color.White,
-                            fontWeight = FontWeight.Black,
-                            fontSize = 16.sp,
-                            style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
-                        )
-                        Text("لعدد ${periodicAids.size} أسرة ويتيم", color = FundGoldLight, fontSize = 11.sp)
-                    }
-
-                    if (canManage) {
-                        Button(
-                            onClick = { showBatchConfirmDialog = true },
-                            enabled = periodicAids.any { it.status == "نشطة" },
-                            colors = ButtonDefaults.buttonColors(containerColor = FundGold),
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.heightIn(min = 48.dp)
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .padding(end = 8.dp)
+                                .align(Alignment.CenterVertically)
                         ) {
-                            Icon(Icons.Default.DoneAll, contentDescription = null, tint = Color.Black)
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("صرف دفعة الشهر", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                            Text(
+                                text = "إجمالي الكفالات: ${FormatUtils.formatAmount(totalMonthly, screenFormat)} / شهرياً",
+                                color = Color.White,
+                                fontWeight = FontWeight.Black,
+                                fontSize = 15.sp,
+                                style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
+                            )
+                            Text(
+                                text = "لعدد ${FormatUtils.formatCodeOrNumber(periodicAids.size.toString(), screenFormat)} أسرة ويتيم",
+                                color = FundGoldLight,
+                                fontSize = 11.sp,
+                                style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
+                            )
+                        }
+
+                        if (canManage) {
+                            Button(
+                                onClick = { showBatchConfirmDialog = true },
+                                enabled = periodicAids.any { it.status == "نشطة" },
+                                colors = ButtonDefaults.buttonColors(containerColor = FundGold),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier
+                                    .heightIn(min = 44.dp)
+                                    .align(Alignment.CenterVertically)
+                            ) {
+                                Icon(Icons.Default.DoneAll, contentDescription = null, tint = Color.Black, modifier = Modifier.size(17.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "صرف دفعة الشهر",
+                                    color = Color.Black,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp,
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
+                            }
                         }
                     }
                 }
             }
         }
 
-        Text(
-            "قائمة الكفالات الشهرية المسجلة",
-            fontFamily = AmiriFontFamily,
-            fontWeight = FontWeight.Bold,
-            fontSize = 16.sp,
-            color = FundPrimary
-        )
+        item(key = "periodic_list_header") {
+            Text(
+                text = "قائمة الكفالات الشهرية المسجلة (${FormatUtils.formatCodeOrNumber(periodicAids.size.toString(), screenFormat)})",
+                fontFamily = AmiriFontFamily,
+                fontWeight = FontWeight.Bold,
+                fontSize = 16.sp,
+                color = FundPrimary,
+                modifier = Modifier.padding(top = 2.dp),
+                style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
+            )
+        }
 
         if (periodicAids.isEmpty()) {
-            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.TopCenter) {
+            item(key = "periodic_empty_state") {
                 FundEmptyState(
                     icon = Icons.Default.VolunteerActivism,
                     title = "لا توجد كفالات دورية مسجلة",
@@ -127,70 +167,72 @@ fun PeriodicAidsScreen() {
                 )
             }
         } else {
-            LazyColumn(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                items(periodicAids, key = { it.id }) { pa ->
-                    val isPaidThisMonth = pa.lastDisbursedMonth == currentDisbursingMonth
-                    Card(
-                        shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Column {
-                                    Text(pa.beneficiaryName, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                    Text("نوع الكفالة: ${pa.sponsorshipType} | آخر شهر مصروف: ${pa.lastDisbursedMonth}", fontSize = 11.sp, color = Color.Gray)
-                                }
-
-                                Column(horizontalAlignment = Alignment.End) {
-                                    Text(
-                                        "%,d ﷼".format(pa.monthlyAmountYer.toLong()),
-                                        fontWeight = FontWeight.Bold,
-                                        color = FundPrimary,
-                                        fontSize = 13.sp,
-                                        style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
-                                    )
-                                    Surface(
-                                        color = if (isPaidThisMonth) StatusSuccess.copy(alpha = 0.12f) else StatusPending.copy(alpha = 0.12f),
-                                        shape = RoundedCornerShape(4.dp)
-                                    ) {
-                                        Text(
-                                            text = if (isPaidThisMonth) "مصروفة لشهر $currentDisbursingMonth ✔" else "مستحقة الصرف",
-                                            color = if (isPaidThisMonth) StatusSuccess else StatusPending,
-                                            fontSize = 9.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
-                                        )
-                                    }
-                                }
+            items(periodicAids, key = { it.id }) { pa ->
+                val isPaidThisMonth = pa.lastDisbursedMonth == currentDisbursingMonth
+                Card(
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(pa.beneficiaryName, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                Text(
+                                    text = "نوع الكفالة: ${pa.sponsorshipType} | آخر شهر مصروف: ${FormatUtils.formatCodeOrNumber(pa.lastDisbursedMonth, screenFormat)}",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
+                                )
                             }
 
-                            if (canManage && !isPaidThisMonth) {
-                                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.End
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text(
+                                    FormatUtils.formatAmount(pa.monthlyAmountYer, screenFormat),
+                                    fontWeight = FontWeight.Bold,
+                                    color = FundPrimary,
+                                    fontSize = 13.sp,
+                                    style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
+                                )
+                                Surface(
+                                    color = if (isPaidThisMonth) StatusSuccess.copy(alpha = 0.12f) else StatusPending.copy(alpha = 0.12f),
+                                    shape = RoundedCornerShape(4.dp)
                                 ) {
-                                    OutlinedButton(
-                                        onClick = {
-                                            repo.disburseSinglePeriodicAid(pa.id, currentDisbursingMonth)
-                                            Toast.makeText(context, "تم صرف الكفالة الفردية وإصدار سند الصرف", Toast.LENGTH_SHORT).show()
-                                        },
-                                        shape = RoundedCornerShape(8.dp),
-                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
-                                    ) {
-                                        Icon(Icons.Default.Payments, contentDescription = null, modifier = Modifier.size(14.dp), tint = FundPrimary)
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text("صرف فردي فوري", fontSize = 11.sp, color = FundPrimary)
-                                    }
+                                    Text(
+                                        text = if (isPaidThisMonth) "مصروفة لشهر ${FormatUtils.formatCodeOrNumber(currentDisbursingMonth, screenFormat)} ✔" else "مستحقة الصرف",
+                                        color = if (isPaidThisMonth) StatusSuccess else StatusPending,
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                        style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
+                                    )
+                                }
+                            }
+                        }
+
+                        if (canManage && !isPaidThisMonth) {
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End
+                            ) {
+                                OutlinedButton(
+                                    onClick = {
+                                        repo.disburseSinglePeriodicAid(pa.id, currentDisbursingMonth)
+                                        Toast.makeText(context, "تم صرف الكفالة الفردية وإصدار سند الصرف", Toast.LENGTH_SHORT).show()
+                                    },
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                    modifier = Modifier.heightIn(min = 38.dp)
+                                ) {
+                                    Icon(Icons.Default.Payments, contentDescription = null, modifier = Modifier.size(14.dp), tint = FundPrimary)
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("صرف فردي فوري", fontSize = 11.sp, color = FundPrimary, maxLines = 1, softWrap = false)
                                 }
                             }
                         }
@@ -205,7 +247,7 @@ fun PeriodicAidsScreen() {
         val batchAmount = activeList.sumOf { it.monthlyAmountYer }
         SensitiveActionConfirmDialog(
             title = "تأكيد صرف دفعة الشهر ($currentDisbursingMonth)",
-            message = "سيتم صرف ${activeList.size} كفالة نشطة بإجمالي %,d ﷼ وتوليد سندات الصرف والقيود المحاسبية تلقائياً.".format(batchAmount.toLong()),
+            message = "سيتم صرف ${activeList.size} كفالة نشطة بإجمالي ${FormatUtils.formatAmount(batchAmount, screenFormat)} وتوليد سندات الصرف والقيود المحاسبية تلقائياً.",
             confirmText = "اعتماد وصرف الدفعة",
             confirmColor = FundPrimary,
             icon = Icons.Default.DoneAll,
@@ -272,10 +314,11 @@ private fun AddPeriodicAidDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
+                val dialogFormat = LocalScreenFormat.current
                 OutlinedTextField(
                     value = amountStr,
                     onValueChange = { amountStr = it },
-                    label = { Text("المبلغ الشهري الثابت (ريال يمني)") },
+                    label = { Text("المبلغ الشهري الثابت (${dialogFormat.resolvedCurrencySymbol()})") },
                     modifier = Modifier.fillMaxWidth()
                 )
             }

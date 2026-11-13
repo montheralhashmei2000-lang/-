@@ -27,6 +27,7 @@ import com.example.fund.data.FundRepository
 import com.example.fund.model.*
 import com.example.fund.ui.components.FundEmptyState
 import com.example.fund.ui.viewmodel.AccountingViewModel
+import com.example.fund.util.FormatUtils
 import com.example.fund.util.OfficialPrintHelper
 import com.example.ui.theme.*
 import kotlin.math.abs
@@ -39,6 +40,7 @@ fun FinancialReportsScreen(accountingViewModel: AccountingViewModel = viewModel(
     val journalEntries by accountingViewModel.journalEntries.collectAsStateWithLifecycle()
     val currencyRates by repo.currencyRates.collectAsStateWithLifecycle()
     val fundInfo by accountingViewModel.fundInfo.collectAsStateWithLifecycle()
+    val screenFormat by accountingViewModel.screenFormat.collectAsStateWithLifecycle()
 
     var activeTab by remember { mutableIntStateOf(0) }
     val tabTitles = listOf(
@@ -58,15 +60,15 @@ fun FinancialReportsScreen(accountingViewModel: AccountingViewModel = viewModel(
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     "القوائم المالية الختامية والعملات",
                     fontFamily = AmiriFontFamily,
+                    style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 17.sp,
                     color = FundPrimary
                 )
                 Text(
@@ -92,7 +94,7 @@ fun FinancialReportsScreen(accountingViewModel: AccountingViewModel = viewModel(
             ) {
                 Icon(Icons.Default.Print, contentDescription = null, modifier = Modifier.size(15.dp))
                 Spacer(modifier = Modifier.width(5.dp))
-                Text("طباعة القائمة PDF", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Text("طباعة القائمة PDF", fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
             }
         }
 
@@ -114,11 +116,11 @@ fun FinancialReportsScreen(accountingViewModel: AccountingViewModel = viewModel(
         }
 
         when (activeTab) {
-            0 -> TrialBalanceTab(accounts, journalEntries)
-            1 -> IncomeStatementTab(accounts)
-            2 -> BalanceSheetTab(accounts)
-            3 -> AccountLedgerTab(accounts, journalEntries)
-            4 -> ReconciliationTab(accounts, onAdjustEntry = { code, name, diff ->
+            0 -> TrialBalanceTab(accounts, journalEntries, screenFormat)
+            1 -> IncomeStatementTab(accounts, screenFormat)
+            2 -> BalanceSheetTab(accounts, screenFormat)
+            3 -> AccountLedgerTab(accounts, journalEntries, screenFormat)
+            4 -> ReconciliationTab(accounts, screenFormat, onAdjustEntry = { code, name, diff ->
                 val lines = if (diff > 0) {
                     listOf(
                         JournalLine(code, name, diff, 0.0, "مدين - إثبات فائض تسوية جرد الخزينة"),
@@ -131,12 +133,12 @@ fun FinancialReportsScreen(accountingViewModel: AccountingViewModel = viewModel(
                         JournalLine(code, name, 0.0, absDiff, "دائن - تسوية عجز الجرد")
                     )
                 }
-                repo.createManualJournalEntry(lines, "قيد تسوية مطابق لحساب $name بفارق $diff ﷼")
+                repo.createManualJournalEntry(lines, "قيد تسوية مطابق لحساب $name بفارق ${FormatUtils.formatAmount(diff, screenFormat)}")
                 Toast.makeText(context, "تم توليد قيد التسوية وترحيله بنجاح", Toast.LENGTH_SHORT).show()
             })
-            5 -> CurrenciesTab(currencyRates, onUpdateRate = { curr, newRate ->
+            5 -> CurrenciesTab(currencyRates, screenFormat, onUpdateRate = { curr, newRate ->
                 repo.updateCurrencyRate(curr, newRate)
-                Toast.makeText(context, "تم تحديث سعر صرف ${curr.title} إلى $newRate", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "تم تحديث سعر صرف ${curr.title} إلى ${FormatUtils.formatNumber(newRate, screenFormat, decimalsOverride = 0)}", Toast.LENGTH_SHORT).show()
             })
         }
     }
@@ -146,7 +148,7 @@ fun FinancialReportsScreen(accountingViewModel: AccountingViewModel = viewModel(
 // Tab 1: Trial Balance
 // ----------------------------------------------------------------------------
 @Composable
-private fun TrialBalanceTab(accounts: List<Account>, entries: List<JournalEntry>) {
+private fun TrialBalanceTab(accounts: List<Account>, entries: List<JournalEntry>, screenFormat: DisplayFormatConfig) {
     var accountQuery by remember { mutableStateOf("") }
     var totalDebitBalance = 0.0
     var totalCreditBalance = 0.0
@@ -208,9 +210,10 @@ private fun TrialBalanceTab(accounts: List<Account>, entries: List<JournalEntry>
             Row(
                 modifier = Modifier.padding(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Row(
+                    modifier = Modifier.weight(1f),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
@@ -228,10 +231,12 @@ private fun TrialBalanceTab(accounts: List<Account>, entries: List<JournalEntry>
                 }
 
                 Text(
-                    text = "الإجمالي: %,d ﷼".format(totalDebitBalance.toLong()),
+                    text = "الإجمالي: ${FormatUtils.formatAmount(totalDebitBalance, screenFormat)}",
                     fontWeight = FontWeight.Black,
                     color = FundPrimary,
                     fontSize = 13.sp,
+                    maxLines = 1,
+                    softWrap = false,
                     style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
                 )
             }
@@ -277,17 +282,17 @@ private fun TrialBalanceTab(accounts: List<Account>, entries: List<JournalEntry>
                         ) {
                             Column(modifier = Modifier.weight(2f)) {
                                 Text(acc.name, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                Text(acc.code, fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"))
+                                Text(FormatUtils.formatCodeOrNumber(acc.code, screenFormat), fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"))
                             }
                             Text(
-                                text = if (deb > 0) "%,d".format(deb.toLong()) else "-",
+                                text = if (deb > 0) FormatUtils.formatAmount(deb, screenFormat, inTable = true) else "-",
                                 fontSize = 11.sp,
                                 fontWeight = if (deb > 0) FontWeight.Bold else FontWeight.Normal,
                                 modifier = Modifier.weight(1f),
                                 style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
                             )
                             Text(
-                                text = if (cred > 0) "%,d".format(cred.toLong()) else "-",
+                                text = if (cred > 0) FormatUtils.formatAmount(cred, screenFormat, inTable = true) else "-",
                                 fontSize = 11.sp,
                                 fontWeight = if (cred > 0) FontWeight.Bold else FontWeight.Normal,
                                 modifier = Modifier.weight(1f),
@@ -308,7 +313,7 @@ private fun TrialBalanceTab(accounts: List<Account>, entries: List<JournalEntry>
                 ) {
                     Text("الإجماليات الكلية:", fontWeight = FontWeight.Black, fontSize = 12.sp, modifier = Modifier.weight(2f))
                     Text(
-                        "%,d ﷼".format(totalDebitBalance.toLong()),
+                        FormatUtils.formatAmount(totalDebitBalance, screenFormat),
                         fontWeight = FontWeight.Black,
                         fontSize = 12.sp,
                         color = StatusSuccess,
@@ -316,7 +321,7 @@ private fun TrialBalanceTab(accounts: List<Account>, entries: List<JournalEntry>
                         style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
                     )
                     Text(
-                        "%,d ﷼".format(totalCreditBalance.toLong()),
+                        FormatUtils.formatAmount(totalCreditBalance, screenFormat),
                         fontWeight = FontWeight.Black,
                         fontSize = 12.sp,
                         color = StatusSuccess,
@@ -333,7 +338,7 @@ private fun TrialBalanceTab(accounts: List<Account>, entries: List<JournalEntry>
 // Tab 2: Income Statement
 // ----------------------------------------------------------------------------
 @Composable
-private fun IncomeStatementTab(accounts: List<Account>) {
+private fun IncomeStatementTab(accounts: List<Account>, screenFormat: DisplayFormatConfig) {
     val revenues = accounts.filter { it.code.startsWith("4") && it.parentCode != null }
         .ifEmpty { accounts.filter { it.code.startsWith("4") } }
     val expenses = accounts.filter { it.code.startsWith("5") && it.parentCode != null }
@@ -362,24 +367,31 @@ private fun IncomeStatementTab(accounts: List<Account>) {
                     fontSize = 12.sp
                 )
                 Text(
-                    text = "%,d ﷼".format(netSurplus.toLong()),
+                    text = FormatUtils.formatAmount(netSurplus, screenFormat),
                     color = Color.White,
                     fontWeight = FontWeight.Black,
-                    fontSize = 24.sp
+                    fontSize = 24.sp,
+                    style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
                 )
             }
         }
 
         // Revenues Section
-        StatementGroup("أولاً: الإيرادات والتبرعات (4000)", revenues, totalRevenues, FundPrimaryMedium)
+        StatementGroup("أولاً: الإيرادات والتبرعات (4000)", revenues, totalRevenues, FundPrimaryMedium, screenFormat)
 
         // Expenses Section
-        StatementGroup("ثانياً: المصروفات والمساعدات (5000)", expenses, totalExpenses, Color(0xFFC62828))
+        StatementGroup("ثانياً: المصروفات والمساعدات (5000)", expenses, totalExpenses, Color(0xFFC62828), screenFormat)
     }
 }
 
 @Composable
-private fun StatementGroup(title: String, accounts: List<Account>, total: Double, color: Color) {
+private fun StatementGroup(
+    title: String,
+    accounts: List<Account>,
+    total: Double,
+    color: Color,
+    screenFormat: DisplayFormatConfig
+) {
     Card(
         shape = RoundedCornerShape(12.dp),
         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
@@ -388,10 +400,19 @@ private fun StatementGroup(title: String, accounts: List<Account>, total: Double
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(title, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = color)
-                Text("%,d ﷼".format(total.toLong()), fontWeight = FontWeight.Black, fontSize = 13.sp, color = color)
+                Text(title, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = color, modifier = Modifier.weight(1f))
+                Text(
+                    FormatUtils.formatAmount(total, screenFormat),
+                    fontWeight = FontWeight.Black,
+                    fontSize = 13.sp,
+                    color = color,
+                    maxLines = 1,
+                    softWrap = false,
+                    style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
+                )
             }
 
             HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
@@ -399,13 +420,20 @@ private fun StatementGroup(title: String, accounts: List<Account>, total: Double
             accounts.forEach { acc ->
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("${acc.name} (${acc.code})", fontSize = 11.sp)
                     Text(
-                        "%,d ﷼".format(acc.balance.toLong()),
+                        "${acc.name} (${FormatUtils.formatCodeOrNumber(acc.code, screenFormat)})",
+                        fontSize = 11.sp,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Text(
+                        FormatUtils.formatAmount(acc.balance, screenFormat),
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        softWrap = false,
                         style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
                     )
                 }
@@ -418,7 +446,7 @@ private fun StatementGroup(title: String, accounts: List<Account>, total: Double
 // Tab 3: Balance Sheet
 // ----------------------------------------------------------------------------
 @Composable
-private fun BalanceSheetTab(accounts: List<Account>) {
+private fun BalanceSheetTab(accounts: List<Account>, screenFormat: DisplayFormatConfig) {
     val assets = accounts.filter { it.code.startsWith("1") && it.parentCode != null }
         .ifEmpty { accounts.filter { it.code.startsWith("1") } }
     val liabilities = accounts.filter { it.code.startsWith("2") && it.parentCode != null }
@@ -437,9 +465,9 @@ private fun BalanceSheetTab(accounts: List<Account>) {
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        StatementGroup("الأصول والموجودات (1000)", assets, totalAssets, FundPrimary)
-        StatementGroup("الالتزامات والذمم الدائنة (2000)", liabilities, totalLiabilities, StatusPending)
-        StatementGroup("حقوق الملكية والاحتياطي (3000)", equity, totalEquity, FundGoldDark)
+        StatementGroup("الأصول والموجودات (1000)", assets, totalAssets, FundPrimary, screenFormat)
+        StatementGroup("الالتزامات والذمم الدائنة (2000)", liabilities, totalLiabilities, StatusPending, screenFormat)
+        StatementGroup("حقوق الملكية والاحتياطي (3000)", equity, totalEquity, FundGoldDark, screenFormat)
 
         Card(
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
@@ -450,14 +478,17 @@ private fun BalanceSheetTab(accounts: List<Account>) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(14.dp),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("مجموع الالتزامات وحقوق الملكية:", fontWeight = FontWeight.Black, fontSize = 13.sp)
+                Text("مجموع الالتزامات وحقوق الملكية:", fontWeight = FontWeight.Black, fontSize = 13.sp, modifier = Modifier.weight(1f))
                 Text(
-                    "%,d ﷼".format(totalLiabEquity.toLong()),
+                    FormatUtils.formatAmount(totalLiabEquity, screenFormat),
                     fontWeight = FontWeight.Black,
                     fontSize = 13.sp,
                     color = FundPrimary,
+                    maxLines = 1,
+                    softWrap = false,
                     style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
                 )
             }
@@ -469,7 +500,11 @@ private fun BalanceSheetTab(accounts: List<Account>) {
 // Tab 4: Account Ledger (Running Balance)
 // ----------------------------------------------------------------------------
 @Composable
-private fun AccountLedgerTab(accounts: List<Account>, entries: List<JournalEntry>) {
+private fun AccountLedgerTab(
+    accounts: List<Account>,
+    entries: List<JournalEntry>,
+    screenFormat: DisplayFormatConfig
+) {
     var selectedCode by remember { mutableStateOf("1100") }
     var dropdownOpen by remember { mutableStateOf(false) }
 
@@ -497,7 +532,7 @@ private fun AccountLedgerTab(accounts: List<Account>, entries: List<JournalEntry
                 onClick = { dropdownOpen = true },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("الحساب: ${activeAccount.name} (${activeAccount.code})", fontWeight = FontWeight.Bold)
+                Text("الحساب: ${activeAccount.name} (${FormatUtils.formatCodeOrNumber(activeAccount.code, screenFormat)})", fontWeight = FontWeight.Bold)
             }
 
             DropdownMenu(
@@ -506,7 +541,7 @@ private fun AccountLedgerTab(accounts: List<Account>, entries: List<JournalEntry
             ) {
                 accounts.forEach { acc ->
                     DropdownMenuItem(
-                        text = { Text("${acc.name} (${acc.code})") },
+                        text = { Text("${acc.name} (${FormatUtils.formatCodeOrNumber(acc.code, screenFormat)})") },
                         onClick = {
                             selectedCode = acc.code
                             dropdownOpen = false
@@ -553,12 +588,22 @@ private fun AccountLedgerTab(accounts: List<Account>, entries: List<JournalEntry
                         ) {
                             Column(modifier = Modifier.weight(2f)) {
                                 Text(desc, fontSize = 11.sp, maxLines = 1, fontWeight = FontWeight.Bold)
-                                Text(date, fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(FormatUtils.formatDate(date, screenFormat), fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
-                            Text(if (deb > 0) "%,d".format(deb.toLong()) else "-", fontSize = 11.sp, modifier = Modifier.weight(1f), style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"))
-                            Text(if (cred > 0) "%,d".format(cred.toLong()) else "-", fontSize = 11.sp, modifier = Modifier.weight(1f), style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"))
                             Text(
-                                "%,d".format(bal.toLong()),
+                                if (deb > 0) FormatUtils.formatAmount(deb, screenFormat, inTable = true) else "-",
+                                fontSize = 11.sp,
+                                modifier = Modifier.weight(1f),
+                                style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
+                            )
+                            Text(
+                                if (cred > 0) FormatUtils.formatAmount(cred, screenFormat, inTable = true) else "-",
+                                fontSize = 11.sp,
+                                modifier = Modifier.weight(1f),
+                                style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
+                            )
+                            Text(
+                                FormatUtils.formatAmount(bal, screenFormat, inTable = true),
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = FundPrimary,
@@ -579,7 +624,11 @@ private data class Quadruple<A, B, C, D, E>(val first: A, val second: B, val thi
 // Tab 5: Bank & Treasury Reconciliation
 // ----------------------------------------------------------------------------
 @Composable
-private fun ReconciliationTab(accounts: List<Account>, onAdjustEntry: (String, String, Double) -> Unit) {
+private fun ReconciliationTab(
+    accounts: List<Account>,
+    screenFormat: DisplayFormatConfig,
+    onAdjustEntry: (String, String, Double) -> Unit
+) {
     var selectedCode by remember { mutableStateOf("1100") }
     val activeAcc = accounts.find { it.code == selectedCode } ?: accounts.first()
     val bookBalance = activeAcc.balance
@@ -619,7 +668,7 @@ private fun ReconciliationTab(accounts: List<Account>, onAdjustEntry: (String, S
                 }
 
                 Text(
-                    "الرصيد الدفتري الحالي: %,d ﷼".format(bookBalance.toLong()),
+                    "الرصيد الدفتري الحالي: ${FormatUtils.formatAmount(bookBalance, screenFormat)}",
                     fontWeight = FontWeight.Bold,
                     fontSize = 13.sp,
                     style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
@@ -627,8 +676,8 @@ private fun ReconciliationTab(accounts: List<Account>, onAdjustEntry: (String, S
 
                 OutlinedTextField(
                     value = actualCountStr,
-                    onValueChange = { input -> actualCountStr = input.filter { it.isDigit() || it == '.' } },
-                    label = { Text("الرصيد الفعلي بعد الجرد / كشف البنك (﷼)") },
+                    onValueChange = { input -> actualCountStr = FormatUtils.toLatinDigits(input).filter { it.isDigit() || it == '.' } },
+                    label = { Text("الرصيد الفعلي بعد الجرد / كشف البنك (${screenFormat.resolvedCurrencySymbol()})") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -642,12 +691,16 @@ private fun ReconciliationTab(accounts: List<Account>, onAdjustEntry: (String, S
                             RoundedCornerShape(8.dp)
                         )
                         .padding(10.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("فارق المطابقة والتسوية:", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    Text("فارق المطابقة والتسوية:", fontWeight = FontWeight.Bold, fontSize = 12.sp, modifier = Modifier.weight(1f))
                     Text(
-                        text = if (abs(difference) < 0.01) "مطابق تماماً ✔ (صفر)" else "%,d ﷼ ${if (difference > 0) "(فائض)" else "(عجز)"}".format(difference.toLong()),
+                        text = if (abs(difference) < 0.01) {
+                            "مطابق تماماً ✔ (صفر)"
+                        } else {
+                            "${FormatUtils.formatAmount(difference, screenFormat)} ${if (difference > 0) "(فائض)" else "(عجز)"}"
+                        },
                         fontWeight = FontWeight.Bold,
                         color = if (abs(difference) < 0.01) StatusSuccess else StatusDanger,
                         fontSize = 13.sp,
@@ -676,13 +729,17 @@ private fun ReconciliationTab(accounts: List<Account>, onAdjustEntry: (String, S
 // Tab 6: Currencies
 // ----------------------------------------------------------------------------
 @Composable
-private fun CurrenciesTab(rates: Map<CurrencyCode, Double>, onUpdateRate: (CurrencyCode, Double) -> Unit) {
+private fun CurrenciesTab(
+    rates: Map<CurrencyCode, Double>,
+    screenFormat: DisplayFormatConfig,
+    onUpdateRate: (CurrencyCode, Double) -> Unit
+) {
     var calcAmountStr by remember { mutableStateOf("1000") }
     var calcCurrency by remember { mutableStateOf(CurrencyCode.SAR) }
 
     val calcAmount = calcAmountStr.toDoubleOrNull() ?: 0.0
     val selectedRate = rates[calcCurrency] ?: 1.0
-    val equivalentYer = (calcAmount * selectedRate).toLong()
+    val equivalentYer = calcAmount * selectedRate
     val usdRate = (rates[CurrencyCode.USD] ?: 2530.0).coerceAtLeast(1.0)
     val sarRate = (rates[CurrencyCode.SAR] ?: 665.0).coerceAtLeast(1.0)
 
@@ -692,7 +749,7 @@ private fun CurrenciesTab(rates: Map<CurrencyCode, Double>, onUpdateRate: (Curre
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text("إدارة أسعار صرف العملات الأجنبية مقابل الريال اليمني (YER)", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+        Text("إدارة أسعار صرف العملات الأجنبية مقابل العملة الأساسية (${screenFormat.resolvedCurrencySymbol()})", fontWeight = FontWeight.Bold, fontSize = 14.sp)
 
         rates.forEach { (curr, rate) ->
             if (curr != CurrencyCode.YER) {
@@ -708,11 +765,11 @@ private fun CurrenciesTab(rates: Map<CurrencyCode, Double>, onUpdateRate: (Curre
                             .fillMaxWidth()
                             .padding(14.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Column {
+                        Column(modifier = Modifier.weight(1f)) {
                             Text("${curr.title} (${curr.symbol})", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                            Text("السعر الحالي: %,.0f ﷼".format(rate), fontSize = 11.sp, color = FundPrimary)
+                            Text("السعر الحالي: ${FormatUtils.formatAmount(rate, screenFormat, decimalsOverride = 0)}", fontSize = 11.sp, color = FundPrimary)
                         }
 
                         Row(
@@ -721,7 +778,7 @@ private fun CurrenciesTab(rates: Map<CurrencyCode, Double>, onUpdateRate: (Curre
                         ) {
                             OutlinedTextField(
                                 value = newRateStr,
-                                onValueChange = { newRateStr = it },
+                                onValueChange = { newRateStr = FormatUtils.toLatinDigits(it).filter { c -> c.isDigit() || c == '.' } },
                                 singleLine = true,
                                 modifier = Modifier.width(100.dp)
                             )
@@ -733,7 +790,7 @@ private fun CurrenciesTab(rates: Map<CurrencyCode, Double>, onUpdateRate: (Curre
                                 colors = ButtonDefaults.buttonColors(containerColor = FundPrimary),
                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
                             ) {
-                                Text("تحديث", fontSize = 11.sp)
+                                Text("تحديث", fontSize = 11.sp, maxLines = 1, softWrap = false)
                             }
                         }
                     }
@@ -771,7 +828,7 @@ private fun CurrenciesTab(rates: Map<CurrencyCode, Double>, onUpdateRate: (Curre
 
                 OutlinedTextField(
                     value = calcAmountStr,
-                    onValueChange = { calcAmountStr = it },
+                    onValueChange = { calcAmountStr = FormatUtils.toLatinDigits(it).filter { c -> c.isDigit() || c == '.' } },
                     label = { Text("أدخل المبلغ المراد تحويله (${calcCurrency.symbol})") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
@@ -787,15 +844,19 @@ private fun CurrenciesTab(rates: Map<CurrencyCode, Double>, onUpdateRate: (Curre
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         Text(
-                            text = "المعادل بالريال اليمني: ${"%,d".format(equivalentYer)} ﷼",
+                            text = "المعادل بالعملة الأساسية: ${FormatUtils.formatAmount(equivalentYer, screenFormat)}",
                             color = FundGoldLight,
                             fontWeight = FontWeight.Black,
-                            fontSize = 15.sp
+                            fontSize = 15.sp,
+                            style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
                         )
+                        val eqUsd = FormatUtils.formatNumber(equivalentYer / usdRate, screenFormat, decimalsOverride = 1)
+                        val eqSar = FormatUtils.formatNumber(equivalentYer / sarRate, screenFormat, decimalsOverride = 1)
                         Text(
-                            text = "المعادل بالدولار: ${"%,.1f".format(equivalentYer / usdRate)} $  |  بالريال السعودي: ${"%,.1f".format(equivalentYer / sarRate)} ر.س",
+                            text = "المعادل بالدولار: $eqUsd $  |  بالريال السعودي: $eqSar ر.س",
                             color = Color.White.copy(alpha = 0.85f),
-                            fontSize = 11.sp
+                            fontSize = 11.sp,
+                            style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
                         )
                     }
                 }

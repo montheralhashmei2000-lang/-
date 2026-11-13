@@ -270,12 +270,13 @@ object OfficialPrintHelper {
             """<div style="position:fixed;top:40%;left:20%;transform:rotate(-30deg);border:6px solid rgba(211,47,47,0.45);color:rgba(211,47,47,0.45);font-size:44px;font-weight:900;padding:12px 36px;border-radius:14px;z-index:99;">سند ملغي - VOID</div>"""
         } else ""
 
+        val pf = ps.printFormat
         val currencySubHtml = if (ps.showCurrencyDetails && voucher.currency != CurrencyCode.YER) {
-            """<div style="font-size:11px;color:#44553F;margin-top:2px;">(${voucher.amountOriginal} ${voucher.currency.name} @ ${"%,.0f".format(voucher.exchangeRate)})</div>"""
+            """<div style="font-size:11px;color:#44553F;margin-top:2px;">(${FormatUtils.formatNumber(voucher.amountOriginal, pf)} ${voucher.currency.name} @ ${FormatUtils.formatNumber(voucher.exchangeRate, pf, decimalsOverride = 0)})</div>"""
         } else ""
 
         val journalRefHtml = if (ps.showJournalReference && voucher.linkedJournalEntryId.isNotBlank()) {
-            """<div style="font-size:11px;color:$accent;margin-top:2px;">القيد المحاسبي: <b>${escapeHtml(voucher.linkedJournalEntryId)}</b></div>"""
+            """<div style="font-size:11px;color:$accent;margin-top:2px;">القيد المحاسبي: <b>${escapeHtml(FormatUtils.formatCodeOrNumber(voucher.linkedJournalEntryId, pf))}</b></div>"""
         } else ""
 
         val partyLabel = if (isReceipt) ps.receiptPartyLabel else ps.paymentPartyLabel
@@ -366,13 +367,13 @@ object OfficialPrintHelper {
 
                         <div class="banner">
                             <div>
-                                <div style="font-weight:bold;font-size:${ps.bodyFontSizeSp + 1}px;color:$badgeColor;">رقم السند: ${escapeHtml(voucher.voucherNo)}</div>
-                                <div style="font-size:12px;color:#44553F;margin-top:2px;">التاريخ: ${escapeHtml(voucher.date)}</div>
+                                <div style="font-weight:bold;font-size:${ps.bodyFontSizeSp + 1}px;color:$badgeColor;">رقم السند: ${escapeHtml(FormatUtils.formatCodeOrNumber(voucher.voucherNo, pf))}</div>
+                                <div style="font-size:12px;color:#44553F;margin-top:2px;">التاريخ: ${escapeHtml(FormatUtils.formatDate(voucher.date, pf))}</div>
                                 $journalRefHtml
                             </div>
                             <div class="title-pill">${escapeHtml(titleText)}</div>
                             <div class="amount-box">
-                                <div style="font-size:${ps.headerFontSizeSp + 2}px;font-weight:900;color:#003300;"># ${"%,d".format(voucher.amountYer.toLong())} # ﷼</div>
+                                <div style="font-size:${ps.headerFontSizeSp + 2}px;font-weight:900;color:#003300;">${escapeHtml(FormatUtils.formatAmount(voucher.amountYer, pf))}</div>
                                 $currencySubHtml
                             </div>
                         </div>
@@ -465,16 +466,16 @@ object OfficialPrintHelper {
                     <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
                         <div style="flex:1;">
                             <div style="font-size:20px;font-weight:bold;">${escapeHtml(member.fullName)}</div>
-                            <div style="font-size:15px;color:#FDD835;margin-top:6px;">رقم العضوية: ${escapeHtml(member.memberNo)}</div>
-                            <div style="font-size:12px;margin-top:4px;">رقم الهوية: ${escapeHtml(member.nationalId)} | الهاتف: ${escapeHtml(member.phone)}</div>
+                            <div style="font-size:15px;color:#FDD835;margin-top:6px;">رقم العضوية: ${escapeHtml(FormatUtils.formatCodeOrNumber(member.memberNo, ps.printFormat))}</div>
+                            <div style="font-size:12px;margin-top:4px;">رقم الهوية: ${escapeHtml(FormatUtils.formatCodeOrNumber(member.nationalId, ps.printFormat))} | الهاتف: ${escapeHtml(FormatUtils.formatCodeOrNumber(member.phone, ps.printFormat))}</div>
                             <div style="font-size:12px;margin-top:4px;">المهنة: ${escapeHtml(member.job)} | المنطقة: ${escapeHtml(member.region)} | القرية: ${escapeHtml(member.village)}</div>
                         </div>
                         $qrSvg
                     </div>
                     <hr style="border-color:rgba(255,255,255,0.2);margin:14px 0;" />
                     <div style="font-size:12px;display:flex;justify-content:space-between;">
-                        <span>تاريخ الانتساب: ${escapeHtml(member.joinDate)}</span>
-                        <span>إجمالي السداد: ${"%,d".format(member.totalPaidYer.toLong())} ﷼</span>
+                        <span>تاريخ الانتساب: ${escapeHtml(FormatUtils.formatDate(member.joinDate, ps.printFormat))}</span>
+                        <span>إجمالي السداد: ${escapeHtml(FormatUtils.formatAmount(member.totalPaidYer, ps.printFormat))}</span>
                     </div>
                 </div>
             </body>
@@ -496,14 +497,15 @@ object OfficialPrintHelper {
         val fontFaceCss = resolveFontFaceCss(context, ps.fontFamily)
         val headerHtml = buildOfficialHeaderHtml(context, fundInfo, ps, accent)
 
-        val totalDebit = entry.lines.sumOf { it.debit }.toLong()
-        val totalCredit = entry.lines.sumOf { it.credit }.toLong()
+        val pf = ps.printFormat
+        val totalDebit = entry.lines.sumOf { it.debit }
+        val totalCredit = entry.lines.sumOf { it.credit }
         val rowsHtml = entry.lines.joinToString("\n") { line ->
-            val debStr = if (line.debit > 0) "%,d ﷼".format(line.debit.toLong()) else "-"
-            val credStr = if (line.credit > 0) "%,d ﷼".format(line.credit.toLong()) else "-"
+            val debStr = if (line.debit > 0) escapeHtml(FormatUtils.formatAmount(line.debit, pf, inTable = true)) else "-"
+            val credStr = if (line.credit > 0) escapeHtml(FormatUtils.formatAmount(line.credit, pf, inTable = true)) else "-"
             """
             <tr>
-                <td><b>${escapeHtml(line.accountCode)}</b></td>
+                <td><b>${escapeHtml(FormatUtils.formatCodeOrNumber(line.accountCode, pf))}</b></td>
                 <td>${escapeHtml(line.accountName)}</td>
                 <td style="color:$accent;font-weight:bold;">$debStr</td>
                 <td style="color:#BF6000;font-weight:bold;">$credStr</td>
@@ -520,7 +522,7 @@ object OfficialPrintHelper {
             sig3NameFallback = "المراجع المالي",
             sig4NameFallback = "رئيس مجلس الإدارة"
         )
-        val footerHtml = buildFooterHtml(ps, fundInfo, "JOURNAL|${entry.entryNo}|${entry.date}|$totalDebit", accent)
+        val footerHtml = buildFooterHtml(ps, fundInfo, "JOURNAL|${entry.entryNo}|${entry.date}|${totalDebit.toLong()}", accent)
 
         val html = """
             <!DOCTYPE html>
@@ -544,9 +546,9 @@ object OfficialPrintHelper {
                         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
                             <div class="badge">${escapeHtml(ps.journalVoucherTitle)}</div>
                             <div style="text-align:left;font-size:13px;">
-                                <div><b>رقم القيد:</b> ${escapeHtml(entry.entryNo)}</div>
-                                <div><b>التاريخ:</b> ${escapeHtml(entry.date)}</div>
-                                <div><b>السند المرتبط:</b> ${escapeHtml(entry.originalVoucherNo ?: "قيد يدوي")}</div>
+                                <div><b>رقم القيد:</b> ${escapeHtml(FormatUtils.formatCodeOrNumber(entry.entryNo, pf))}</div>
+                                <div><b>التاريخ:</b> ${escapeHtml(FormatUtils.formatDate(entry.date, pf))}</div>
+                                <div><b>السند المرتبط:</b> ${escapeHtml(entry.originalVoucherNo?.let { FormatUtils.formatCodeOrNumber(it, pf) } ?: "قيد يدوي")}</div>
                             </div>
                         </div>
                         <div style="margin-bottom:10px;"><b>البيان المحاسبي:</b> ${escapeHtml(entry.description)}</div>
@@ -564,8 +566,8 @@ object OfficialPrintHelper {
                                 $rowsHtml
                                 <tr class="total-row">
                                     <td colspan="2">الإجمالي المطابق (توازن القيد المزدوج ✔)</td>
-                                    <td>${"%,d".format(totalDebit)} ﷼</td>
-                                    <td>${"%,d".format(totalCredit)} ﷼</td>
+                                    <td>${escapeHtml(FormatUtils.formatAmount(totalDebit, pf))}</td>
+                                    <td>${escapeHtml(FormatUtils.formatAmount(totalCredit, pf))}</td>
                                     <td>متوازن</td>
                                 </tr>
                             </tbody>
@@ -594,19 +596,20 @@ object OfficialPrintHelper {
         val fontFaceCss = resolveFontFaceCss(context, ps.fontFamily)
         val headerHtml = buildOfficialHeaderHtml(context, fundInfo, ps, accent)
 
+        val pf = ps.printFormat
         val rowsHtml = accounts.joinToString("\n") { acc ->
             """
             <tr>
-                <td><b>${escapeHtml(acc.code)}</b></td>
+                <td><b>${escapeHtml(FormatUtils.formatCodeOrNumber(acc.code, pf))}</b></td>
                 <td>${escapeHtml(acc.name)}</td>
                 <td>${escapeHtml(acc.type.title)}</td>
-                <td style="font-weight:bold;color:$accent;">${"%,d".format(acc.balance.toLong())} ﷼</td>
+                <td style="font-weight:bold;color:$accent;">${escapeHtml(FormatUtils.formatAmount(acc.balance, pf, inTable = true))}</td>
             </tr>
             """.trimIndent()
         }
-        val totalAssets = accounts.filter { it.parentCode != null && it.code.startsWith("1") }.sumOf { it.balance }.toLong()
-        val totalRev = accounts.filter { it.parentCode != null && it.code.startsWith("4") }.sumOf { it.balance }.toLong()
-        val totalExp = accounts.filter { it.parentCode != null && it.code.startsWith("5") }.sumOf { it.balance }.toLong()
+        val totalAssets = accounts.filter { it.parentCode != null && it.code.startsWith("1") }.sumOf { it.balance }
+        val totalRev = accounts.filter { it.parentCode != null && it.code.startsWith("4") }.sumOf { it.balance }
+        val totalExp = accounts.filter { it.parentCode != null && it.code.startsWith("5") }.sumOf { it.balance }
 
         val signaturesHtml = buildSignaturesHtml(
             ps = ps,
@@ -616,7 +619,7 @@ object OfficialPrintHelper {
             sig3NameFallback = "المراجع المالي",
             sig4NameFallback = "رئيس مجلس الإدارة"
         )
-        val footerHtml = buildFooterHtml(ps, fundInfo, "STATEMENT|${fundInfo.fiscalYear}|$totalAssets|$totalRev", accent)
+        val footerHtml = buildFooterHtml(ps, fundInfo, "STATEMENT|${fundInfo.fiscalYear}|${totalAssets.toLong()}|${totalRev.toLong()}", accent)
 
         val html = """
             <!DOCTYPE html>
@@ -642,10 +645,10 @@ object OfficialPrintHelper {
                             <div style="font-size:11px;color:#666;">${escapeHtml(ps.financialStatementSubtitle)}</div>
                         </div>
                         <div class="kpi-row">
-                            <div class="kpi"><b>إجمالي الأصول والسيولة</b><br/>${"%,d".format(totalAssets)} ﷼</div>
-                            <div class="kpi"><b>إجمالي الإيرادات</b><br/>${"%,d".format(totalRev)} ﷼</div>
-                            <div class="kpi"><b>إجمالي المصروفات</b><br/>${"%,d".format(totalExp)} ﷼</div>
-                            <div class="kpi"><b>صافي الفائض التشغيلي</b><br/>${"%,d".format(totalRev - totalExp)} ﷼</div>
+                            <div class="kpi"><b>إجمالي الأصول والسيولة</b><br/>${escapeHtml(FormatUtils.formatAmount(totalAssets, pf))}</div>
+                            <div class="kpi"><b>إجمالي الإيرادات</b><br/>${escapeHtml(FormatUtils.formatAmount(totalRev, pf))}</div>
+                            <div class="kpi"><b>إجمالي المصروفات</b><br/>${escapeHtml(FormatUtils.formatAmount(totalExp, pf))}</div>
+                            <div class="kpi"><b>صافي الفائض التشغيلي</b><br/>${escapeHtml(FormatUtils.formatAmount(totalRev - totalExp, pf))}</div>
                         </div>
                         <table>
                             <thead>
@@ -717,11 +720,11 @@ object OfficialPrintHelper {
                         </div>
                         <table>
                             <tr><th>البيان الإحصائي / المالي</th><th>القيمة المعتمدة</th></tr>
-                            <tr><td>إجمالي المقبوضات المعتمدة</td><td>${"%,d ﷼".format(totalRev)}</td></tr>
-                            <tr><td>إجمالي المصروفات المعتمدة</td><td>${"%,d ﷼".format(totalExp)}</td></tr>
-                            <tr><td>صافي الفائض النقدي والبنكي</td><td><b>${"%,d ﷼".format(totalRev - totalExp)}</b></td></tr>
-                            <tr><td>إجمالي الأعضاء المسجلين</td><td>$membersCount عضو</td></tr>
-                            <tr><td>عدد حالات المساعدات المنفذة</td><td>$disbursedAidsCount حالة</td></tr>
+                            <tr><td>إجمالي المقبوضات المعتمدة</td><td>${escapeHtml(FormatUtils.formatAmount(totalRev.toDouble(), ps.printFormat))}</td></tr>
+                            <tr><td>إجمالي المصروفات المعتمدة</td><td>${escapeHtml(FormatUtils.formatAmount(totalExp.toDouble(), ps.printFormat))}</td></tr>
+                            <tr><td>صافي الفائض النقدي والبنكي</td><td><b>${escapeHtml(FormatUtils.formatAmount((totalRev - totalExp).toDouble(), ps.printFormat))}</b></td></tr>
+                            <tr><td>إجمالي الأعضاء المسجلين</td><td>${FormatUtils.toArabicDigitsIfNeeded(membersCount.toString(), ps.printFormat.digitLanguage)} عضو</td></tr>
+                            <tr><td>عدد حالات المساعدات المنفذة</td><td>${FormatUtils.toArabicDigitsIfNeeded(disbursedAidsCount.toString(), ps.printFormat.digitLanguage)} حالة</td></tr>
                         </table>
                         $signaturesHtml
                         $footerHtml
@@ -853,7 +856,9 @@ object OfficialPrintHelper {
                 textAlign = Paint.Align.RIGHT
             }
             canvas.drawText(voucherTitle, pageWidth - 48f, 160f, badgePaint)
-            canvas.drawText("رقم السند: ${voucher.voucherNo}   |   التاريخ: ${voucher.date}", pageWidth - 48f, 184f, bodyPaint.apply { textAlign = Paint.Align.RIGHT })
+            val formattedPdfDate = FormatUtils.formatDate(voucher.date, printSettings.printFormat)
+            val formattedPdfNo = FormatUtils.formatCodeOrNumber(voucher.voucherNo, printSettings.printFormat)
+            canvas.drawText("رقم السند: $formattedPdfNo   |   التاريخ: $formattedPdfDate", pageWidth - 48f, 184f, bodyPaint.apply { textAlign = Paint.Align.RIGHT })
 
             val amountBoxPaint = Paint().apply {
                 color = android.graphics.Color.parseColor("#FFF9C4")
@@ -867,7 +872,7 @@ object OfficialPrintHelper {
                 typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
                 textAlign = Paint.Align.CENTER
             }
-            canvas.drawText("%,d ﷼".format(voucher.amountYer.toLong()), 141f, 172f, amtTextPaint)
+            canvas.drawText(FormatUtils.formatAmount(voucher.amountYer, printSettings.printFormat), 141f, 172f, amtTextPaint)
 
             // Ledger Body Rows
             val partyLabel = if (voucher.type == VoucherType.RECEIPT) printSettings.receiptPartyLabel else printSettings.paymentPartyLabel
@@ -876,7 +881,7 @@ object OfficialPrintHelper {
                 printSettings.amountWordsLabel to voucher.amountWords,
                 printSettings.paymentMethodLabel to "${voucher.paymentMethod.title} (${voucher.accountName})",
                 printSettings.descriptionLabel to voucher.description,
-                "رقم القيد المحاسبي" to voucher.linkedJournalEntryId.ifBlank { "مرحّل آلياً" }
+                "رقم القيد المحاسبي" to voucher.linkedJournalEntryId.takeIf { it.isNotBlank() }?.let { FormatUtils.formatCodeOrNumber(it, printSettings.printFormat) }.orEmpty().ifBlank { "مرحّل آلياً" }
             )
             var rowY = 220f
             rows.forEach { (label, value) ->

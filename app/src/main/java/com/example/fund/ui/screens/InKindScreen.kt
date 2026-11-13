@@ -27,16 +27,20 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.fund.data.FundRepository
 import com.example.fund.model.InKindItem
 import com.example.fund.model.InKindMovement
+import com.example.fund.util.FormatUtils
+import com.example.fund.util.LocalScreenFormat
 import com.example.ui.theme.*
 import java.text.SimpleDateFormat
 import java.util.*
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun InKindScreen() {
     val repo = FundRepository.getInstance()
     val items by repo.inKindItems.collectAsStateWithLifecycle()
     val movements by repo.inKindMovements.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val screenFormat = LocalScreenFormat.current
 
     var selectedTab by remember { mutableIntStateOf(0) } // 0: المخزون، 1: سجل الحركات
     var showMoveDialog by remember { mutableStateOf<Pair<InKindItem, String>?>(null) }
@@ -50,19 +54,19 @@ fun InKindScreen() {
             .padding(16.dp)
             .testTag("in_kind_screen")
     ) {
-        Row(
+        FlowRow(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Column(modifier = Modifier.weight(1f)) {
+            Column(modifier = Modifier.widthIn(min = 180.dp)) {
                 Text(
                     "المستودع والمساعدات العينية",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    "إجمالي القيمة التقديرية للمخزون: ${"%,d ﷼".format(totalValueYer)}",
+                    "إجمالي القيمة التقديرية للمخزون: ${FormatUtils.formatAmount(totalValueYer.toDouble(), screenFormat)}",
                     style = MaterialTheme.typography.bodySmall.copy(fontFeatureSettings = "tnum"),
                     color = StatusSuccess,
                     fontWeight = FontWeight.Bold
@@ -75,7 +79,7 @@ fun InKindScreen() {
                 ) {
                     Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("صنف جديد", style = MaterialTheme.typography.labelMedium)
+                    Text("صنف جديد", style = MaterialTheme.typography.labelMedium, maxLines = 1, softWrap = false)
                 }
                 Button(
                     onClick = {
@@ -86,7 +90,7 @@ fun InKindScreen() {
                 ) {
                     Icon(Icons.Default.LocalShipping, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("توريد", style = MaterialTheme.typography.labelMedium)
+                    Text("توريد", style = MaterialTheme.typography.labelMedium, maxLines = 1, softWrap = false)
                 }
             }
         }
@@ -131,7 +135,7 @@ fun InKindScreen() {
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(item.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                                     Text(
-                                        "الكود: ${item.code} | الفئة: ${item.category} | قيمة الوحدة: ${"%,d ﷼".format(item.unitCostYer.toLong())}",
+                                        "الكود: ${item.code} | الفئة: ${item.category} | قيمة الوحدة: ${FormatUtils.formatAmount(item.unitCostYer, screenFormat)}",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -249,7 +253,7 @@ private fun InKindMovementCard(mov: InKindMovement) {
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
@@ -461,10 +465,11 @@ private fun AddInKindItemDialog(
                     )
                 }
                 Spacer(Modifier.height(8.dp))
+                val dialogFormat = LocalScreenFormat.current
                 OutlinedTextField(
                     value = unitValText,
                     onValueChange = { unitValText = it.filter { c -> c.isDigit() } },
-                    label = { Text("القيمة التقديرية للوحدة (ريال يمني)") },
+                    label = { Text("القيمة التقديرية للوحدة (${dialogFormat.resolvedCurrencySymbol()})") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true

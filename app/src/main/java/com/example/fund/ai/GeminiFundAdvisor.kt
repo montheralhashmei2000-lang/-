@@ -177,18 +177,20 @@ object GeminiFundAdvisor {
             }
         }
 
+        val screenFormat = repo.screenFormat.value
         val eligibilityNote = if (memberDue > 0L) {
-            "توصية بسداد المتأخرات ($memberDue ﷼) أو خصمها بالتقسيط الميسّر وفق اللائحة."
+            "توصية بسداد المتأخرات (${com.example.fund.util.FormatUtils.formatAmount(memberDue.toDouble(), screenFormat)}) أو خصمها بالتقسيط الميسّر وفق اللائحة."
         } else {
             "العضو منتظم تماماً في سداد الاشتراكات الشهرية ولا توجد عليه متأخرات."
         }
 
+        val reqNoFormatted = com.example.fund.util.FormatUtils.formatCodeOrNumber(request.requestNo, screenFormat)
         return@withContext """
-            📋 توصية التحليل المالي المحلي لطلب المساعدة (${request.requestNo}):
+            📋 توصية التحليل المالي المحلي لطلب المساعدة ($reqNoFormatted):
 
-            - المستفيد: ${member?.fullName ?: request.memberName} (سدد: ${"%,d".format(memberPaid)} ﷼ | متأخرات: ${"%,d".format(memberDue)} ﷼)
+            - المستفيد: ${member?.fullName ?: request.memberName} (سدد: ${com.example.fund.util.FormatUtils.formatAmount(memberPaid.toDouble(), screenFormat)} | متأخرات: ${com.example.fund.util.FormatUtils.formatAmount(memberDue.toDouble(), screenFormat)})
             - القرار المقترح: اعتماد المساعدة ضمن السقف النظامي للصندوق.
-            - المبلغ الموصى باعتماده: ${"%,d".format(approved.toLong())} ريال يمني.
+            - المبلغ الموصى باعتماده: ${com.example.fund.util.FormatUtils.formatAmount(approved, screenFormat)}.
             - مبررات القرار:
               1. مطابقة الحالة للائحة المساعدات الاجتماعية للصندوق (فئة: ${request.aidType.title}).
               2. $eligibilityNote
@@ -210,23 +212,24 @@ object GeminiFundAdvisor {
         ceiling: Long,
         isOfflineMode: Boolean
     ): String {
+        val screenFormat = com.example.fund.data.FundRepository.getInstance().screenFormat.value
         val coverage = if (totalLiabilities > 0) ((totalAssets / totalLiabilities) * 100).toInt() else 100
         val modeTag = if (isOfflineMode) "⚡ محرك التحليل المحلي (Offline Fallback)" else "📊 تقرير التحليل المالي الذكي"
         return """
             $modeTag - $fundName:
 
             1. مؤشر السيولة والتوازن المحاسبي:
-               - مستوى السيولة والأصول: ${"%,d".format(totalAssets.toLong())} ﷼، مقابل التزامات قدرها ${"%,d".format(totalLiabilities.toLong())} ﷼ (نسبة التغطية: $coverage%).
+               - مستوى السيولة والأصول: ${com.example.fund.util.FormatUtils.formatAmount(totalAssets, screenFormat)}، مقابل التزامات قدرها ${com.example.fund.util.FormatUtils.formatAmount(totalLiabilities, screenFormat)} (نسبة التغطية: $coverage%).
                - حالة دفتر القيود المزدوجة: ${if (isBalanced) "متوازن بالكامل ✔" else "يتطلب مراجعة فرق التوازن ⚠"}.
 
-            2. كفاءة الصرف والتنبيهات ($vouchersCount سند):
-               - صافي الفائض التشغيلي: ${"%,d".format(netSurplus.toLong())} ﷼ (إيرادات: ${"%,d".format(totalRevenue.toLong())} ﷼ | مصروفات: ${"%,d".format(totalExpenses.toLong())} ﷼).
+            2. كفاءة الصرف والتنبيهات (${com.example.fund.util.FormatUtils.formatCodeOrNumber(vouchersCount.toString(), screenFormat)} سند):
+               - صافي الفائض التشغيلي: ${com.example.fund.util.FormatUtils.formatAmount(netSurplus, screenFormat)} (إيرادات: ${com.example.fund.util.FormatUtils.formatAmount(totalRevenue, screenFormat)} | مصروفات: ${com.example.fund.util.FormatUtils.formatAmount(totalExpenses, screenFormat)}).
                - تنبيهات المخزون والموازنة: $lowStockCount أصناف قاربت حد إعادة الطلب | $overBudgetCount بنود موازنة تجاوزت حد التنبيه.
 
             3. التوصيات الاستراتيجية:
                - توجيه 20% من الفائض المتراكم نحو المشاريع التنموية المستدامة في القرى والمناطق المستفيدة.
                - تفعيل خطة تحصيل للاشتراكات المتأخرة للأعضاء عبر وسائل الدفع الإلكتروني.
-               - الحفاظ على سقف المساعدات الفردية عند ${"%,d".format(ceiling)} ﷼ لضمان استدامة العدالة التوزيعية.
+               - الحفاظ على سقف المساعدات الفردية عند ${com.example.fund.util.FormatUtils.formatAmount(ceiling.toDouble(), screenFormat)} لضمان استدامة العدالة التوزيعية.
         """.trimIndent()
     }
 }

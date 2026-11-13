@@ -43,10 +43,10 @@ fun MessagesScreen() {
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text("المراسلات الإدارية الداخلية", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = FundPrimary)
                 Text("التواصل بين المحاسب والمراجع ومجلس الإدارة", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
@@ -58,7 +58,7 @@ fun MessagesScreen() {
             ) {
                 Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(4.dp))
-                Text("رسالة جديدة", fontSize = 12.sp)
+                Text("رسالة جديدة", fontSize = 12.sp, maxLines = 1, softWrap = false)
             }
         }
 
@@ -102,10 +102,16 @@ fun MessagesScreen() {
                         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(msg.subject, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = if (msg.isRead) MaterialTheme.colorScheme.onSurface else FundPrimary)
+                                Text(
+                                    msg.subject,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp,
+                                    color = if (msg.isRead) MaterialTheme.colorScheme.onSurface else FundPrimary,
+                                    modifier = Modifier.weight(1f)
+                                )
                                 if (!msg.isRead) {
                                     Surface(color = FundGoldDark, shape = RoundedCornerShape(4.dp)) {
                                         Text("جديدة", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))

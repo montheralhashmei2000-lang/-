@@ -31,6 +31,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.fund.data.FundRepository
 import com.example.fund.model.*
+import com.example.fund.util.FormatUtils
 import com.example.fund.util.OfficialPrintHelper
 import com.example.fund.util.QrCodeView
 import com.example.ui.theme.*
@@ -138,12 +139,12 @@ fun VoucherPrintDialog(
                                 if (!shared) {
                                     val shareText = """
                                         ${fundInfo.name}
-                                        $voucherTitle رقم: ${voucher.voucherNo}
-                                        التاريخ: ${voucher.date}
+                                        $voucherTitle رقم: ${FormatUtils.formatCodeOrNumber(voucher.voucherNo, ps.printFormat)}
+                                        التاريخ: ${FormatUtils.formatDate(voucher.date, ps.printFormat)}
                                         ${if (isReceipt) ps.receiptPartyLabel else ps.paymentPartyLabel} ${voucher.partyName}
-                                        المبلغ: ${"%,d".format(voucher.amountYer.toLong())} ﷼ (${voucher.amountWords})
+                                        المبلغ: ${FormatUtils.formatAmount(voucher.amountYer, ps.printFormat)} (${voucher.amountWords})
                                         ${ps.descriptionLabel} ${voucher.description}
-                                        القيد المحاسبي: ${voucher.linkedJournalEntryId}
+                                        القيد المحاسبي: ${FormatUtils.formatCodeOrNumber(voucher.linkedJournalEntryId, ps.printFormat)}
                                     """.trimIndent()
                                     val intent = Intent(Intent.ACTION_SEND).apply {
                                         type = "text/plain"
@@ -450,7 +451,7 @@ fun VoucherPrintDialog(
                                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
                                             ) {
                                                 Text(
-                                                    text = "# %,d # ﷼".format(voucher.amountYer.toLong()),
+                                                    text = FormatUtils.formatAmount(voucher.amountYer, ps.printFormat),
                                                     fontWeight = FontWeight.Black,
                                                     fontSize = (ps.headerFontSizeSp).sp,
                                                     color = Color(0xFF003300),
@@ -458,7 +459,7 @@ fun VoucherPrintDialog(
                                                 )
                                                 if (ps.showCurrencyDetails && voucher.currency != CurrencyCode.YER) {
                                                     Text(
-                                                        text = "${voucher.amountOriginal} ${voucher.currency.name} @ %,.0f".format(voucher.exchangeRate),
+                                                        text = "${FormatUtils.formatNumber(voucher.amountOriginal, ps.printFormat)} ${voucher.currency.name} @ ${FormatUtils.formatNumber(voucher.exchangeRate, ps.printFormat, decimalsOverride = 0)}",
                                                         fontSize = 9.sp,
                                                         color = Color(0xFF44553F),
                                                         style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
@@ -475,22 +476,25 @@ fun VoucherPrintDialog(
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Text(
-                                            text = "رقم السند: ${voucher.voucherNo}",
+                                            text = "رقم السند: ${FormatUtils.formatCodeOrNumber(voucher.voucherNo, ps.printFormat)}",
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 11.sp,
-                                            color = badgeColor
+                                            color = badgeColor,
+                                            style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
                                         )
                                         Text(
-                                            text = "التاريخ: ${voucher.date}",
+                                            text = "التاريخ: ${FormatUtils.formatDate(voucher.date, ps.printFormat)}",
                                             fontSize = 11.sp,
-                                            color = Color(0xFF333333)
+                                            color = Color(0xFF333333),
+                                            style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
                                         )
                                         if (ps.showJournalReference && voucher.linkedJournalEntryId.isNotBlank()) {
                                             Text(
-                                                text = "القيد: ${voucher.linkedJournalEntryId}",
+                                                text = "القيد: ${FormatUtils.formatCodeOrNumber(voucher.linkedJournalEntryId, ps.printFormat)}",
                                                 fontSize = 10.sp,
                                                 fontWeight = FontWeight.Bold,
-                                                color = accentColor
+                                                color = accentColor,
+                                                style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
                                             )
                                         }
                                     }

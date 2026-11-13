@@ -308,6 +308,75 @@ data class FundInfo(
     val customLogoBase64: String = ""
 )
 
+enum class DigitLanguage(val title: String) {
+    LATIN("لاتينية (123)"),
+    ARABIC_INDIC("عربية شرقية (١٢٣)")
+}
+
+enum class ThousandsSeparatorOption(val title: String, val charStr: String) {
+    COMMA("فاصلة (,)", ","),
+    DOT("نقطة (.)", "."),
+    SPACE("مسافة ( )", " "),
+    NONE("بدون فاصل", "")
+}
+
+enum class DecimalSeparatorOption(val title: String, val charStr: String) {
+    DOT("نقطة (.)", "."),
+    COMMA("فاصلة (,)", ",")
+}
+
+enum class DateFormatPattern(val title: String, val pattern: String) {
+    DMY_SLASH("يوم/شهر/سنة", "dd/MM/yyyy"),
+    YMD_DASH("سنة-شهر-يوم", "yyyy-MM-dd"),
+    DMY_MONTH_NAME("يوم شهر سنة", "dd MMM yyyy")
+}
+
+enum class CalendarSystem(val title: String) {
+    GREGORIAN("ميلادي"),
+    HIJRI("هجري")
+}
+
+enum class CurrencySymbolPosition(val title: String) {
+    AFTER("بعد الرقم"),
+    BEFORE("قبل الرقم"),
+    HIDDEN_IN_TABLES("إخفاء في الجداول")
+}
+
+enum class DisplayCurrencyOption(val title: String, val defaultSymbol: String) {
+    YER("ريال يمني", "ر.ي"),
+    YER_SIGN("ريال يمني (﷼)", "﷼"),
+    SAR("ريال سعودي", "ر.س"),
+    USD("دولار أمريكي", "$"),
+    CUSTOM("رمز مخصص", "ر.ي")
+}
+
+enum class AppFontOption(val title: String) {
+    SYSTEM("النظام الافتراضي (System)"),
+    TAJAWAL("تجوال العصري (Tajawal)"),
+    CAIRO("القاهرة الهندسي (Cairo)"),
+    IBM_PLEX_SANS_ARABIC("IBM Plex العربي"),
+    AMIRI("أميري الكلاسيكي (Amiri)")
+}
+
+data class DisplayFormatConfig(
+    val digitLanguage: DigitLanguage = DigitLanguage.LATIN,
+    val thousandsSeparator: ThousandsSeparatorOption = ThousandsSeparatorOption.COMMA,
+    val decimalSeparator: DecimalSeparatorOption = DecimalSeparatorOption.DOT,
+    val decimalPlaces: Int = 0,
+    val maxAmountDigits: Int = 12,
+    val currencyOption: DisplayCurrencyOption = DisplayCurrencyOption.YER,
+    val customCurrencySymbol: String = "ر.ي",
+    val symbolPosition: CurrencySymbolPosition = CurrencySymbolPosition.AFTER,
+    val datePattern: DateFormatPattern = DateFormatPattern.YMD_DASH,
+    val showTime: Boolean = false,
+    val calendarSystem: CalendarSystem = CalendarSystem.GREGORIAN
+) {
+    fun resolvedCurrencySymbol(): String = when (currencyOption) {
+        DisplayCurrencyOption.CUSTOM -> customCurrencySymbol.ifBlank { "ر.ي" }
+        else -> currencyOption.defaultSymbol
+    }
+}
+
 data class AppSettings(
     // إعدادات الأعضاء والاشتراكات
     val monthlySubscriptionFeeYer: Double = 20000.0,
@@ -330,7 +399,9 @@ data class AppSettings(
     val allowAnonymousDonors: Boolean = true,
     val defaultEventLocation: String = "مقر الصندوق - قاعة الاجتماعات",
     val strictRolePermissions: Boolean = true,
-    val enableAuditTrail: Boolean = true
+    val enableAuditTrail: Boolean = true,
+    // إعدادات تنسيق الشاشات (الأرقام والعملات والتاريخ)
+    val screenFormat: DisplayFormatConfig = DisplayFormatConfig()
 )
 
 enum class PrintFontOption(val title: String, val cssName: String, val resName: String) {
@@ -405,7 +476,10 @@ data class PrintSettings(
     val showCurrencyDetails: Boolean = true,
     val showFundContactInFooter: Boolean = true,
     val footerNote: String = "هذا السند معتمد إلكترونياً ولا يعتد بأي كشط أو تعديل يدوي.",
-    val footerSubNote: String = "شكراً لمساهمتكم في دعم التكافل والتنمية المجتمعية."
+    val footerSubNote: String = "شكراً لمساهمتكم في دعم التكافل والتنمية المجتمعية.",
+    // إعدادات تنسيق الشاشات والمطبوعات و PDF المستقلة
+    val screenFormat: DisplayFormatConfig = DisplayFormatConfig(),
+    val printFormat: DisplayFormatConfig = DisplayFormatConfig()
 )
 
 data class SyncQueueItem(

@@ -34,167 +34,174 @@ fun UsersScreen(settingsViewModel: SettingsViewModel = viewModel()) {
     val context = LocalContext.current
     var showAddUserDialog by remember { mutableStateOf(false) }
 
-    Column(
+    LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp)
-            .testTag("users_screen")
+            .testTag("users_screen"),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    "المستخدمون والصلاحيات (RBAC)",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    "المستخدم النشط حالياً: ${currentUser.fullName} (${currentUser.role.title})",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = StatusSuccess,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-            if (currentUser.role == UserRole.ADMIN) {
-                Button(
-                    onClick = { showAddUserDialog = true },
-                    modifier = Modifier.testTag("add_user_button")
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("إضافة مستخدم")
-                }
-            }
-        }
-
-        Spacer(Modifier.height(12.dp))
-
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-        ) {
-            Column(modifier = Modifier.padding(12.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Security, contentDescription = null, tint = FundPrimary, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("مصفوفة الصلاحيات المعتمدة في الصندوق:", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                }
-                Spacer(Modifier.height(4.dp))
-                UserRole.entries.forEach { role ->
+        item(key = "users_header") {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        "• ${role.title}: ${rolePermissionsDescription(role)}",
+                        "المستخدمون والصلاحيات (RBAC)",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "المستخدم النشط حالياً: ${currentUser.fullName} (${currentUser.role.title})",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = StatusSuccess,
+                        fontWeight = FontWeight.Bold
                     )
                 }
+                if (currentUser.role == UserRole.ADMIN) {
+                    Button(
+                        onClick = { showAddUserDialog = true },
+                        modifier = Modifier.testTag("add_user_button")
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("إضافة مستخدم", maxLines = 1, softWrap = false)
+                    }
+                }
             }
         }
 
-        Spacer(Modifier.height(12.dp))
+        item(key = "users_rbac_matrix") {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Security, contentDescription = null, tint = FundPrimary, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("مصفوفة الصلاحيات المعتمدة في الصندوق:", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    UserRole.entries.forEach { role ->
+                        Text(
+                            "• ${role.title}: ${rolePermissionsDescription(role)}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
 
-        LazyColumn(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            items(users, key = { it.id }) { u ->
-                val isCurrent = u.id == currentUser.id
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (isCurrent) FundPrimary.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surface
-                    ),
-                    elevation = CardDefaults.cardElevation(1.dp)
+        items(users, key = { it.id }) { u ->
+            val isCurrent = u.id == currentUser.id
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (isCurrent) FundPrimary.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surface
+                ),
+                elevation = CardDefaults.cardElevation(1.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(14.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Icon(Icons.Default.Person, contentDescription = null, tint = FundPrimary)
-                                Text(u.fullName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                                Surface(
-                                    color = (if (u.isActive) StatusSuccess else StatusDanger).copy(alpha = 0.14f),
-                                    shape = RoundedCornerShape(6.dp)
-                                ) {
-                                    Text(
-                                        if (u.isActive) "نشط" else "موقوف",
-                                        color = if (u.isActive) StatusSuccess else StatusDanger,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                    )
-                                }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Icon(Icons.Default.Person, contentDescription = null, tint = FundPrimary)
+                            Text(
+                                u.fullName,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.weight(1f, fill = false)
+                            )
+                            Surface(
+                                color = (if (u.isActive) StatusSuccess else StatusDanger).copy(alpha = 0.14f),
+                                shape = RoundedCornerShape(6.dp)
+                            ) {
+                                Text(
+                                    if (u.isActive) "نشط" else "موقوف",
+                                    color = if (u.isActive) StatusSuccess else StatusDanger,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
                             }
-                            Text(
-                                "اسم الدخول: @${u.username} | الدور: ${u.role.title}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = FundPrimary,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Text(
-                                rolePermissionsDescription(u.role),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Text(
-                                "آخر دخول: ${u.lastLogin}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
                         }
-                        Column(
-                            horizontalAlignment = Alignment.End,
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            if (isCurrent) {
-                                Surface(
-                                    color = StatusSuccess.copy(alpha = 0.16f),
-                                    shape = RoundedCornerShape(8.dp)
+                        Text(
+                            "اسم الدخول: @${u.username} | الدور: ${u.role.title}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = FundPrimary,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            rolePermissionsDescription(u.role),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            "آخر دخول: ${u.lastLogin}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Column(
+                        horizontalAlignment = Alignment.End,
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        if (isCurrent) {
+                            Surface(
+                                color = StatusSuccess.copy(alpha = 0.16f),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text(
+                                    "الجلسة الحالية",
+                                    color = StatusSuccess,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                )
+                            }
+                        } else {
+                            OutlinedButton(
+                                onClick = {
+                                    if (u.isActive) {
+                                        settingsViewModel.switchRole(u.role)
+                                        Toast.makeText(context, "تم التبديل إلى حساب: ${u.fullName}", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        Toast.makeText(context, "هذا الحساب موقوف، قم بتفعيله أولاً", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                enabled = u.isActive,
+                                modifier = Modifier.testTag("switch_user_${u.username}")
+                            ) {
+                                Icon(Icons.Default.SwapHoriz, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("تبديل الدور", style = MaterialTheme.typography.labelSmall, maxLines = 1, softWrap = false)
+                            }
+                            if (currentUser.role == UserRole.ADMIN) {
+                                TextButton(
+                                    onClick = { settingsViewModel.toggleUserActive(u.id) },
+                                    modifier = Modifier.height(30.dp),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
                                 ) {
                                     Text(
-                                        "الجلسة الحالية",
-                                        color = StatusSuccess,
+                                        if (u.isActive) "إيقاف الحساب" else "تفعيل الحساب",
+                                        color = if (u.isActive) StatusDanger else StatusSuccess,
                                         style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                        maxLines = 1,
+                                        softWrap = false
                                     )
-                                }
-                            } else {
-                                OutlinedButton(
-                                    onClick = {
-                                        if (u.isActive) {
-                                            settingsViewModel.switchRole(u.role)
-                                            Toast.makeText(context, "تم التبديل إلى حساب: ${u.fullName}", Toast.LENGTH_SHORT).show()
-                                        } else {
-                                            Toast.makeText(context, "هذا الحساب موقوف، قم بتفعيله أولاً", Toast.LENGTH_SHORT).show()
-                                        }
-                                    },
-                                    enabled = u.isActive,
-                                    modifier = Modifier.testTag("switch_user_${u.username}")
-                                ) {
-                                    Icon(Icons.Default.SwapHoriz, contentDescription = null, modifier = Modifier.size(16.dp))
-                                    Spacer(Modifier.width(4.dp))
-                                    Text("تبديل الدور", style = MaterialTheme.typography.labelSmall)
-                                }
-                                if (currentUser.role == UserRole.ADMIN) {
-                                    TextButton(
-                                        onClick = { settingsViewModel.toggleUserActive(u.id) },
-                                        modifier = Modifier.height(30.dp),
-                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
-                                    ) {
-                                        Text(
-                                            if (u.isActive) "إيقاف الحساب" else "تفعيل الحساب",
-                                            color = if (u.isActive) StatusDanger else StatusSuccess,
-                                            style = MaterialTheme.typography.labelSmall
-                                        )
-                                    }
                                 }
                             }
                         }

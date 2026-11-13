@@ -290,7 +290,7 @@ class SyncRepository(
         }
 
         val ts = nowTimeStr()
-        val batchNo = "SYNC-2026-%03d".format(_syncHistory.value.size + 19)
+        val batchNo = String.format(java.util.Locale.US, "SYNC-2026-%03d", _syncHistory.value.size + 19)
         val queueDigest = pendingList.joinToString("|") { "${it.id}:${it.txHash}:${it.entityName}:${it.summary}" }
         val checksum = SecurityUtils.sha256Hex(queueDigest)
 

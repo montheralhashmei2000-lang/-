@@ -464,14 +464,15 @@ data class AppSettingsEntity(
     val allowAnonymousDonors: Boolean,
     val defaultEventLocation: String,
     val strictRolePermissions: Boolean,
-    val enableAuditTrail: Boolean
+    val enableAuditTrail: Boolean,
+    val screenFormat: DisplayFormatConfig = DisplayFormatConfig()
 ) {
     fun toDomain() = AppSettings(
         monthlySubscriptionFeeYer, autoSuspendMonths, requireNationalId, memberNoPrefix,
         requireReviewerApproval, periodicAidDisburseDay, lowStockThreshold, defaultWarehouseName,
         voucherNoPrefix, defaultTreasuryAccountCode, allowNegativeTreasury, enforceBalancedJournal,
         budgetAlertPercent, autoPrintVoucher, allowAnonymousDonors, defaultEventLocation,
-        strictRolePermissions, enableAuditTrail
+        strictRolePermissions, enableAuditTrail, screenFormat
     )
     companion object {
         fun fromDomain(d: AppSettings) = AppSettingsEntity(
@@ -479,7 +480,7 @@ data class AppSettingsEntity(
             d.requireReviewerApproval, d.periodicAidDisburseDay, d.lowStockThreshold, d.defaultWarehouseName,
             d.voucherNoPrefix, d.defaultTreasuryAccountCode, d.allowNegativeTreasury, d.enforceBalancedJournal,
             d.budgetAlertPercent, d.autoPrintVoucher, d.allowAnonymousDonors, d.defaultEventLocation,
-            d.strictRolePermissions, d.enableAuditTrail
+            d.strictRolePermissions, d.enableAuditTrail, d.screenFormat
         )
     }
 }
@@ -533,7 +534,9 @@ data class PrintSettingsEntity(
     val showCurrencyDetails: Boolean,
     val showFundContactInFooter: Boolean,
     val footerNote: String,
-    val footerSubNote: String
+    val footerSubNote: String,
+    val screenFormat: DisplayFormatConfig = DisplayFormatConfig(),
+    val printFormat: DisplayFormatConfig = DisplayFormatConfig()
 ) {
     fun toDomain() = PrintSettings(
         showCountryHeader, countryHeaderText, showDepartmentHeader, departmentHeaderText,
@@ -546,7 +549,7 @@ data class PrintSettingsEntity(
         sig3Enabled, sig3Title, sig3DefaultName, sig4Enabled, sig4Title, sig4DefaultName,
         showSignatureLine, showOfficialStampBox, officialStampLabel, showQrVerification,
         qrCaptionText, showJournalReference, showCurrencyDetails, showFundContactInFooter,
-        footerNote, footerSubNote
+        footerNote, footerSubNote, screenFormat, printFormat
     )
     companion object {
         fun fromDomain(d: PrintSettings) = PrintSettingsEntity(
@@ -560,7 +563,7 @@ data class PrintSettingsEntity(
             d.sig3Enabled, d.sig3Title, d.sig3DefaultName, d.sig4Enabled, d.sig4Title, d.sig4DefaultName,
             d.showSignatureLine, d.showOfficialStampBox, d.officialStampLabel, d.showQrVerification,
             d.qrCaptionText, d.showJournalReference, d.showCurrencyDetails, d.showFundContactInFooter,
-            d.footerNote, d.footerSubNote
+            d.footerNote, d.footerSubNote, d.screenFormat, d.printFormat
         )
     }
 }

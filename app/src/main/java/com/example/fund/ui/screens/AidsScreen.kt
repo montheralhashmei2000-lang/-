@@ -30,6 +30,8 @@ import com.example.fund.ui.components.FundEmptyState
 import com.example.fund.ui.components.SensitiveActionConfirmDialog
 import com.example.fund.ui.components.ThousandSeparatorTransformation
 import com.example.fund.ui.viewmodel.AidsViewModel
+import com.example.fund.util.FormatUtils
+import com.example.fund.util.LocalScreenFormat
 import com.example.fund.util.TafqeetEngine
 import com.example.ui.theme.*
 import kotlinx.coroutines.launch
@@ -46,6 +48,7 @@ fun AidsScreen(
     aidsViewModel: AidsViewModel = viewModel()
 ) {
     val context = LocalContext.current
+    val screenFormat = LocalScreenFormat.current
     val coroutineScope = rememberCoroutineScope()
     val aidRequests by aidsViewModel.aidRequests.collectAsStateWithLifecycle()
     val members by aidsViewModel.members.collectAsStateWithLifecycle()
@@ -85,10 +88,10 @@ fun AidsScreen(
         // Top Bar
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text("طلبات المساعدة والضمان الاجتماعي", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = FundPrimary)
                 Text("إدارة مراحل الاعتماد والصرف المالي", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
@@ -102,7 +105,7 @@ fun AidsScreen(
                 ) {
                     Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("طلب جديد", fontSize = 12.sp)
+                    Text("طلب جديد", fontSize = 12.sp, maxLines = 1, softWrap = false)
                 }
             }
         }
@@ -178,10 +181,14 @@ fun AidsScreen(
                 Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
                             Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = FundGoldDark)
                             Text("توصية ذكية من مستشار Gemini ($evaluatingRequestNo)", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                         }
@@ -254,14 +261,14 @@ fun AidsScreen(
         val (dialogTitle, dialogMsg, confirmLabel, confirmColor, dialogIcon) = when (action.targetStatus) {
             AidStatus.APPROVED -> listOf(
                 "تأكيد اعتماد طلب المساعدة",
-                "هل أنت متأكد من اعتماد طلب (${action.request.requestNo}) للمستفيد ${action.request.memberName} بمبلغ ${"%,d".format(action.approvedAmountYer.toLong())} ﷼؟",
+                "هل أنت متأكد من اعتماد طلب (${action.request.requestNo}) للمستفيد ${action.request.memberName} بمبلغ ${FormatUtils.formatAmount(action.approvedAmountYer, screenFormat)}؟",
                 "اعتماد الطلب",
                 StatusInfo,
                 Icons.Default.Verified
             )
             AidStatus.DISBURSED -> listOf(
                 "تأكيد الصرف النقدي الفوري",
-                "سيتم صرف مبلغ ${"%,d".format(action.approvedAmountYer.toLong())} ﷼ لطلب (${action.request.requestNo}) وتوليد سند صرف وقيد محاسبي آلي. هل تود المتابعة؟",
+                "سيتم صرف مبلغ ${FormatUtils.formatAmount(action.approvedAmountYer, screenFormat)} لطلب (${action.request.requestNo}) وتوليد سند صرف وقيد محاسبي آلي. هل تود المتابعة؟",
                 "صرف فوري وإصدار السند",
                 StatusSuccess,
                 Icons.Default.Payments
@@ -312,6 +319,7 @@ private fun AidRequestCardItem(
     onStatusChange: (AidStatus, Double) -> Unit,
     onConsultAi: () -> Unit
 ) {
+    val screenFormat = LocalScreenFormat.current
     val statusColor = when (req.status) {
         AidStatus.IN_REVIEW -> StatusPending
         AidStatus.APPROVED -> StatusInfo
@@ -328,12 +336,17 @@ private fun AidRequestCardItem(
         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(req.memberName, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                    Text("طلب رقم: ${req.requestNo} | التاريخ: ${req.requestDate}", fontSize = 11.sp, color = Color.Gray)
+                    Text(
+                        "طلب رقم: ${FormatUtils.formatCodeOrNumber(req.requestNo, screenFormat)} | التاريخ: ${FormatUtils.formatDate(req.requestDate, screenFormat)}",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
+                    )
                 }
 
                 Surface(
@@ -345,18 +358,20 @@ private fun AidRequestCardItem(
                         color = Color.White,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                        maxLines = 1,
+                        softWrap = false
                     )
                 }
             }
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text("نوع المساعدة: ${req.aidType.title}", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Text("نوع المساعدة: ${req.aidType.title}", fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                 Text(
-                    "المبلغ المطلوب: %,d ﷼".format(req.requestedAmountYer.toLong()),
+                    "المبلغ المطلوب: ${FormatUtils.formatAmount(req.requestedAmountYer, screenFormat)}",
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     color = FundPrimary,
@@ -366,7 +381,7 @@ private fun AidRequestCardItem(
 
             if (req.approvedAmountYer > 0) {
                 Text(
-                    "المبلغ المعتمد: %,d ﷼".format(req.approvedAmountYer.toLong()),
+                    "المبلغ المعتمد: ${FormatUtils.formatAmount(req.approvedAmountYer, screenFormat)}",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                     color = StatusSuccess,
@@ -375,7 +390,7 @@ private fun AidRequestCardItem(
             }
 
             if (req.voucherId != null) {
-                Text("سند الصرف المرتبط: ${req.voucherId}", fontSize = 11.sp, color = StatusInfo)
+                Text("سند الصرف المرتبط: ${FormatUtils.formatCodeOrNumber(req.voucherId, screenFormat)}", fontSize = 11.sp, color = StatusInfo)
             }
 
             if (req.notes.isNotEmpty()) {
@@ -391,10 +406,13 @@ private fun AidRequestCardItem(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // AI Consult button
-                TextButton(onClick = onConsultAi) {
+                TextButton(
+                    onClick = onConsultAi,
+                    modifier = Modifier.weight(1f, fill = false)
+                ) {
                     Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = FundGoldDark, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("تقييم الذكاء الاصطناعي", fontSize = 11.sp, color = FundGoldDark)
+                    Text("تقييم الذكاء الاصطناعي", fontSize = 11.sp, color = FundGoldDark, maxLines = 1, softWrap = false)
                 }
 
                 if (canManage) {
@@ -406,7 +424,7 @@ private fun AidRequestCardItem(
                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
                                 shape = RoundedCornerShape(8.dp)
                             ) {
-                                Text("اعتماد", fontSize = 11.sp)
+                                Text("اعتماد", fontSize = 11.sp, maxLines = 1, softWrap = false)
                             }
 
                             OutlinedButton(
@@ -414,7 +432,7 @@ private fun AidRequestCardItem(
                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
                                 shape = RoundedCornerShape(8.dp)
                             ) {
-                                Text("رفض", fontSize = 11.sp, color = StatusDanger)
+                                Text("رفض", fontSize = 11.sp, color = StatusDanger, maxLines = 1, softWrap = false)
                             }
                         } else if (req.status == AidStatus.APPROVED) {
                             Button(
@@ -423,7 +441,7 @@ private fun AidRequestCardItem(
                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
                                 shape = RoundedCornerShape(8.dp)
                             ) {
-                                Text("صرف نقدي فوري", fontSize = 11.sp)
+                                Text("صرف نقدي فوري", fontSize = 11.sp, maxLines = 1, softWrap = false)
                             }
                         }
                     }
@@ -440,6 +458,7 @@ private fun NewAidRequestDialog(
     onDismiss: () -> Unit,
     onSubmit: (String, AidType, Double, String) -> Unit
 ) {
+    val screenFormat = LocalScreenFormat.current
     var selectedMember by remember { mutableStateOf(members.firstOrNull()) }
     var memberDropdownExpanded by remember { mutableStateOf(false) }
 
@@ -512,7 +531,7 @@ private fun NewAidRequestDialog(
                         val cleaned = input.replace(",", "").filter { it.isDigit() }
                         amountStr = cleaned
                     },
-                    label = { Text("المبلغ المطلوب (ريال يمني)") },
+                    label = { Text("المبلغ المطلوب (${screenFormat.resolvedCurrencySymbol()})") },
                     visualTransformation = ThousandSeparatorTransformation(),
                     textStyle = LocalTextStyle.current.copy(fontFeatureSettings = "tnum", fontWeight = FontWeight.Bold),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -522,7 +541,7 @@ private fun NewAidRequestDialog(
 
                 if (amount > 0) {
                     Text(
-                        text = TafqeetEngine.convertToWords(amount, "ريال يمني", "فلس"),
+                        text = TafqeetEngine.convertToWords(amount, screenFormat.currencyOption.title, "فلس"),
                         fontSize = 11.sp,
                         color = FundPrimary,
                         fontWeight = FontWeight.Bold
@@ -531,7 +550,7 @@ private fun NewAidRequestDialog(
 
                 if (isOverCeiling) {
                     Text(
-                        "تنبيه: المبلغ يتجاوز السقف الأعلى المسموح به (${"%,d".format(ceiling.toLong())} ﷼) ويلزم استثناء خاص من مجلس الإدارة.",
+                        "تنبيه: المبلغ يتجاوز السقف الأعلى المسموح به (${FormatUtils.formatAmount(ceiling, screenFormat)}) ويلزم استثناء خاص من مجلس الإدارة.",
                         color = StatusDanger,
                         fontSize = 11.sp,
                         style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")

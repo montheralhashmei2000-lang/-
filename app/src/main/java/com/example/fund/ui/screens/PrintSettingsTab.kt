@@ -22,7 +22,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.fund.model.*
+import com.example.fund.ui.components.DisplayFormatSettingsCard
 import com.example.fund.ui.components.VoucherPrintDialog
+import com.example.fund.util.FormatUtils
 import com.example.ui.theme.*
 
 @Composable
@@ -35,6 +37,7 @@ fun PrintSettingsTab(
 ) {
     var draft by remember(printSettings) { mutableStateOf(printSettings) }
     var showFullPreviewDialog by remember { mutableStateOf(false) }
+    var activeFormatProfile by remember { mutableIntStateOf(0) } // 0 = Screen, 1 = Print/PDF
 
     val accentColors = listOf(
         "#1B5E20" to "أخضر الصندوق",
@@ -130,10 +133,16 @@ fun PrintSettingsTab(
                     )
                 }
                 Text(
-                    "${draft.receiptPartyLabel} نموذج تجريبي للاسم",
+                    "سند رقم: ${FormatUtils.formatCodeOrNumber("V-2026-0042", draft.printFormat)} • ${draft.receiptPartyLabel} نموذج تجريبي • ${FormatUtils.formatAmount(50000.0, draft.printFormat)}",
                     fontFamily = previewFont,
                     fontSize = draft.bodyFontSizeSp.coerceAtMost(14).sp,
                     color = Color(0xFF14210F)
+                )
+                Text(
+                    "تاريخ الطباعة: ${FormatUtils.formatDate("2026-11-12", draft.printFormat)}",
+                    fontFamily = previewFont,
+                    fontSize = 10.sp,
+                    color = Color.DarkGray
                 )
                 if (draft.showSignaturesSection) {
                     val activeTitles = listOfNotNull(
@@ -152,6 +161,91 @@ fun PrintSettingsTab(
                 if (draft.footerNote.isNotBlank()) {
                     HorizontalDivider(color = Color(0xFFD8E4D2))
                     Text(draft.footerNote, fontFamily = previewFont, fontSize = 9.sp, color = Color.Gray)
+                }
+            }
+
+            // Live Side-by-Side Comparison: Screen Format vs Print Format
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
+                shape = RoundedCornerShape(10.dp),
+                border = BorderStroke(1.dp, parsedAccent.copy(alpha = 0.35f)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("dual_format_live_preview_card")
+            ) {
+                Column(
+                    modifier = Modifier.padding(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        "معاينة حية مقارنة (الشاشات مقابل المطبوعات و PDF):",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = parsedAccent
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.surface,
+                            shape = RoundedCornerShape(8.dp),
+                            border = BorderStroke(1.dp, FundPrimary.copy(alpha = 0.4f)),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Column(modifier = Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text("على الشاشة", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = FundPrimary)
+                                Text(
+                                    FormatUtils.formatAmount(1250450.75, draft.screenFormat),
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Black,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
+                                )
+                                Text(
+                                    "سند: ${FormatUtils.formatCodeOrNumber("V-2026-0042", draft.screenFormat)}",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = FundPrimary,
+                                    style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
+                                )
+                                Text(
+                                    FormatUtils.formatDate("2026-11-12 14:35", draft.screenFormat),
+                                    fontSize = 10.sp,
+                                    color = FundGoldDark
+                                )
+                            }
+                        }
+                        Surface(
+                            color = MaterialTheme.colorScheme.surface,
+                            shape = RoundedCornerShape(8.dp),
+                            border = BorderStroke(1.dp, parsedAccent.copy(alpha = 0.45f)),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Column(modifier = Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text("في المطبوعة / PDF", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = parsedAccent)
+                                Text(
+                                    FormatUtils.formatAmount(1250450.75, draft.printFormat),
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Black,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
+                                )
+                                Text(
+                                    "سند: ${FormatUtils.formatCodeOrNumber("V-2026-0042", draft.printFormat)}",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = parsedAccent,
+                                    style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
+                                )
+                                Text(
+                                    FormatUtils.formatDate("2026-11-12 14:35", draft.printFormat),
+                                    fontSize = 10.sp,
+                                    color = FundGoldDark
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -527,6 +621,87 @@ fun PrintSettingsTab(
                 label = { Text("نص التذييل الإضافي / رسالة الشكر") },
                 modifier = Modifier.fillMaxWidth()
             )
+        }
+    }
+
+    // 6. Unified Screen & Print Numbers, Currency & Date Formatting
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, parsedAccent.copy(alpha = 0.45f))
+    ) {
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(
+                "6. تنسيق الأرقام والعملات والتاريخ (الشاشات والمطبوعات)",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = parsedAccent
+            )
+            Text(
+                "اضبط تنسيق عرض الشاشات وتنسيق المطبوعات وملفات PDF بشكل مستقل أو موحّد من مكان واحد.",
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilterChip(
+                    selected = activeFormatProfile == 0,
+                    onClick = { activeFormatProfile = 0 },
+                    leadingIcon = { Icon(Icons.Default.Smartphone, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                    label = { Text("تنسيق الشاشات", fontSize = 12.sp, fontWeight = FontWeight.Bold) },
+                    modifier = Modifier.weight(1f).testTag("profile_tab_screen_format")
+                )
+                FilterChip(
+                    selected = activeFormatProfile == 1,
+                    onClick = { activeFormatProfile = 1 },
+                    leadingIcon = { Icon(Icons.Default.Print, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                    label = { Text("تنسيق المطبوعات و PDF", fontSize = 12.sp, fontWeight = FontWeight.Bold) },
+                    modifier = Modifier.weight(1f).testTag("profile_tab_print_format")
+                )
+            }
+
+            OutlinedButton(
+                onClick = {
+                    draft = if (activeFormatProfile == 0) {
+                        draft.copy(screenFormat = draft.printFormat)
+                    } else {
+                        draft.copy(printFormat = draft.screenFormat)
+                    }
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(15.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    if (activeFormatProfile == 0) "نسخ إعدادات المطبوعة إلى الشاشات"
+                    else "نسخ إعدادات الشاشات إلى المطبوعات",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            if (activeFormatProfile == 0) {
+                DisplayFormatSettingsCard(
+                    title = "ملف تنسيق الشاشات وحقول الإدخال",
+                    subtitle = "يطبّق على لوحة المعلومات، الجداول، السندات، القيود، وحقول الإدخال",
+                    config = draft.screenFormat,
+                    onConfigChange = { draft = draft.copy(screenFormat = it) },
+                    accentColor = FundPrimary,
+                    testTagPrefix = "screen_format"
+                )
+            } else {
+                DisplayFormatSettingsCard(
+                    title = "ملف تنسيق المطبوعات وملفات PDF",
+                    subtitle = "مستقل عن تنسيق الشاشات؛ يطبّق على السندات المطبوعة وكشوفات PDF",
+                    config = draft.printFormat,
+                    onConfigChange = { draft = draft.copy(printFormat = it) },
+                    accentColor = parsedAccent,
+                    testTagPrefix = "print_format"
+                )
+            }
         }
     }
 

@@ -26,7 +26,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.fund.data.FundRepository
 import com.example.fund.model.AidStatus
 import com.example.fund.model.UserRole
-import com.example.fund.ui.navigation.Screen
 import com.example.ui.theme.*
 
 @Composable
@@ -36,10 +35,8 @@ fun AppTopBar(
     breadcrumbHint: String? = null,
     onNavigateBack: () -> Unit = {},
     onOpenDrawer: () -> Unit,
-    onNavigate: (Screen) -> Unit,
     onOpenAiAdvisor: () -> Unit,
-    onOpenSyncCenter: () -> Unit = {},
-    onOpenGlobalSearch: () -> Unit = {}
+    onOpenSyncCenter: () -> Unit = {}
 ) {
     val repo = FundRepository.getInstance()
     val isOnline by repo.isOnline.collectAsStateWithLifecycle()
@@ -56,6 +53,7 @@ fun AppTopBar(
     val totalAlerts = unreadCount + pendingAidsCount
 
     var roleMenuExpanded by remember { mutableStateOf(false) }
+    var showAlertsDialog by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.fillMaxWidth()) {
         // Sleek, Compact Mobile Top Bar with contextual Up/Back or Drawer Menu + Quick Search
@@ -137,26 +135,11 @@ fun AppTopBar(
                     }
                 }
 
-                // Trailing Actions: Global Search + Sync Status + Alerts + AI + User Menu
+                // Trailing Actions: Sync Status + Alerts Summary + AI + User Role Menu
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
-                    IconButton(
-                        onClick = onOpenGlobalSearch,
-                        modifier = Modifier
-                            .minimumInteractiveComponentSize()
-                            .size(40.dp)
-                            .testTag("topbar_global_search_btn")
-                    ) {
-                        Icon(
-                            Icons.Default.Search,
-                            contentDescription = "البحث والتنقل السريع",
-                            tint = Color.White,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-
                     // Compact Server & Sync Pill
                     Surface(
                         color = if (isOnline) Color.White.copy(alpha = 0.14f) else StatusPending.copy(alpha = 0.85f),
@@ -192,19 +175,17 @@ fun AppTopBar(
                         }
                     }
 
-                    // Notifications Bell with Badge
+                    // Notifications Bell with Badge (opens inline alerts summary without duplicate screen routing)
                     Box(contentAlignment = Alignment.Center) {
                         IconButton(
-                            onClick = {
-                                if (pendingAidsCount > 0) onNavigate(Screen.AIDS) else onNavigate(Screen.MESSAGES)
-                            },
+                            onClick = { showAlertsDialog = true },
                             modifier = Modifier
                                 .minimumInteractiveComponentSize()
                                 .size(40.dp)
                         ) {
                             Icon(
                                 Icons.Default.Notifications,
-                                contentDescription = "التنبيهات",
+                                contentDescription = "ملخص التنبيهات",
                                 tint = Color.White,
                                 modifier = Modifier.size(19.dp)
                             )
@@ -289,15 +270,6 @@ fun AppTopBar(
                                 onClick = { roleMenuExpanded = false }
                             )
                             HorizontalDivider()
-                            DropdownMenuItem(
-                                leadingIcon = { Icon(Icons.AutoMirrored.Filled.MenuOpen, contentDescription = null, tint = FundPrimary) },
-                                text = { Text("فتح القائمة الكاملة (23 شاشة)", fontWeight = FontWeight.Bold, fontSize = 12.sp) },
-                                onClick = {
-                                    roleMenuExpanded = false
-                                    onOpenDrawer()
-                                }
-                            )
-                            HorizontalDivider()
                             UserRole.entries.forEach { role ->
                                 DropdownMenuItem(
                                     text = {
@@ -316,27 +288,11 @@ fun AppTopBar(
                             }
                             HorizontalDivider()
                             DropdownMenuItem(
-                                leadingIcon = { Icon(Icons.Default.Email, contentDescription = null, tint = FundPrimary) },
-                                text = { Text("الرسائل الداخلية ($unreadCount غير مقروءة)", fontSize = 12.sp) },
-                                onClick = {
-                                    roleMenuExpanded = false
-                                    onNavigate(Screen.MESSAGES)
-                                }
-                            )
-                            DropdownMenuItem(
                                 leadingIcon = { Icon(Icons.Default.Dns, contentDescription = null, tint = FundPrimary) },
                                 text = { Text("مركز الخادم المحلي والمزامنة", fontWeight = FontWeight.Bold, fontSize = 12.sp) },
                                 onClick = {
                                     roleMenuExpanded = false
                                     onOpenSyncCenter()
-                                }
-                            )
-                            DropdownMenuItem(
-                                leadingIcon = { Icon(Icons.Default.LockOpen, contentDescription = null, tint = StatusDanger) },
-                                text = { Text("شاشة تسجيل الدخول / تبديل الحساب", fontWeight = FontWeight.Bold, color = StatusDanger, fontSize = 12.sp) },
-                                onClick = {
-                                    roleMenuExpanded = false
-                                    onNavigate(Screen.LOGIN)
                                 }
                             )
                         }
@@ -424,5 +380,22 @@ fun AppTopBar(
                 }
             }
         }
+    }
+
+    if (showAlertsDialog) {
+        AlertDialog(
+            onDismissRequest = { showAlertsDialog = false },
+            title = { Text("ملخص التنبيهات الحالية", fontWeight = FontWeight.Bold, color = FundPrimary) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("• طلبات مساعدة قيد المراجعة: $pendingAidsCount (تُدار من مركز الإعانات والمشاريع)", fontSize = 12.sp)
+                    Text("• الرسائل الداخلية غير المقروءة: $unreadCount (تُفتح من القائمة الجانبية)", fontSize = 12.sp)
+                    Text("• عمليات بانتظار المزامنة المحلية: ${syncQueue.size}", fontSize = 12.sp)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showAlertsDialog = false }) { Text("حسناً") }
+            }
+        )
     }
 }

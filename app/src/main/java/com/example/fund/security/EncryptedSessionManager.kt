@@ -55,6 +55,10 @@ class EncryptedSessionManager(context: Context) {
         get() = prefs.getFloat(KEY_FONT_SCALE, 1.0f)
         set(value) = prefs.edit { putFloat(KEY_FONT_SCALE, value) }
 
+    var appFontFamily: String
+        get() = prefs.getString(KEY_APP_FONT, "TAJAWAL") ?: "TAJAWAL"
+        set(value) = prefs.edit { putString(KEY_APP_FONT, value) }
+
     var autoSyncOnConnect: Boolean
         get() = prefs.getBoolean(KEY_AUTO_SYNC, true)
         set(value) = prefs.edit { putBoolean(KEY_AUTO_SYNC, value) }
@@ -107,6 +111,7 @@ class EncryptedSessionManager(context: Context) {
         private const val KEY_QUICK_PIN_HASH = "quick_pin_hash"
         private const val KEY_DARK_MODE = "is_dark_mode"
         private const val KEY_FONT_SCALE = "font_scale"
+        private const val KEY_APP_FONT = "app_font_family"
         private const val KEY_AUTO_SYNC = "auto_sync_on_connect"
         private const val KEY_SERVER_NAME = "server_name"
         private const val KEY_SERVER_HOST = "server_host"

@@ -23,6 +23,11 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.fund.data.FundRepository
 import com.example.fund.model.CurrencyCode
+import com.example.fund.model.DecimalSeparatorOption
+import com.example.fund.model.DigitLanguage
+import com.example.fund.model.DisplayCurrencyOption
+import com.example.fund.model.ThousandsSeparatorOption
+import com.example.fund.util.FormatUtils
 import com.example.fund.util.TafqeetEngine
 import com.example.ui.theme.*
 
@@ -30,7 +35,11 @@ import com.example.ui.theme.*
  * Formats integer digits with thousands separators (e.g. 1250000 -> 1,250,000)
  * while preserving exact cursor offset mapping for both integer and decimal inputs.
  */
-class ThousandSeparatorTransformation : VisualTransformation {
+class ThousandSeparatorTransformation(
+    private val thousandsSep: String = ",",
+    private val decimalSep: String = ".",
+    private val digitLanguage: DigitLanguage = DigitLanguage.LATIN
+) : VisualTransformation {
     override fun filter(text: AnnotatedString): TransformedText {
         val raw = text.text
         if (raw.isEmpty()) {
@@ -39,7 +48,6 @@ class ThousandSeparatorTransformation : VisualTransformation {
 
         val dotIndex = raw.indexOf('.')
         val intPart = if (dotIndex >= 0) raw.substring(0, dotIndex) else raw
-        val fracPart = if (dotIndex >= 0) raw.substring(dotIndex) else ""
 
         val out = StringBuilder()
         val origToTrans = IntArray(raw.length + 1)
@@ -47,19 +55,25 @@ class ThousandSeparatorTransformation : VisualTransformation {
 
         val intLen = intPart.length
         for (i in 0 until intLen) {
-            if (i > 0 && (intLen - i) % 3 == 0) {
-                out.append(',')
-                transToOrig.add(i)
+            if (i > 0 && (intLen - i) % 3 == 0 && thousandsSep.isNotEmpty()) {
+                out.append(thousandsSep)
+                repeat(thousandsSep.length) { transToOrig.add(i) }
             }
             origToTrans[i] = out.length
-            out.append(intPart[i])
+            out.append(mapDigit(intPart[i]))
             transToOrig.add(i)
         }
 
         for (i in intLen until raw.length) {
             origToTrans[i] = out.length
-            out.append(raw[i])
-            transToOrig.add(i)
+            val ch = raw[i]
+            if (ch == '.') {
+                out.append(decimalSep)
+                repeat(decimalSep.length.coerceAtLeast(1)) { transToOrig.add(i) }
+            } else {
+                out.append(mapDigit(ch))
+                transToOrig.add(i)
+            }
         }
         origToTrans[raw.length] = out.length
         transToOrig.add(raw.length)
@@ -76,6 +90,14 @@ class ThousandSeparatorTransformation : VisualTransformation {
         }
         return TransformedText(AnnotatedString(transformedString), mapping)
     }
+
+    private fun mapDigit(ch: Char): Char {
+        return if (digitLanguage == DigitLanguage.ARABIC_INDIC && ch in '0'..'9') {
+            ('٠'.code + (ch.code - '0'.code)).toChar()
+        } else {
+            ch
+        }
+    }
 }
 
 @Composable
@@ -90,6 +112,7 @@ fun MoneyInput(
 ) {
     val repo = FundRepository.getInstance()
     val currencyRates by repo.currencyRates.collectAsStateWithLifecycle()
+    val screenFormat by repo.screenFormat.collectAsStateWithLifecycle()
     val rate = currencyRates[selectedCurrency] ?: selectedCurrency.defaultRate
     val parsedAmount = amount.toDoubleOrNull() ?: 0.0
     val amountYer = parsedAmount * rate
@@ -107,6 +130,18 @@ fun MoneyInput(
                 subUnitName = currencySubUnit
             )
         } else ""
+    }
+
+    val transformation = remember(
+        screenFormat.thousandsSeparator,
+        screenFormat.decimalSeparator,
+        screenFormat.digitLanguage
+    ) {
+        ThousandSeparatorTransformation(
+            thousandsSep = screenFormat.thousandsSeparator.charStr,
+            decimalSep = screenFormat.decimalSeparator.charStr,
+            digitLanguage = screenFormat.digitLanguage
+        )
     }
 
     Column(modifier = modifier.fillMaxWidth()) {
@@ -127,13 +162,23 @@ fun MoneyInput(
             OutlinedTextField(
                 value = amount,
                 onValueChange = { input ->
-                    val normalized = input.replace(",", "")
-                    if (normalized.isEmpty() || normalized.matches(Regex("""^\d*\.?\d*$"""))) {
+                    val latin = FormatUtils.toLatinDigits(input).replace(" ", "")
+                    val normalized = when {
+                        screenFormat.thousandsSeparator != ThousandsSeparatorOption.COMMA &&
+                            screenFormat.decimalSeparator == DecimalSeparatorOption.COMMA -> {
+                            latin.replace(",", ".")
+                        }
+                        else -> latin.replace(",", "")
+                    }
+                    val intDigitsCount = normalized.substringBefore('.').length
+                    if ((normalized.isEmpty() || normalized.matches(Regex("""^\d*\.?\d*$"""))) &&
+                        intDigitsCount <= screenFormat.maxAmountDigits
+                    ) {
                         onAmountChange(normalized)
                     }
                 },
-                placeholder = { Text("0") },
-                visualTransformation = ThousandSeparatorTransformation(),
+                placeholder = { Text(FormatUtils.toArabicDigitsIfNeeded("0", screenFormat.digitLanguage)) },
+                visualTransformation = transformation,
                 textStyle = LocalTextStyle.current.copy(
                     fontFeatureSettings = "tnum",
                     fontWeight = FontWeight.Bold,
@@ -158,6 +203,15 @@ fun MoneyInput(
             ) {
                 CurrencyCode.entries.forEach { curr ->
                     val isSelected = curr == selectedCurrency
+                    val chipSymbol = if (
+                        curr == CurrencyCode.YER &&
+                        (screenFormat.currencyOption == DisplayCurrencyOption.YER ||
+                            screenFormat.currencyOption == DisplayCurrencyOption.YER_SIGN)
+                    ) {
+                        screenFormat.resolvedCurrencySymbol()
+                    } else {
+                        curr.symbol
+                    }
                     Button(
                         onClick = { onCurrencyChange(curr) },
                         colors = ButtonDefaults.buttonColors(
@@ -170,7 +224,7 @@ fun MoneyInput(
                         modifier = Modifier.height(48.dp)
                     ) {
                         Text(
-                            text = curr.symbol,
+                            text = chipSymbol,
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                             fontSize = 13.sp
                         )
@@ -227,14 +281,14 @@ fun MoneyInput(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        text = "≈ %,d ﷼".format(amountYer.toLong()),
+                        text = "≈ ${FormatUtils.formatAmount(amountYer, screenFormat)}",
                         fontWeight = FontWeight.Bold,
                         color = FundPrimary,
                         fontSize = 14.sp,
                         style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
                     )
                     Text(
-                        text = "(أصل المبلغ: $amount ${selectedCurrency.name} @ %,.0f)".format(rate),
+                        text = "(أصل المبلغ: ${FormatUtils.formatNumber(parsedAmount, screenFormat)} ${selectedCurrency.name} @ ${FormatUtils.formatNumber(rate, screenFormat, decimalsOverride = 0)})",
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")

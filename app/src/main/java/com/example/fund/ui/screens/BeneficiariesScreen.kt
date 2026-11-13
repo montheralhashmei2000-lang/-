@@ -28,11 +28,14 @@ import com.example.fund.data.FundRepository
 import com.example.fund.model.Beneficiary
 import com.example.fund.model.PovertyTier
 import com.example.fund.ui.components.FundEmptyState
+import com.example.fund.util.FormatUtils
+import com.example.fund.util.LocalScreenFormat
 import com.example.ui.theme.*
 
 @Composable
 fun BeneficiariesScreen() {
     val context = LocalContext.current
+    val screenFormat = LocalScreenFormat.current
     val repo = FundRepository.getInstance()
     val beneficiaries by repo.beneficiaries.collectAsStateWithLifecycle()
     val regions by repo.regions.collectAsStateWithLifecycle()
@@ -58,11 +61,11 @@ fun BeneficiariesScreen() {
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
-                Text("قاعدة بيانات الأسر المستفيدة (${filtered.size})", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = FundPrimary)
+            Column(modifier = Modifier.weight(1f)) {
+                Text("قاعدة بيانات الأسر المستفيدة (${FormatUtils.formatCodeOrNumber(filtered.size.toString(), screenFormat)})", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = FundPrimary)
                 Text("رصد حالات الاحتياج الميداني في المناطق والقرى", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
 
@@ -73,7 +76,7 @@ fun BeneficiariesScreen() {
             ) {
                 Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(4.dp))
-                Text("إضافة أسرة", fontSize = 12.sp)
+                Text("إضافة أسرة", fontSize = 12.sp, maxLines = 1, softWrap = false)
             }
         }
 
@@ -149,10 +152,10 @@ fun BeneficiariesScreen() {
                         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(b.familyHeadName, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                Text(b.familyHeadName, fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.weight(1f))
                                 Surface(
                                     color = tierColor.copy(alpha = 0.15f),
                                     shape = RoundedCornerShape(8.dp),
@@ -168,21 +171,22 @@ fun BeneficiariesScreen() {
                                 }
                             }
 
-                            Text("المنطقة: ${b.region} • القرية: ${b.village} | الهاتف: ${b.phone}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("المنطقة: ${b.region} • القرية: ${b.village} | الهاتف: ${FormatUtils.formatCodeOrNumber(b.phone, screenFormat)}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Text(
-                                    "أفراد الأسرة: ${b.membersCount} أفراد",
+                                    "أفراد الأسرة: ${FormatUtils.formatCodeOrNumber(b.membersCount.toString(), screenFormat)} أفراد",
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.weight(1f),
                                     style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
                                 )
                                 Text(
-                                    "الدخل الشهري: %,d ﷼".format(b.monthlyIncomeYer.toLong()),
+                                    "الدخل الشهري: ${FormatUtils.formatAmount(b.monthlyIncomeYer, screenFormat)}",
                                     fontSize = 12.sp,
-                                    color = Color.Gray,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
                                 )
                             }

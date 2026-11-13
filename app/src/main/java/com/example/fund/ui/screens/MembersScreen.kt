@@ -30,6 +30,8 @@ import com.example.fund.ui.components.FundEmptyState
 import com.example.fund.ui.components.MemberCardDialog
 import com.example.fund.ui.components.SensitiveActionConfirmDialog
 import com.example.fund.ui.viewmodel.MembersViewModel
+import com.example.fund.util.FormatUtils
+import com.example.fund.util.LocalScreenFormat
 import com.example.ui.theme.*
 import java.text.SimpleDateFormat
 import java.util.*
@@ -46,6 +48,7 @@ fun MembersScreen(
     val regions by membersViewModel.regions.collectAsStateWithLifecycle()
     val currentUser by membersViewModel.currentUser.collectAsStateWithLifecycle()
     val canEdit = currentUser.role != UserRole.VIEWER
+    val screenFormat = LocalScreenFormat.current
 
     var searchQuery by remember { mutableStateOf("") }
     var selectedStatusFilter by remember(initialStatusFilter) { mutableStateOf(initialStatusFilter) }
@@ -90,12 +93,12 @@ fun MembersScreen(
         // Top Toolbar
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "سجل أعضاء الصندوق (${filteredMembers.size})",
+                    text = "سجل أعضاء الصندوق (${FormatUtils.formatCodeOrNumber(filteredMembers.size.toString(), screenFormat)})",
                     fontFamily = AmiriFontFamily,
                     fontWeight = FontWeight.Bold,
                     fontSize = 18.sp,
@@ -108,7 +111,7 @@ fun MembersScreen(
                 )
             }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(
                     onClick = onOpenQrCheck,
                     modifier = Modifier.testTag("members_qr_button")
@@ -125,7 +128,7 @@ fun MembersScreen(
                     ) {
                         Icon(Icons.Default.PersonAdd, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("عضو جديد", fontSize = 12.sp)
+                        Text("عضو جديد", fontSize = 12.sp, maxLines = 1, softWrap = false)
                     }
                 }
             }
@@ -340,10 +343,11 @@ private fun MemberCardItem(
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(
+                    modifier = Modifier.weight(1f),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
@@ -361,7 +365,7 @@ private fun MemberCardItem(
                         )
                     }
 
-                    Column {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(member.fullName, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                         Text(
                             "${member.memberNo} | ${member.phone}",
@@ -380,6 +384,8 @@ private fun MemberCardItem(
                         color = Color.White,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        softWrap = false,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
                     )
                 }
@@ -398,19 +404,21 @@ private fun MemberCardItem(
                 Text("المهنة / الصفة: ${member.job}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
 
+            val screenFormat = LocalScreenFormat.current
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
-                    text = "إجمالي السداد: %,d ﷼".format(member.totalPaidYer.toLong()),
+                    text = "إجمالي السداد: ${FormatUtils.formatAmount(member.totalPaidYer, screenFormat)}",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                     color = FundPrimary,
+                    modifier = Modifier.weight(1f),
                     style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
                 )
                 Text(
-                    text = "المستحق: %,d ﷼".format(member.dueBalanceYer.toLong()),
+                    text = "المستحق: ${FormatUtils.formatAmount(member.dueBalanceYer, screenFormat)}",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                     color = if (member.dueBalanceYer > 0) StatusDanger else StatusSuccess,
@@ -668,10 +676,11 @@ private fun MemberFormDialog(
                     }
                 }
 
+                val screenFormat = LocalScreenFormat.current
                 OutlinedTextField(
                     value = dueStr,
                     onValueChange = { dueStr = it },
-                    label = { Text("الرصيد المستحق / المتأخرات (﷼)") },
+                    label = { Text("الرصيد المستحق / المتأخرات (${screenFormat.resolvedCurrencySymbol()})") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )

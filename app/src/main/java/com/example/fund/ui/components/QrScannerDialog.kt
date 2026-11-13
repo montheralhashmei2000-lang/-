@@ -1,7 +1,12 @@
 package com.example.fund.ui.components
 
 import android.Manifest
+import android.app.Activity
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
+import android.provider.Settings
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraControl
@@ -37,25 +42,36 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.fund.data.FundRepository
 import com.example.fund.model.Member
 import com.example.fund.model.Voucher
+import com.example.fund.util.FormatUtils
 import com.example.ui.theme.*
 import java.util.concurrent.TimeUnit
 
 @Composable
 fun QrScannerDialog(
-    onDismiss: () -> Unit,
-    onOpenMemberRecord: (Member) -> Unit = {},
-    onOpenMemberSubscriptions: (Member) -> Unit = {}
+    onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+    val activity = context as? Activity
+    val lifecycleOwner = LocalLifecycleOwner.current
     val repo = FundRepository.getInstance()
     val members by repo.members.collectAsStateWithLifecycle()
     val vouchers by repo.vouchers.collectAsStateWithLifecycle()
+    val screenFormat by repo.screenFormat.collectAsStateWithLifecycle()
+
+    val hasCameraFeature = remember(context) {
+        runCatching {
+            context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)
+        }.getOrDefault(false)
+    }
 
     var hasCameraPermission by remember {
         mutableStateOf(
@@ -63,19 +79,44 @@ fun QrScannerDialog(
                 PackageManager.PERMISSION_GRANTED
         )
     }
-    var showCameraPreview by remember { mutableStateOf(hasCameraPermission) }
+    var hasRequestedCameraPermission by remember { mutableStateOf(false) }
+    var showCameraPreview by remember { mutableStateOf(hasCameraPermission && hasCameraFeature) }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                val grantedNow = ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.CAMERA
+                ) == PackageManager.PERMISSION_GRANTED
+                hasCameraPermission = grantedNow
+                if (grantedNow && hasCameraFeature) {
+                    showCameraPreview = true
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    val permanentlyDenied = remember(hasCameraPermission, hasRequestedCameraPermission, activity) {
+        hasRequestedCameraPermission && !hasCameraPermission && activity != null &&
+            !ActivityCompat.shouldShowRequestPermissionRationale(activity, Manifest.permission.CAMERA)
+    }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
+        hasRequestedCameraPermission = true
         hasCameraPermission = granted
-        showCameraPreview = granted
+        showCameraPreview = granted && hasCameraFeature
     }
 
     var searchQuery by remember { mutableStateOf("M-1001") }
     var matchedMember by remember { mutableStateOf<Member?>(members.find { it.memberNo == "M-1001" }) }
     var matchedVoucher by remember { mutableStateOf<Voucher?>(null) }
     var hasSearched by remember { mutableStateOf(true) }
+    var selectedMemberForCard by remember { mutableStateOf<Member?>(null) }
 
     fun performLookup(rawInput: String) {
         val clean = rawInput.trim()
@@ -135,56 +176,130 @@ fun QrScannerDialog(
                 }
 
                 // Live CameraX Viewfinder Section
-                if (hasCameraPermission && showCameraPreview) {
-                    CameraXViewfinderCard(
-                        onHideCamera = { showCameraPreview = false }
-                    )
-                } else {
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-                        shape = RoundedCornerShape(14.dp),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(12.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                when {
+                    !hasCameraFeature -> {
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                            shape = RoundedCornerShape(14.dp),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)),
+                            modifier = Modifier.fillMaxWidth()
                         ) {
                             Row(
-                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                modifier = Modifier.weight(1f)
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(Icons.Default.CameraAlt, contentDescription = null, tint = FundPrimary)
+                                Icon(Icons.Default.VideocamOff, contentDescription = null, tint = FundPrimary)
                                 Column {
+                                    Text("كاميرا المسح غير متوفرة على هذا الجهاز", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                                     Text(
-                                        text = if (hasCameraPermission) "الكاميرا الميدانية جاهزة" else "تفعيل كاميرا المسح الميداني",
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 12.sp
-                                    )
-                                    Text(
-                                        text = if (hasCameraPermission) "اضغط لفتح عدسة الكاميرا مع الفلاش والتركيز التلقائي" else "يتطلب إذن الكاميرا لعرض العدسة المباشرة",
+                                        "يمكنك التحقق الميداني الفوري بإدخال رقم العضوية أو رقم السند أو نص رمز QR أدناه.",
                                         fontSize = 10.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                             }
-                            Button(
-                                onClick = {
-                                    if (hasCameraPermission) {
-                                        showCameraPreview = true
-                                    } else {
-                                        permissionLauncher.launch(Manifest.permission.CAMERA)
-                                    }
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = FundPrimary),
-                                shape = RoundedCornerShape(10.dp),
-                                modifier = Modifier.heightIn(min = 48.dp)
+                        }
+                    }
+
+                    hasCameraPermission && showCameraPreview -> {
+                        CameraXViewfinderCard(
+                            onHideCamera = { showCameraPreview = false }
+                        )
+                    }
+
+                    else -> {
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                            shape = RoundedCornerShape(14.dp),
+                            border = BorderStroke(
+                                1.dp,
+                                if (permanentlyDenied) StatusDanger.copy(alpha = 0.6f)
+                                else MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Text(if (hasCameraPermission) "فتح العدسة" else "منح الإذن", fontSize = 11.sp)
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Icon(
+                                            imageVector = if (permanentlyDenied) Icons.Default.NoPhotography else Icons.Default.CameraAlt,
+                                            contentDescription = null,
+                                            tint = if (permanentlyDenied) StatusDanger else FundPrimary
+                                        )
+                                        Column {
+                                            Text(
+                                                text = when {
+                                                    hasCameraPermission -> "الكاميرا الميدانية جاهزة"
+                                                    permanentlyDenied -> "تم رفض إذن الكاميرا نهائياً"
+                                                    else -> "تفعيل كاميرا المسح الميداني"
+                                                },
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 12.sp
+                                            )
+                                            Text(
+                                                text = when {
+                                                    hasCameraPermission -> "اضغط لفتح عدسة الكاميرا مع الفلاش والتركيز التلقائي"
+                                                    permanentlyDenied -> "فعّل إذن الكاميرا من إعدادات التطبيق لعرض العدسة المباشرة، أو استخدم البحث اليدوي أدناه."
+                                                    else -> "يتطلب إذن الكاميرا لعرض العدسة المباشرة"
+                                                },
+                                                fontSize = 10.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                    Button(
+                                        onClick = {
+                                            when {
+                                                hasCameraPermission -> showCameraPreview = true
+                                                permanentlyDenied -> {
+                                                    runCatching {
+                                                        val settingsIntent = Intent(
+                                                            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                                            Uri.fromParts("package", context.packageName, null)
+                                                        ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                                        context.startActivity(settingsIntent)
+                                                    }.onFailure {
+                                                        Toast.makeText(context, "تعذر فتح إعدادات التطبيق", Toast.LENGTH_SHORT).show()
+                                                    }
+                                                }
+                                                else -> {
+                                                    hasRequestedCameraPermission = true
+                                                    permissionLauncher.launch(Manifest.permission.CAMERA)
+                                                }
+                                            }
+                                        },
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = if (permanentlyDenied) StatusDanger else FundPrimary
+                                        ),
+                                        shape = RoundedCornerShape(10.dp),
+                                        modifier = Modifier.heightIn(min = 48.dp)
+                                    ) {
+                                        Text(
+                                            text = when {
+                                                hasCameraPermission -> "فتح العدسة"
+                                                permanentlyDenied -> "فتح إعدادات التطبيق"
+                                                else -> "منح الإذن"
+                                            },
+                                            fontSize = 11.sp
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -280,17 +395,17 @@ fun QrScannerDialog(
                                         }
                                     }
 
-                                    Text("رقم العضوية: ${m.memberNo} | الهوية: ${m.nationalId}", fontSize = 12.sp)
+                                    Text("رقم العضوية: ${FormatUtils.formatCodeOrNumber(m.memberNo, screenFormat)} | الهوية: ${FormatUtils.formatCodeOrNumber(m.nationalId, screenFormat)}", fontSize = 12.sp)
                                     Text("المهنة: ${m.job} | المنطقة: ${m.region} | القرية: ${m.village}", fontSize = 12.sp)
                                     Text(
-                                        "إجمالي المدفوع: %,d ﷼".format(m.totalPaidYer.toLong()),
+                                        "إجمالي المدفوع: ${FormatUtils.formatAmount(m.totalPaidYer, screenFormat)}",
                                         fontWeight = FontWeight.Bold,
                                         color = FundPrimary,
                                         fontSize = 12.sp,
                                         style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
                                     )
                                     Text(
-                                        "المتأخرات المستحقة: %,d ﷼".format(m.dueBalanceYer.toLong()),
+                                        "المتأخرات المستحقة: ${FormatUtils.formatAmount(m.dueBalanceYer, screenFormat)}",
                                         color = if (m.dueBalanceYer > 0) StatusDanger else StatusSuccess,
                                         fontSize = 12.sp,
                                         style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
@@ -311,37 +426,18 @@ fun QrScannerDialog(
                                         color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
                                     )
 
-                                    // Direct contextual action buttons
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    // Inline Member Card preview without duplicating screen navigation
+                                    OutlinedButton(
+                                        onClick = { selectedMemberForCard = m },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .heightIn(min = 48.dp)
+                                            .testTag("qr_open_member_card_inline"),
+                                        shape = RoundedCornerShape(10.dp)
                                     ) {
-                                        OutlinedButton(
-                                            onClick = { onOpenMemberRecord(m) },
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .heightIn(min = 48.dp)
-                                                .testTag("qr_open_member_record"),
-                                            shape = RoundedCornerShape(10.dp)
-                                        ) {
-                                            Icon(Icons.Default.Badge, contentDescription = null, modifier = Modifier.size(16.dp), tint = FundPrimary)
-                                            Spacer(Modifier.width(4.dp))
-                                            Text("فتح بطاقة العضو", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                        }
-
-                                        Button(
-                                            onClick = { onOpenMemberSubscriptions(m) },
-                                            colors = ButtonDefaults.buttonColors(containerColor = FundPrimary),
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .heightIn(min = 48.dp)
-                                                .testTag("qr_open_member_subs"),
-                                            shape = RoundedCornerShape(10.dp)
-                                        ) {
-                                            Icon(Icons.Default.Payments, contentDescription = null, modifier = Modifier.size(16.dp))
-                                            Spacer(Modifier.width(4.dp))
-                                            Text("الاشتراكات والسداد", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                        }
+                                        Icon(Icons.Default.Badge, contentDescription = null, modifier = Modifier.size(18.dp), tint = FundPrimary)
+                                        Spacer(Modifier.width(6.dp))
+                                        Text("معاينة وطباعة بطاقة العضو الرسمية", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                     }
                                 }
                             }
@@ -359,7 +455,7 @@ fun QrScannerDialog(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.SpaceBetween
                                     ) {
-                                        Text("${v.type.title} - ${v.voucherNo}", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                        Text("${v.type.title} - ${FormatUtils.formatCodeOrNumber(v.voucherNo, screenFormat)}", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                                         Text(
                                             v.status.title,
                                             color = if (v.status.name == "POSTED") StatusSuccess else StatusDanger,
@@ -368,7 +464,7 @@ fun QrScannerDialog(
                                     }
                                     Text("المكرم: ${v.partyName}", fontSize = 12.sp)
                                     Text(
-                                        "المبلغ: %,d ﷼".format(v.amountYer.toLong()),
+                                        "المبلغ: ${FormatUtils.formatAmount(v.amountYer, screenFormat)}",
                                         fontWeight = FontWeight.Bold,
                                         color = FundPrimary,
                                         style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
@@ -392,6 +488,13 @@ fun QrScannerDialog(
             }
         }
     }
+
+    selectedMemberForCard?.let { m ->
+        MemberCardDialog(
+            member = m,
+            onDismiss = { selectedMemberForCard = null }
+        )
+    }
 }
 
 @Composable
@@ -402,6 +505,7 @@ private fun CameraXViewfinderCard(
     val lifecycleOwner = LocalLifecycleOwner.current
 
     var torchEnabled by remember { mutableStateOf(false) }
+    var hasFlashUnit by remember { mutableStateOf(false) }
     var focusHint by remember { mutableStateOf("وجّه الإطار نحو رمز QR أو المس الشاشة للتركيز") }
     var cameraControl by remember { mutableStateOf<CameraControl?>(null) }
     var cameraError by remember { mutableStateOf<String?>(null) }
@@ -423,9 +527,14 @@ private fun CameraXViewfinderCard(
                     it.surfaceProvider = previewView.surfaceProvider
                 }
                 val selector = CameraSelector.DEFAULT_BACK_CAMERA
+                if (!cameraProvider.hasCamera(selector)) {
+                    cameraError = "لا توجد كاميرا خلفية متصلة"
+                    return@runCatching
+                }
                 cameraProvider.unbindAll()
                 val camera = cameraProvider.bindToLifecycle(lifecycleOwner, selector, preview)
                 cameraControl = camera.cameraControl
+                hasFlashUnit = camera.cameraInfo.hasFlashUnit()
 
                 val centerPoint = previewView.meteringPointFactory.createPoint(
                     (previewView.width.coerceAtLeast(1)) / 2f,
@@ -434,7 +543,7 @@ private fun CameraXViewfinderCard(
                 val focusAction = FocusMeteringAction.Builder(centerPoint, FocusMeteringAction.FLAG_AF)
                     .setAutoCancelDuration(3, TimeUnit.SECONDS)
                     .build()
-                camera.cameraControl.startFocusAndMetering(focusAction)
+                runCatching { camera.cameraControl.startFocusAndMetering(focusAction) }
             }.onFailure { err ->
                 cameraError = err.localizedMessage ?: "الكاميرا غير متوفرة حالياً"
             }
@@ -465,12 +574,16 @@ private fun CameraXViewfinderCard(
                     .fillMaxSize()
                     .pointerInput(cameraControl) {
                         detectTapGestures { offset ->
-                            val point = previewView.meteringPointFactory.createPoint(offset.x, offset.y)
-                            val action = FocusMeteringAction.Builder(point, FocusMeteringAction.FLAG_AF)
-                                .setAutoCancelDuration(3, TimeUnit.SECONDS)
-                                .build()
-                            cameraControl?.startFocusAndMetering(action)
-                            focusHint = "تم ضبط التركيز التلقائي عند نقطة اللمس ✔"
+                            runCatching {
+                                val point = previewView.meteringPointFactory.createPoint(offset.x, offset.y)
+                                val action = FocusMeteringAction.Builder(point, FocusMeteringAction.FLAG_AF)
+                                    .setAutoCancelDuration(3, TimeUnit.SECONDS)
+                                    .build()
+                                cameraControl?.startFocusAndMetering(action)
+                                focusHint = "تم ضبط التركيز التلقائي عند نقطة اللمس ✔"
+                            }.onFailure {
+                                focusHint = "التركيز اليدوي غير مدعوم على هذه العدسة"
+                            }
                         }
                     }
             )
@@ -511,46 +624,58 @@ private fun CameraXViewfinderCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                IconButton(
-                    onClick = {
-                        val next = !torchEnabled
-                        torchEnabled = next
-                        cameraControl?.enableTorch(next)
-                    },
-                    modifier = Modifier
-                        .size(48.dp)
-                        .background(Color.Black.copy(alpha = 0.5f), CircleShape)
-                        .testTag("qr_torch_toggle")
-                ) {
-                    Icon(
-                        imageVector = if (torchEnabled) Icons.Default.FlashOn else Icons.Default.FlashOff,
-                        contentDescription = if (torchEnabled) "إطفاء الفلاش" else "تشغيل الفلاش",
-                        tint = if (torchEnabled) FundGoldLight else Color.White
-                    )
+                if (hasFlashUnit && cameraError == null) {
+                    IconButton(
+                        onClick = {
+                            val next = !torchEnabled
+                            runCatching {
+                                cameraControl?.enableTorch(next)
+                                torchEnabled = next
+                            }.onFailure {
+                                focusHint = "تعذر تشغيل فلاش الكاميرا"
+                            }
+                        },
+                        modifier = Modifier
+                            .size(48.dp)
+                            .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                            .testTag("qr_torch_toggle")
+                    ) {
+                        Icon(
+                            imageVector = if (torchEnabled) Icons.Default.FlashOn else Icons.Default.FlashOff,
+                            contentDescription = if (torchEnabled) "إطفاء الفلاش" else "تشغيل الفلاش",
+                            tint = if (torchEnabled) FundGoldLight else Color.White
+                        )
+                    }
                 }
 
-                IconButton(
-                    onClick = {
-                        val point = previewView.meteringPointFactory.createPoint(
-                            (previewView.width.coerceAtLeast(1)) / 2f,
-                            (previewView.height.coerceAtLeast(1)) / 2f
+                if (cameraError == null) {
+                    IconButton(
+                        onClick = {
+                            runCatching {
+                                val point = previewView.meteringPointFactory.createPoint(
+                                    (previewView.width.coerceAtLeast(1)) / 2f,
+                                    (previewView.height.coerceAtLeast(1)) / 2f
+                                )
+                                val action = FocusMeteringAction.Builder(point, FocusMeteringAction.FLAG_AF)
+                                    .setAutoCancelDuration(3, TimeUnit.SECONDS)
+                                    .build()
+                                cameraControl?.startFocusAndMetering(action)
+                                focusHint = "جاري إعادة ضبط التركيز التلقائي..."
+                            }.onFailure {
+                                focusHint = "التركيز التلقائي غير متاح حالياً"
+                            }
+                        },
+                        modifier = Modifier
+                            .size(48.dp)
+                            .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                            .testTag("qr_autofocus_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CenterFocusStrong,
+                            contentDescription = "تركيز تلقائي",
+                            tint = Color.White
                         )
-                        val action = FocusMeteringAction.Builder(point, FocusMeteringAction.FLAG_AF)
-                            .setAutoCancelDuration(3, TimeUnit.SECONDS)
-                            .build()
-                        cameraControl?.startFocusAndMetering(action)
-                        focusHint = "جاري إعادة ضبط التركيز التلقائي..."
-                    },
-                    modifier = Modifier
-                        .size(48.dp)
-                        .background(Color.Black.copy(alpha = 0.5f), CircleShape)
-                        .testTag("qr_autofocus_button")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.CenterFocusStrong,
-                        contentDescription = "تركيز تلقائي",
-                        tint = Color.White
-                    )
+                    }
                 }
             }
 

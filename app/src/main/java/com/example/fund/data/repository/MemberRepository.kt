@@ -99,7 +99,7 @@ class MemberRepository(
         val amountYer = amountOriginal * rate
         val maxSuffix = _subscriptions.value.mapNotNull { it.receiptNo.substringAfterLast("-").toIntOrNull() }.maxOrNull() ?: 0
         val nextNum = maxOf(maxSuffix, _subscriptions.value.size) + 1
-        val receiptNo = "SUB-${Calendar.getInstance().get(Calendar.YEAR)}-%03d".format(nextNum)
+        val receiptNo = String.format(Locale.US, "SUB-%d-%03d", Calendar.getInstance().get(Calendar.YEAR), nextNum)
         val today = nowStr()
 
         val sub = Subscription(

@@ -73,6 +73,9 @@ class FundRepository private constructor() {
     val internalMessages: StateFlow<List<InternalMessage>> get() = settingsRepository.internalMessages
     val isDarkMode: StateFlow<Boolean> get() = settingsRepository.isDarkMode
     val fontScale: StateFlow<Float> get() = settingsRepository.fontScale
+    val appFontFamily: StateFlow<AppFontOption> get() = settingsRepository.appFontFamily
+    val screenFormat: StateFlow<DisplayFormatConfig> get() = settingsRepository.screenFormat
+    val printFormat: StateFlow<DisplayFormatConfig> get() = settingsRepository.printFormat
 
     val isOnline: StateFlow<Boolean> get() = syncRepository.isOnline
     val serverConfig: StateFlow<LocalServerConfig> get() = syncRepository.serverConfig
@@ -136,6 +139,7 @@ class FundRepository private constructor() {
 
     fun setDarkModePreference(enabled: Boolean) = settingsRepository.setDarkModePreference(enabled)
     fun setFontScalePreference(scale: Float) = settingsRepository.setFontScalePreference(scale)
+    fun setAppFontPreference(fontOption: AppFontOption) = settingsRepository.setAppFontPreference(fontOption)
     fun setAutoSyncOnConnect(enabled: Boolean) = syncRepository.setAutoSyncOnConnect(enabled)
     fun updateServerNode(name: String, host: String, latencyMs: Int = 8) =
         syncRepository.updateServerNode(name, host, latencyMs)

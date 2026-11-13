@@ -28,11 +28,14 @@ import com.example.fund.model.PaymentMethod
 import com.example.fund.model.UserRole
 import com.example.fund.ui.components.FundEmptyState
 import com.example.fund.ui.components.MoneyInput
+import com.example.fund.util.FormatUtils
+import com.example.fund.util.LocalScreenFormat
 import com.example.ui.theme.*
 
 @Composable
 fun DonorsScreen() {
     val context = LocalContext.current
+    val screenFormat = LocalScreenFormat.current
     val repo = FundRepository.getInstance()
     val donors by repo.donors.collectAsStateWithLifecycle()
     val currentUser by repo.currentUser.collectAsStateWithLifecycle()
@@ -54,10 +57,10 @@ fun DonorsScreen() {
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     "سجل الداعمين والمانحين",
                     fontFamily = AmiriFontFamily,
@@ -76,7 +79,7 @@ fun DonorsScreen() {
                 ) {
                     Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("داعم جديد", fontSize = 12.sp)
+                    Text("داعم جديد", fontSize = 12.sp, maxLines = 1, softWrap = false)
                 }
             }
         }
@@ -126,10 +129,10 @@ fun DonorsScreen() {
                         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Column {
+                                Column(modifier = Modifier.weight(1f)) {
                                     Text(d.name, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                                     Text("النوع: ${d.type} | هاتف: ${d.phone}", fontSize = 11.sp, color = Color.Gray)
                                 }
@@ -150,17 +153,18 @@ fun DonorsScreen() {
 
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Text(
-                                    "إجمالي التبرعات: %,d ﷼".format(d.totalDonatedYer.toLong()),
+                                    "إجمالي التبرعات: ${FormatUtils.formatAmount(d.totalDonatedYer, screenFormat)}",
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = FundPrimary,
+                                    modifier = Modifier.weight(1f),
                                     style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
                                 )
                                 Text(
-                                    "التعهد الكلي: %,d ﷼".format(d.pledgeAmountYer.toLong()),
+                                    "التعهد الكلي: ${FormatUtils.formatAmount(d.pledgeAmountYer, screenFormat)}",
                                     fontSize = 12.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
@@ -180,14 +184,15 @@ fun DonorsScreen() {
                                 HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(
-                                        text = if (remainingPledge > 0) "متبقي من التعهد: %,d ﷼".format(remainingPledge.toLong()) else "مكتمل الوفاء بالتعهد ✔",
+                                        text = if (remainingPledge > 0) "متبقي من التعهد: ${FormatUtils.formatAmount(remainingPledge, screenFormat)}" else "مكتمل الوفاء بالتعهد ✔",
                                         fontSize = 11.sp,
                                         color = if (remainingPledge > 0) StatusPending else StatusSuccess,
                                         fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.weight(1f),
                                         style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
                                     )
 
@@ -199,7 +204,7 @@ fun DonorsScreen() {
                                     ) {
                                         Icon(Icons.Default.Payments, contentDescription = null, modifier = Modifier.size(14.dp))
                                         Spacer(modifier = Modifier.width(4.dp))
-                                        Text("تسجيل دفعة تعهد", fontSize = 11.sp)
+                                        Text("تسجيل دفعة تعهد", fontSize = 11.sp, maxLines = 1, softWrap = false)
                                     }
                                 }
                             }
@@ -301,11 +306,12 @@ private fun AddDonorDialog(
         onDismissRequest = onDismiss,
         title = { Text("إضافة داعم أو مانح جديد", fontWeight = FontWeight.Bold, fontSize = 16.sp) },
         text = {
+            val dialogFormat = LocalScreenFormat.current
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("اسم الداعم أو المؤسسة") }, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(value = phone, onValueChange = { phone = it }, label = { Text("رقم الهاتف") }, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(value = type, onValueChange = { type = it }, label = { Text("صفة الداعم (مغترب، تاجر، مؤسسة)") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = pledgeStr, onValueChange = { pledgeStr = it }, label = { Text("مبلغ التعهد المالي (ريال يمني)") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = pledgeStr, onValueChange = { pledgeStr = it }, label = { Text("مبلغ التعهد المالي (${dialogFormat.resolvedCurrencySymbol()})") }, modifier = Modifier.fillMaxWidth())
             }
         },
         confirmButton = {

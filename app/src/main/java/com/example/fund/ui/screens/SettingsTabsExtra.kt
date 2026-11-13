@@ -2,7 +2,10 @@ package com.example.fund.ui.screens
 
 import android.content.Intent
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -18,12 +21,103 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.example.fund.model.AppFontOption
 import com.example.fund.model.AppSettings
 import com.example.fund.model.CurrencyCode
+import com.example.fund.model.DisplayFormatConfig
 import com.example.fund.model.FundInfo
 import com.example.fund.model.LocalServerConfig
 import com.example.fund.ui.viewmodel.SettingsViewModel
+import com.example.fund.util.FormatUtils
+import com.example.fund.util.LocalScreenFormat
 import com.example.ui.theme.*
+
+@Composable
+fun AppFontSelectorSection(
+    selectedFont: AppFontOption,
+    screenFormat: DisplayFormatConfig,
+    onSelectFont: (AppFontOption) -> Unit
+) {
+    val previewFamily = appFontFamilyFor(selectedFont)
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Icon(Icons.Default.FontDownload, contentDescription = null, tint = FundPrimary, modifier = Modifier.size(18.dp))
+                Text(
+                    "نوع الخط العربي للواجهة والتطبيق بالكامل",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = FundPrimary
+                )
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                AppFontOption.entries.forEach { option ->
+                    FilterChip(
+                        selected = selectedFont == option,
+                        onClick = { onSelectFont(option) },
+                        label = {
+                            Text(
+                                text = option.title,
+                                fontFamily = appFontFamilyFor(option),
+                                fontSize = 12.sp,
+                                fontWeight = if (selectedFont == option) FontWeight.Bold else FontWeight.Normal
+                            )
+                        },
+                        modifier = Modifier.testTag("app_font_chip_${option.name.lowercase()}")
+                    )
+                }
+            }
+
+            // Live Arabic & Financial Digits Preview Card
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                shape = RoundedCornerShape(10.dp),
+                border = BorderStroke(1.dp, FundPrimary.copy(alpha = 0.35f)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("app_font_preview_card")
+            ) {
+                Column(
+                    modifier = Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = "معاينة فورية للخط المختار (${selectedFont.title}):",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = FundPrimary
+                    )
+                    Text(
+                        text = "بسم الله الرحمن الرحيم — الصندوق الاجتماعي التنموي يدعم التكافل والمبادرات الخيرية.",
+                        fontFamily = previewFamily,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "أرقام مالية متوازنة: ${FormatUtils.formatAmount(1250750.0, screenFormat)} | التاريخ: ${FormatUtils.formatDate("2026-11-12", screenFormat)}",
+                        fontFamily = previewFamily,
+                        fontSize = 13.sp,
+                        color = FundGoldDark,
+                        style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
+                    )
+                }
+            }
+        }
+    }
+}
 
 @Composable
 fun MembersAidsWarehouseTab(
@@ -31,6 +125,7 @@ fun MembersAidsWarehouseTab(
     maxAidCeilingYer: Double,
     onSave: (AppSettings, Double) -> Unit
 ) {
+    val currencySym = LocalScreenFormat.current.resolvedCurrencySymbol()
     var feeStr by remember(appSettings) { mutableStateOf(appSettings.monthlySubscriptionFeeYer.toLong().toString()) }
     var suspendMonthsStr by remember(appSettings) { mutableStateOf(appSettings.autoSuspendMonths.toString()) }
     var memberPrefix by remember(appSettings) { mutableStateOf(appSettings.memberNoPrefix) }
@@ -51,7 +146,7 @@ fun MembersAidsWarehouseTab(
                 OutlinedTextField(
                     value = feeStr,
                     onValueChange = { feeStr = it.filter { c -> c.isDigit() } },
-                    label = { Text("الاشتراك الشهري (﷼)") },
+                    label = { Text("الاشتراك الشهري ($currencySym)") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.weight(1f),
                     singleLine = true
@@ -91,7 +186,7 @@ fun MembersAidsWarehouseTab(
                 OutlinedTextField(
                     value = ceilingStr,
                     onValueChange = { ceilingStr = it.filter { c -> c.isDigit() } },
-                    label = { Text("سقف المساعدة الفردية (﷼)") },
+                    label = { Text("سقف المساعدة الفردية ($currencySym)") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.weight(1.3f),
                     singleLine = true

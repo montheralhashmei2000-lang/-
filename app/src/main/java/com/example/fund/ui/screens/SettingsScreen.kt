@@ -47,6 +47,8 @@ fun SettingsScreen(
     val rates by settingsViewModel.currencyRates.collectAsStateWithLifecycle()
     val isDark by settingsViewModel.isDarkMode.collectAsStateWithLifecycle()
     val fontScale by settingsViewModel.fontScale.collectAsStateWithLifecycle()
+    val appFont by settingsViewModel.appFontFamily.collectAsStateWithLifecycle()
+    val screenFormat by settingsViewModel.screenFormat.collectAsStateWithLifecycle()
     val serverConfig by settingsViewModel.serverConfig.collectAsStateWithLifecycle()
     val autoSync by settingsViewModel.autoSyncOnConnect.collectAsStateWithLifecycle()
     val isOnline by settingsViewModel.isOnline.collectAsStateWithLifecycle()
@@ -55,7 +57,7 @@ fun SettingsScreen(
 
     var selectedTab by remember(initialTab) { mutableIntStateOf(initialTab.coerceIn(0, 5)) }
     val tabTitles = listOf(
-        "المظهر والهوية",
+        "المظهر والخطوط",
         "المناطق والقرى",
         "الأعضاء والمساعدات",
         "المالية والعملات",
@@ -114,20 +116,18 @@ fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             when (selectedTab) {
-                0 -> GeneralAndIdentityTab(
+                0 -> AppearanceAndFontsTab(
                     isDark = isDark,
                     fontScale = fontScale,
+                    appFont = appFont,
+                    screenFormat = screenFormat,
+                    fundInfo = fundInfo,
                     onDarkChange = { settingsViewModel.setDarkModePreference(it) },
                     onFontScaleChange = { settingsViewModel.setFontScalePreference(it) },
-                    onLogoBase64Selected = { base64 ->
-                        settingsViewModel.updateFundLogo(base64)
-                        Toast.makeText(context, "تم تحديث شعار الصندوق بنجاح", Toast.LENGTH_SHORT).show()
-                    },
-                    onSaveFundInfo = { updated ->
-                        settingsViewModel.updateFundInfo(updated)
-                        Toast.makeText(context, "تم حفظ البيانات الرسمية للصندوق", Toast.LENGTH_SHORT).show()
-                    },
-                    fundInfo = fundInfo
+                    onAppFontChange = { fontOpt ->
+                        settingsViewModel.setAppFontPreference(fontOpt)
+                        Toast.makeText(context, "تم تفعيل خط ${fontOpt.title} عبر التطبيق", Toast.LENGTH_SHORT).show()
+                    }
                 )
 
                 1 -> RegionsAndVillagesTab(
@@ -187,11 +187,11 @@ fun SettingsScreen(
                     sampleVoucher = vouchers.firstOrNull(),
                     onSave = { updated ->
                         settingsViewModel.updatePrintSettings(updated)
-                        Toast.makeText(context, "تم حفظ إعدادات الطباعة والسندات بنجاح", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "تم حفظ إعدادات الطباعة والسندات والأرقام بنجاح", Toast.LENGTH_SHORT).show()
                     },
                     onResetDefault = {
                         settingsViewModel.resetPrintSettingsToDefault()
-                        Toast.makeText(context, "تمت استعادة القالب الافتراضي للطباعة", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "تمت استعادة القالب الافتراضي للطباعة والأرقام", Toast.LENGTH_SHORT).show()
                     }
                 )
 
@@ -210,39 +210,16 @@ fun SettingsScreen(
 }
 
 @Composable
-private fun GeneralAndIdentityTab(
+private fun AppearanceAndFontsTab(
     isDark: Boolean,
     fontScale: Float,
+    appFont: com.example.fund.model.AppFontOption,
+    screenFormat: com.example.fund.model.DisplayFormatConfig,
+    fundInfo: com.example.fund.model.FundInfo,
     onDarkChange: (Boolean) -> Unit,
     onFontScaleChange: (Float) -> Unit,
-    onLogoBase64Selected: (String) -> Unit,
-    onSaveFundInfo: (com.example.fund.model.FundInfo) -> Unit,
-    fundInfo: com.example.fund.model.FundInfo
+    onAppFontChange: (com.example.fund.model.AppFontOption) -> Unit
 ) {
-    val context = LocalContext.current
-    var nameAr by remember(fundInfo) { mutableStateOf(fundInfo.name) }
-    var subtitle by remember(fundInfo) { mutableStateOf(fundInfo.subtitle) }
-    var license by remember(fundInfo) { mutableStateOf(fundInfo.licenseNo) }
-    var address by remember(fundInfo) { mutableStateOf(fundInfo.address) }
-    var phone by remember(fundInfo) { mutableStateOf(fundInfo.phone) }
-    var email by remember(fundInfo) { mutableStateOf(fundInfo.email) }
-    var bankKareemi by remember(fundInfo) { mutableStateOf(fundInfo.bankAccountKareemi) }
-    var bankCAC by remember(fundInfo) { mutableStateOf(fundInfo.bankAccountCAC) }
-    var fiscalYear by remember(fundInfo) { mutableStateOf(fundInfo.fiscalYear) }
-
-    val logoPicker = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.PickVisualMedia()
-    ) { uri ->
-        if (uri != null) {
-            val encoded = encodeImageUriToBase64(context, uri)
-            if (!encoded.isNullOrBlank()) {
-                onLogoBase64Selected(encoded)
-            } else {
-                Toast.makeText(context, "تعذر معالجة الصورة المختارة", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-
     // Appearance & Font Scale Card
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -278,11 +255,18 @@ private fun GeneralAndIdentityTab(
         }
     }
 
-    // Logo Card
+    // App-Wide Arabic Font Family Selector + Live Preview
+    AppFontSelectorSection(
+        selectedFont = appFont,
+        screenFormat = screenFormat,
+        onSelectFont = onAppFontChange
+    )
+
+    // Read-only Fund Identity Summary pointing to dedicated FundInfoScreen (no duplicate form)
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = androidx.compose.foundation.BorderStroke(1.dp, FundGold.copy(alpha = 0.6f))
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f)),
+        border = androidx.compose.foundation.BorderStroke(1.dp, FundGold.copy(alpha = 0.5f))
     ) {
         Row(
             modifier = Modifier
@@ -293,84 +277,25 @@ private fun GeneralAndIdentityTab(
         ) {
             Box(
                 modifier = Modifier
-                    .size(58.dp)
+                    .size(50.dp)
                     .clip(CircleShape)
                     .background(FundDeepHeader)
-                    .border(2.dp, FundGold, CircleShape),
+                    .border(1.5.dp, FundGold, CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 FundLogoImage(
                     customLogoBase64 = fundInfo.customLogoBase64,
                     contentDescription = "شعار الصندوق",
-                    modifier = Modifier.size(50.dp)
+                    modifier = Modifier.size(44.dp)
                 )
             }
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("شعار الصندوق الرسمي", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = FundPrimary)
-                Text("اختر شعار قريتك أو صندوقك ليظهر في الترويسات والسندات وبطاقات العضوية.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        onClick = { logoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
-                        colors = ButtonDefaults.buttonColors(containerColor = FundPrimary),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
-                    ) {
-                        Icon(Icons.Default.PhotoLibrary, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("تغيير الشعار", fontSize = 12.sp)
-                    }
-                    if (fundInfo.customLogoBase64.isNotBlank()) {
-                        OutlinedButton(
-                            onClick = { onLogoBase64Selected("") },
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
-                        ) {
-                            Text("استعادة الافتراضي", fontSize = 11.sp)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // Fund Identity Card
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-    ) {
-        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("البيانات الرسمية للصندوق والحسابات البنكية", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = FundPrimary)
-            OutlinedTextField(value = nameAr, onValueChange = { nameAr = it }, label = { Text("اسم الصندوق / القرية / المنطقة") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-            OutlinedTextField(value = subtitle, onValueChange = { subtitle = it }, label = { Text("الوصف الفرعي") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-            OutlinedTextField(value = license, onValueChange = { license = it }, label = { Text("رقم الترخيص الرسمي") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-            OutlinedTextField(value = address, onValueChange = { address = it }, label = { Text("العنوان والمقر العام") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = phone, onValueChange = { phone = it }, label = { Text("الهاتف") }, modifier = Modifier.weight(1.3f), singleLine = true)
-                OutlinedTextField(value = fiscalYear, onValueChange = { fiscalYear = it }, label = { Text("السنة المالية") }, modifier = Modifier.weight(0.7f), singleLine = true)
-            }
-            OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text("البريد الإلكتروني") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-            OutlinedTextField(value = bankKareemi, onValueChange = { bankKareemi = it }, label = { Text("حساب بنك الكريمي") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-            OutlinedTextField(value = bankCAC, onValueChange = { bankCAC = it }, label = { Text("حساب كاك بنك CAC") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-            Button(
-                onClick = {
-                    onSaveFundInfo(
-                        fundInfo.copy(
-                            name = nameAr,
-                            subtitle = subtitle,
-                            licenseNo = license,
-                            address = address,
-                            phone = phone,
-                            email = email,
-                            bankAccountKareemi = bankKareemi,
-                            bankAccountCAC = bankCAC,
-                            fiscalYear = fiscalYear
-                        )
-                    )
-                },
-                colors = ButtonDefaults.buttonColors(containerColor = FundPrimary),
-                modifier = Modifier.fillMaxWidth().testTag("save_fund_info_button")
-            ) {
-                Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(6.dp))
-                Text("حفظ البيانات الرسمية")
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(fundInfo.name, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = FundPrimary)
+                Text(
+                    "لتعديل بيانات الصندوق الرسمية والشعار والحسابات البنكية، افتح «بيانات الصندوق والشعار» من القائمة الجانبية.",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }

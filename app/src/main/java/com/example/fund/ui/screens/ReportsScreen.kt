@@ -29,6 +29,8 @@ import com.example.fund.model.AidType
 import com.example.fund.model.VoucherStatus
 import com.example.fund.model.VoucherType
 import com.example.fund.ui.components.FundEmptyState
+import com.example.fund.util.FormatUtils
+import com.example.fund.util.LocalScreenFormat
 import com.example.fund.util.OfficialPrintHelper
 import com.example.ui.theme.*
 
@@ -47,6 +49,7 @@ fun ReportsScreen() {
     val regions by repo.regions.collectAsStateWithLifecycle()
     val fundInfo by repo.fundInfo.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val screenFormat = LocalScreenFormat.current
 
     var selectedTab by remember { mutableIntStateOf(0) }
     var sortAsc by remember { mutableStateOf(false) }
@@ -196,9 +199,9 @@ fun ReportsScreen() {
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            ReportKpiCard("إجمالي المقبوضات", "%,d ﷼".format(totalRev), StatusSuccess, Modifier.weight(1f))
-            ReportKpiCard("إجمالي المصروفات", "%,d ﷼".format(totalExp), StatusDanger, Modifier.weight(1f))
-            ReportKpiCard("صافي الفائض", "%,d ﷼".format(totalRev - totalExp), FundPrimary, Modifier.weight(1f))
+            ReportKpiCard("إجمالي المقبوضات", FormatUtils.formatAmount(totalRev.toDouble(), screenFormat), StatusSuccess, Modifier.weight(1f))
+            ReportKpiCard("إجمالي المصروفات", FormatUtils.formatAmount(totalExp.toDouble(), screenFormat), StatusDanger, Modifier.weight(1f))
+            ReportKpiCard("صافي الفائض", FormatUtils.formatAmount((totalRev - totalExp).toDouble(), screenFormat), FundPrimary, Modifier.weight(1f))
         }
 
         Spacer(Modifier.height(10.dp))
@@ -240,7 +243,7 @@ fun ReportsScreen() {
                                                 Text("${region.villages.size} قرية • ${regMembers.size} عضو", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                             }
                                             Text(
-                                                "%,d ﷼".format(regPaid),
+                                                FormatUtils.formatAmount(regPaid.toDouble(), screenFormat, inTable = true),
                                                 fontWeight = FontWeight.Bold,
                                                 fontSize = 12.sp,
                                                 color = StatusSuccess,
@@ -274,7 +277,7 @@ fun ReportsScreen() {
                                     ) {
                                         Text("${aidType.title} (${matching.size} طلب)", fontSize = 12.sp, fontWeight = FontWeight.Medium)
                                         Text(
-                                            "%,d ﷼".format(totalAmt),
+                                            FormatUtils.formatAmount(totalAmt.toDouble(), screenFormat, inTable = true),
                                             fontSize = 12.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = FundGoldDark,
@@ -347,7 +350,7 @@ fun ReportsScreen() {
                                         }
                                         Text("$count دفعة", modifier = Modifier.weight(0.7f), style = MaterialTheme.typography.bodySmall)
                                         Text(
-                                            "%,d ﷼".format(totalPaid),
+                                            FormatUtils.formatAmount(totalPaid.toDouble(), screenFormat, inTable = true),
                                             modifier = Modifier.weight(1f),
                                             style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = "tnum"),
                                             fontWeight = FontWeight.Bold,
@@ -416,9 +419,9 @@ fun ReportsScreen() {
                                                 AidStatus.REJECTED -> StatusDanger
                                             }
                                         )
-                                        val amt = (if (aid.approvedAmountYer > 0) aid.approvedAmountYer else aid.requestedAmountYer).toLong()
+                                        val amt = if (aid.approvedAmountYer > 0) aid.approvedAmountYer else aid.requestedAmountYer
                                         Text(
-                                            "%,d ﷼".format(amt),
+                                            FormatUtils.formatAmount(amt, screenFormat, inTable = true),
                                             modifier = Modifier.weight(1f),
                                             style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = "tnum"),
                                             fontWeight = FontWeight.Bold
@@ -472,8 +475,8 @@ fun ReportsScreen() {
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Column(modifier = Modifier.weight(1.5f)) {
-                                            Text("${v.voucherNo} - ${v.partyName}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                            Text("${v.date} • ${v.description}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                            Text("${FormatUtils.formatCodeOrNumber(v.voucherNo, screenFormat)} - ${v.partyName}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                            Text("${FormatUtils.formatDate(v.date, screenFormat)} • ${v.description}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                         }
                                         Text(
                                             v.type.title,
@@ -483,7 +486,7 @@ fun ReportsScreen() {
                                             fontWeight = FontWeight.Bold
                                         )
                                         Text(
-                                            "%,d ﷼".format(v.amountYer.toLong()),
+                                            FormatUtils.formatAmount(v.amountYer, screenFormat, inTable = true),
                                             modifier = Modifier.weight(1f),
                                             style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = "tnum"),
                                             fontWeight = FontWeight.Bold,

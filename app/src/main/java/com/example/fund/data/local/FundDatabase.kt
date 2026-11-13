@@ -5,6 +5,8 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [
@@ -34,7 +36,7 @@ import androidx.room.TypeConverters
         SyncBatchRecordEntity::class,
         LocalServerConfigEntity::class
     ],
-    version = 1,
+    version = 3,
     exportSchema = false
 )
 @TypeConverters(FundTypeConverters::class)
@@ -50,6 +52,19 @@ abstract class FundDatabase : RoomDatabase() {
     companion object {
         private const val DB_NAME = "social_fund_v9.db"
 
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE app_settings ADD COLUMN screenFormat TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE print_settings ADD COLUMN printFormat TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE print_settings ADD COLUMN screenFormat TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
         @Volatile
         private var instance: FundDatabase? = null
 
@@ -60,6 +75,7 @@ abstract class FundDatabase : RoomDatabase() {
                     FundDatabase::class.java,
                     DB_NAME
                 )
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                     .fallbackToDestructiveMigration(dropAllTables = true)
                     .build()
                     .also { instance = it }

@@ -95,4 +95,17 @@ class FundTypeConverters {
 
     @TypeConverter fun fromPrintPaper(v: PrintPaperSize): String = v.name
     @TypeConverter fun toPrintPaper(s: String): PrintPaperSize = runCatching { PrintPaperSize.valueOf(s) }.getOrDefault(PrintPaperSize.A4)
+
+    @TypeConverter
+    fun fromDisplayFormatConfig(config: DisplayFormatConfig?): String {
+        return com.example.fund.util.FormatUtils.displayFormatToJson(config ?: DisplayFormatConfig()).toString()
+    }
+
+    @TypeConverter
+    fun toDisplayFormatConfig(raw: String?): DisplayFormatConfig {
+        if (raw.isNullOrBlank()) return DisplayFormatConfig()
+        return runCatching {
+            com.example.fund.util.FormatUtils.displayFormatFromJson(JSONObject(raw))
+        }.getOrDefault(DisplayFormatConfig())
+    }
 }

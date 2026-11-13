@@ -10,8 +10,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.MenuBook
-import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.automirrored.filled.TrendingDown
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.*
@@ -37,20 +35,19 @@ import com.example.fund.model.CurrencyCode
 import com.example.fund.model.Voucher
 import com.example.fund.model.VoucherType
 import com.example.fund.ui.components.*
-import com.example.fund.ui.navigation.AppRoute
-import com.example.fund.ui.navigation.Screen
 import com.example.fund.ui.viewmodel.DashboardViewModel
+import com.example.fund.util.FormatUtils
+import com.example.fund.util.LocalScreenFormat
 import com.example.ui.theme.*
 
 @Composable
 fun DashboardScreen(
-    onNavigate: (Screen) -> Unit,
-    onNavigateRoute: (AppRoute) -> Unit = { },
     onOpenQrCheck: () -> Unit,
     onOpenAiAdvisor: () -> Unit = {},
     onOpenSyncCenter: () -> Unit = {},
     dashboardViewModel: DashboardViewModel = viewModel()
 ) {
+    val screenFormat = LocalScreenFormat.current
     val accounts by dashboardViewModel.accounts.collectAsStateWithLifecycle()
     val members by dashboardViewModel.members.collectAsStateWithLifecycle()
     val aidRequests by dashboardViewModel.aidRequests.collectAsStateWithLifecycle()
@@ -325,7 +322,7 @@ fun DashboardScreen(
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = "%,d ﷼".format(totalLiquidity.toLong()),
+                            text = FormatUtils.formatAmount(totalLiquidity, screenFormat),
                             color = Color.White,
                             fontWeight = FontWeight.Black,
                             fontSize = 26.sp,
@@ -337,8 +334,10 @@ fun DashboardScreen(
                             color = Color.Black.copy(alpha = 0.22f),
                             shape = RoundedCornerShape(20.dp)
                         ) {
+                            val eqUsdStr = FormatUtils.formatNumber(equivalentUsd.toDouble(), screenFormat, decimalsOverride = 0)
+                            val eqSarStr = FormatUtils.formatNumber(equivalentSar.toDouble(), screenFormat, decimalsOverride = 0)
                             Text(
-                                text = "المعادل: $%,d دولار  |  %,d ر.س".format(equivalentUsd, equivalentSar),
+                                text = "المعادل: $$eqUsdStr دولار  |  $eqSarStr ر.س",
                                 color = FundGoldLight,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
@@ -356,27 +355,24 @@ fun DashboardScreen(
                         HeroAccountBox(
                             title = "الخزينة (1100)",
                             amount = treasuryCash,
-                            modifier = Modifier.weight(1f),
-                            onClick = { onNavigate(Screen.TREASURY) }
+                            modifier = Modifier.weight(1f)
                         )
                         HeroAccountBox(
                             title = "الكريمي (1200)",
                             amount = bankKareemi,
-                            modifier = Modifier.weight(1f),
-                            onClick = { onNavigate(Screen.TREASURY) }
+                            modifier = Modifier.weight(1f)
                         )
                         HeroAccountBox(
                             title = "المحافظ (1300)",
                             amount = wallets,
-                            modifier = Modifier.weight(1f),
-                            onClick = { onNavigate(Screen.TREASURY) }
+                            modifier = Modifier.weight(1f)
                         )
                     }
                 }
             }
         }
 
-        // 2. Quick Action Circles Bar
+        // 2. Quick Action Circles Bar (Modal/Dialog tools only — single entry point invariant)
         Card(
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             shape = RoundedCornerShape(16.dp),
@@ -390,20 +386,6 @@ fun DashboardScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 CircularQuickAction(
-                    label = "سند مالي",
-                    icon = Icons.AutoMirrored.Filled.ReceiptLong,
-                    containerColor = FundPrimary.copy(alpha = 0.12f),
-                    iconColor = FundPrimary,
-                    onClick = { onNavigate(Screen.VOUCHERS) }
-                )
-                CircularQuickAction(
-                    label = "اشتراك",
-                    icon = Icons.Default.Payments,
-                    containerColor = StatusSuccess.copy(alpha = 0.12f),
-                    iconColor = StatusSuccess,
-                    onClick = { onNavigate(Screen.SUBSCRIPTIONS) }
-                )
-                CircularQuickAction(
                     label = "فحص QR",
                     icon = Icons.Default.QrCodeScanner,
                     containerColor = FundGold.copy(alpha = 0.25f),
@@ -411,14 +393,14 @@ fun DashboardScreen(
                     onClick = onOpenQrCheck
                 )
                 CircularQuickAction(
-                    label = "المساعدات",
-                    icon = Icons.Default.VolunteerActivism,
-                    containerColor = StatusInfo.copy(alpha = 0.12f),
-                    iconColor = StatusInfo,
-                    onClick = { onNavigate(Screen.AIDS) }
+                    label = "المستشار الذكي",
+                    icon = Icons.Default.AutoAwesome,
+                    containerColor = FundPrimary.copy(alpha = 0.12f),
+                    iconColor = FundPrimary,
+                    onClick = onOpenAiAdvisor
                 )
                 CircularQuickAction(
-                    label = "المزامنة",
+                    label = "مركز المزامنة",
                     icon = Icons.Default.CloudSync,
                     containerColor = StatusPending.copy(alpha = 0.12f),
                     iconColor = StatusPending,
@@ -427,7 +409,7 @@ fun DashboardScreen(
             }
         }
 
-        // 3. Interactive 2x2 Executive KPI Grid (Navigates directly with pre-applied filters)
+        // 3. Executive KPI Summary 2x2 Grid
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -435,21 +417,19 @@ fun DashboardScreen(
             ) {
                 ExecutiveKpiCard(
                     title = "إجمالي الإيرادات",
-                    value = "%,d ﷼".format(totalRevenue.toLong()),
-                    subtitle = "${vouchers.count { it.type == VoucherType.RECEIPT }} سند قبض (اضغط للعرض)",
+                    value = FormatUtils.formatAmount(totalRevenue, screenFormat),
+                    subtitle = "${vouchers.count { it.type == VoucherType.RECEIPT }} سند قبض",
                     icon = Icons.AutoMirrored.Filled.TrendingUp,
                     color = StatusSuccess,
-                    modifier = Modifier.weight(1f).testTag("kpi_revenues"),
-                    onClick = { onNavigateRoute(AppRoute.VouchersRoute(typeFilter = "قبض")) }
+                    modifier = Modifier.weight(1f).testTag("kpi_revenues")
                 )
                 ExecutiveKpiCard(
                     title = "إجمالي المصروفات",
-                    value = "%,d ﷼".format(totalExpense.toLong()),
-                    subtitle = "الفائض: %,d ﷼ (عرض الصرف)".format(netSurplus.toLong()),
+                    value = FormatUtils.formatAmount(totalExpense, screenFormat),
+                    subtitle = "الفائض: ${FormatUtils.formatAmount(netSurplus, screenFormat)}",
                     icon = Icons.AutoMirrored.Filled.TrendingDown,
                     color = StatusDanger,
-                    modifier = Modifier.weight(1f).testTag("kpi_expenses"),
-                    onClick = { onNavigateRoute(AppRoute.VouchersRoute(typeFilter = "صرف")) }
+                    modifier = Modifier.weight(1f).testTag("kpi_expenses")
                 )
             }
 
@@ -460,11 +440,10 @@ fun DashboardScreen(
                 ExecutiveKpiCard(
                     title = "الأعضاء المسجلون",
                     value = "$activeMembers عضو نشط",
-                    subtitle = "من إجمالي ${members.size} (تصفية النشطين)",
+                    subtitle = "من إجمالي ${members.size} عضو",
                     icon = Icons.Default.People,
                     color = FundPrimary,
-                    modifier = Modifier.weight(1f).testTag("kpi_members"),
-                    onClick = { onNavigateRoute(AppRoute.MembersRoute(statusFilter = "نشط")) }
+                    modifier = Modifier.weight(1f).testTag("kpi_members")
                 )
                 ExecutiveKpiCard(
                     title = "طلبات المساعدة",
@@ -472,8 +451,7 @@ fun DashboardScreen(
                     subtitle = "$approvedAids معتمدة • $disbursedAids مصروفة",
                     icon = Icons.Default.AssignmentLate,
                     color = StatusPending,
-                    modifier = Modifier.weight(1f).testTag("kpi_pending_aids"),
-                    onClick = { onNavigateRoute(AppRoute.AidsRoute(statusFilter = "قيد المراجعة")) }
+                    modifier = Modifier.weight(1f).testTag("kpi_pending_aids")
                 )
             }
         }
@@ -543,14 +521,14 @@ fun DashboardScreen(
                                 }
                                 Column {
                                     Text(
-                                        text = "${v.voucherNo} • ${v.partyName}",
+                                        text = "${FormatUtils.formatCodeOrNumber(v.voucherNo, screenFormat)} • ${v.partyName}",
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 12.sp,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
                                     Text(
-                                        text = "${v.date} — ${v.description}",
+                                        text = "${FormatUtils.formatDate(v.date, screenFormat)} — ${v.description}",
                                         fontSize = 10.sp,
                                         color = Color.Gray,
                                         maxLines = 1,
@@ -563,7 +541,7 @@ fun DashboardScreen(
 
                             Column(horizontalAlignment = Alignment.End) {
                                 Text(
-                                    text = "${if (isReceipt) "+" else "-"}%,d ﷼".format(v.amountYer.toLong()),
+                                    text = "${if (isReceipt) "+" else "-"}${FormatUtils.formatAmount(v.amountYer, screenFormat)}",
                                     fontWeight = FontWeight.Black,
                                     fontSize = 12.sp,
                                     color = if (isReceipt) StatusSuccess else StatusDanger,
@@ -579,13 +557,6 @@ fun DashboardScreen(
                             }
                         }
                     }
-
-                    TextButton(
-                        onClick = { onNavigate(Screen.VOUCHERS) },
-                        modifier = Modifier.align(Alignment.CenterHorizontally)
-                    ) {
-                        Text("عرض وإدارة كافة السندات المالية ←", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = FundPrimary)
-                    }
                 } else {
                     topMembers.forEachIndexed { index, m ->
                         Row(
@@ -593,9 +564,6 @@ fun DashboardScreen(
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(10.dp))
                                 .background(if (index % 2 == 0) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f) else Color.Transparent)
-                                .clickable {
-                                    onNavigateRoute(AppRoute.MembersRoute(highlightMemberId = m.id))
-                                }
                                 .padding(horizontal = 10.dp, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
@@ -638,7 +606,7 @@ fun DashboardScreen(
                             }
 
                             Text(
-                                text = "%,d ﷼".format(m.totalPaidYer.toLong()),
+                                text = FormatUtils.formatAmount(m.totalPaidYer, screenFormat),
                                 fontWeight = FontWeight.Black,
                                 color = FundPrimary,
                                 fontSize = 12.sp,
@@ -658,23 +626,13 @@ fun DashboardScreen(
 
         DonutChart(
             items = aidDistributionData,
-            centerText = "إجمالي: %,d ﷼".format(totalExpense.toLong()),
+            centerText = "إجمالي: ${FormatUtils.formatAmount(totalExpense, screenFormat)}",
             centerSubtext = "المصروفات"
         )
 
         ProportionalBarChart(items = aidStatusBars)
 
-        // 6. Active Campaigns & Quick Modules Row
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            QuickModuleButton("الحملات (${campaigns.size})", Icons.Default.Campaign, Modifier.weight(1f)) { onNavigate(Screen.CAMPAIGNS) }
-            QuickModuleButton("القوائم المالية", Icons.Default.Assessment, Modifier.weight(1f)) { onNavigate(Screen.FINANCIAL_REPORTS) }
-            QuickModuleButton("دفتر اليومية", Icons.AutoMirrored.Filled.MenuBook, Modifier.weight(1f)) { onNavigate(Screen.JOURNAL) }
-        }
-
-        Spacer(modifier = Modifier.height(72.dp)) // Clearance for Dashboard Quick FAB
+        Spacer(modifier = Modifier.height(72.dp)) // Clearance for Dashboard QR FAB
     }
 
     selectedVoucherForPrint?.let { v ->
@@ -689,14 +647,14 @@ fun DashboardScreen(
 private fun HeroAccountBox(
     title: String,
     amount: Double,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
+    modifier: Modifier = Modifier
 ) {
+    val screenFormat = LocalScreenFormat.current
     Surface(
         color = Color.White.copy(alpha = 0.12f),
         shape = RoundedCornerShape(12.dp),
         border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.25f)),
-        modifier = modifier.clickable { onClick() }
+        modifier = modifier
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
@@ -711,7 +669,7 @@ private fun HeroAccountBox(
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
-                text = "%,d ﷼".format(amount.toLong()),
+                text = FormatUtils.formatAmount(amount, screenFormat),
                 color = FundGoldLight,
                 fontWeight = FontWeight.ExtraBold,
                 fontSize = 11.sp,
@@ -764,11 +722,10 @@ private fun ExecutiveKpiCard(
     subtitle: String,
     icon: ImageVector,
     color: Color,
-    modifier: Modifier,
-    onClick: () -> Unit
+    modifier: Modifier
 ) {
     Card(
-        modifier = modifier.clickable { onClick() },
+        modifier = modifier,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         shape = RoundedCornerShape(16.dp),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
@@ -779,7 +736,7 @@ private fun ExecutiveKpiCard(
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
@@ -788,7 +745,8 @@ private fun ExecutiveKpiCard(
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
                 )
                 Box(
                     modifier = Modifier
@@ -841,36 +799,6 @@ private fun SegmentTabButton(
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
                 color = if (selected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-    }
-}
-
-@Composable
-private fun QuickModuleButton(
-    label: String,
-    icon: ImageVector,
-    modifier: Modifier,
-    onClick: () -> Unit
-) {
-    OutlinedButton(
-        onClick = onClick,
-        modifier = modifier.heightIn(min = 48.dp),
-        shape = RoundedCornerShape(12.dp),
-        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 10.dp)
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Icon(icon, contentDescription = null, tint = FundPrimary, modifier = Modifier.size(16.dp))
-            Text(
-                text = label,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )

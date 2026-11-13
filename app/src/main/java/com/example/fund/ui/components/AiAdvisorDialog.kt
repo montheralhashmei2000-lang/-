@@ -20,6 +20,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.example.fund.ai.GeminiFundAdvisor
+import com.example.fund.util.FormatUtils
+import com.example.fund.util.LocalScreenFormat
 import com.example.ui.theme.*
 import kotlinx.coroutines.launch
 
@@ -28,11 +30,12 @@ fun AiAdvisorDialog(
     onDismiss: () -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
+    val screenFormat = LocalScreenFormat.current
     var isLoading by remember { mutableStateOf(false) }
     var resultText by remember { mutableStateOf("") }
     var activeTab by remember { mutableStateOf(0) } // 0: Financial Health, 1: Aid Guidelines
 
-    LaunchedEffect(activeTab) {
+    LaunchedEffect(activeTab, screenFormat) {
         isLoading = true
         coroutineScope.launch {
             val repo = com.example.fund.data.FundRepository.getInstance()
@@ -45,10 +48,10 @@ fun AiAdvisorDialog(
                     📋 **ضوابط ومعايير صرف المساعدات (${fi.name})**:
                     
                     1. **سقف المساعدات الفردية الأقصى:**
-                       - الحد الأعلى المعتمد للصرف الفردي: حتى ${"%,d".format(fi.maxAidCeilingYer.toLong())} ﷼.
-                       - معونة الزواج للأعضاء: 200,000 ﷼.
-                       - مساعدات الطوارئ والكوارث: حتى 150,000 ﷼.
-                       - المنح التعليمية الجامعية: حتى 150,000 ﷼.
+                       - الحد الأعلى المعتمد للصرف الفردي: حتى ${FormatUtils.formatAmount(fi.maxAidCeilingYer, screenFormat)}.
+                       - معونة الزواج للأعضاء: ${FormatUtils.formatAmount(200_000.0, screenFormat)}.
+                       - مساعدات الطوارئ والكوارث: حتى ${FormatUtils.formatAmount(150_000.0, screenFormat)}.
+                       - المنح التعليمية الجامعية: حتى ${FormatUtils.formatAmount(150_000.0, screenFormat)}.
                     
                     2. **شروط الأهلية والاستحقاق:**
                        - مرور 6 أشهر على الأقل من تاريخ انتساب العضو وسداد الاشتراكات.

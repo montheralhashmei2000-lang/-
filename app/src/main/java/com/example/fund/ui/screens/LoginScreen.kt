@@ -79,12 +79,28 @@ fun LoginScreen(
     var customHost by remember(serverConfig) { mutableStateOf(serverConfig.serverHost) }
 
     val biometricStatus = remember(context) {
-        BiometricManager.from(context).canAuthenticate(
-            BiometricManager.Authenticators.BIOMETRIC_STRONG or
-                BiometricManager.Authenticators.BIOMETRIC_WEAK
-        )
+        runCatching {
+            BiometricManager.from(context).canAuthenticate(
+                BiometricManager.Authenticators.BIOMETRIC_STRONG or
+                    BiometricManager.Authenticators.BIOMETRIC_WEAK
+            )
+        }.getOrDefault(BiometricManager.BIOMETRIC_ERROR_HW_UNAVAILABLE)
     }
+    val biometricHardwarePresent = biometricStatus != BiometricManager.BIOMETRIC_ERROR_NO_HARDWARE &&
+        biometricStatus != BiometricManager.BIOMETRIC_ERROR_HW_UNAVAILABLE &&
+        biometricStatus != BiometricManager.BIOMETRIC_ERROR_UNSUPPORTED
     val biometricHardwareReady = biometricStatus == BiometricManager.BIOMETRIC_SUCCESS
+    val availableModes = remember(biometricHardwareReady, biometricHardwarePresent) {
+        LoginMode.entries.filter { mode ->
+            mode != LoginMode.BIOMETRICS || (biometricHardwarePresent && biometricHardwareReady)
+        }
+    }
+
+    LaunchedEffect(availableModes) {
+        if (activeMode !in availableModes) {
+            activeMode = LoginMode.PASSWORD
+        }
+    }
 
     fun launchRealBiometricPrompt() {
         if (!hasCompletedInitialLogin) {
@@ -105,6 +121,7 @@ fun LoginScreen(
                 else -> "المصادقة الحيوية غير مهيأة على هذا الجهاز."
             }
             Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+            activeMode = LoginMode.PASSWORD
             return
         }
 
@@ -132,6 +149,12 @@ fun LoginScreen(
 
                 override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
                     super.onAuthenticationError(errorCode, errString)
+                    if (errorCode == BiometricPrompt.ERROR_NO_BIOMETRICS ||
+                        errorCode == BiometricPrompt.ERROR_HW_NOT_PRESENT ||
+                        errorCode == BiometricPrompt.ERROR_HW_UNAVAILABLE
+                    ) {
+                        activeMode = LoginMode.PASSWORD
+                    }
                     if (errorCode != BiometricPrompt.ERROR_NEGATIVE_BUTTON &&
                         errorCode != BiometricPrompt.ERROR_USER_CANCELED
                     ) {
@@ -152,7 +175,16 @@ fun LoginScreen(
             .setNegativeButtonText("استخدام كلمة المرور")
             .build()
 
-        prompt.authenticate(promptInfo)
+        runCatching {
+            prompt.authenticate(promptInfo)
+        }.onFailure { err ->
+            Toast.makeText(
+                context,
+                err.localizedMessage ?: "تعذر تشغيل مستشعر البصمة؛ استخدم كلمة المرور أو PIN",
+                Toast.LENGTH_LONG
+            ).show()
+            activeMode = LoginMode.PASSWORD
+        }
     }
 
     Box(
@@ -276,14 +308,15 @@ fun LoginScreen(
                 Spacer(modifier = Modifier.height(14.dp))
 
                 // Mode Selector Tabs
+                val selectedTabIdx = availableModes.indexOf(activeMode).coerceAtLeast(0)
                 ScrollableTabRow(
-                    selectedTabIndex = activeMode.ordinal,
+                    selectedTabIndex = selectedTabIdx,
                     edgePadding = 0.dp,
                     containerColor = MaterialTheme.colorScheme.surfaceVariant,
                     contentColor = FundPrimary,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    LoginMode.entries.forEach { mode ->
+                    availableModes.forEach { mode ->
                         Tab(
                             selected = activeMode == mode,
                             onClick = {
@@ -821,6 +854,32 @@ fun LoginScreen(
                                 Icon(Icons.Default.VerifiedUser, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(Modifier.width(8.dp))
                                 Text("تشغيل التحقق بالبصمة الحيوية", fontWeight = FontWeight.Bold)
+                            }
+
+                            if (!hasCompletedInitialLogin || !biometricHardwareReady) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    OutlinedButton(
+                                        onClick = { activeMode = LoginMode.PASSWORD },
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .heightIn(min = 48.dp),
+                                        shape = RoundedCornerShape(10.dp)
+                                    ) {
+                                        Text("الدخول بكلمة المرور", fontSize = 11.sp)
+                                    }
+                                    OutlinedButton(
+                                        onClick = { activeMode = LoginMode.QUICK_PIN },
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .heightIn(min = 48.dp),
+                                        shape = RoundedCornerShape(10.dp)
+                                    ) {
+                                        Text("الدخول برمز PIN", fontSize = 11.sp)
+                                    }
+                                }
                             }
                         }
                     }

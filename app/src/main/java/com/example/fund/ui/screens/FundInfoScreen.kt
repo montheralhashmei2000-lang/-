@@ -27,6 +27,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.fund.data.FundRepository
 import com.example.fund.ui.components.FundLogoImage
 import com.example.fund.ui.components.encodeImageUriToBase64
@@ -36,8 +37,8 @@ import com.example.ui.theme.*
 fun FundInfoScreen() {
     val context = LocalContext.current
     val repo = FundRepository.getInstance()
-    val fundInfo by repo.fundInfo.collectAsState()
-    val regions by repo.regions.collectAsState()
+    val fundInfo by repo.fundInfo.collectAsStateWithLifecycle()
+    val regions by repo.regions.collectAsStateWithLifecycle()
 
     var name by remember(fundInfo) { mutableStateOf(fundInfo.name) }
     var subtitle by remember(fundInfo) { mutableStateOf(fundInfo.subtitle) }
@@ -220,7 +221,7 @@ fun FundInfoScreen() {
         // Coverage Summary Card
         Card(
             shape = RoundedCornerShape(14.dp),
-            colors = CardDefaults.cardColors(containerColor = FundLightSurfaceSecondary),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
             border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
         ) {
             Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {

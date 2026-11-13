@@ -92,7 +92,7 @@ fun AiAdvisorDialog(
                             text = "مستشار الذكاء الاصطناعي (Gemini Advisor)",
                             fontWeight = FontWeight.Bold,
                             fontSize = 15.sp,
-                            color = FundDeepHeader
+                            color = MaterialTheme.colorScheme.primary
                         )
                     }
                     IconButton(onClick = onDismiss) {
@@ -105,7 +105,7 @@ fun AiAdvisorDialog(
                 // Tabs
                 TabRow(
                     selectedTabIndex = activeTab,
-                    containerColor = FundLightSurfaceSecondary,
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
                     contentColor = FundPrimary
                 ) {
                     Tab(
@@ -127,7 +127,7 @@ fun AiAdvisorDialog(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
-                        .background(FundLightSurfaceSecondary, RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp))
                         .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(12.dp))
                         .padding(14.dp)
                 ) {

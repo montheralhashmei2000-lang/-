@@ -14,8 +14,8 @@ import androidx.compose.material.icons.filled.Print
 import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -40,7 +40,7 @@ fun MemberCardDialog(
 ) {
     val context = LocalContext.current
     val repo = FundRepository.getInstance()
-    val fundInfo by repo.fundInfo.collectAsState()
+    val fundInfo by repo.fundInfo.collectAsStateWithLifecycle()
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(

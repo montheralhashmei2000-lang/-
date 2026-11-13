@@ -78,8 +78,10 @@ fun DashboardScreen(
     val equivalentUsd = (totalLiquidity / usdRate).toLong()
     val equivalentSar = (totalLiquidity / sarRate).toLong()
 
-    val totalRevenue = accounts.filter { it.code.startsWith("4") }.sumOf { it.balance }
-    val totalExpense = accounts.filter { it.code.startsWith("5") }.sumOf { it.balance }
+    val leafRevenues = accounts.filter { it.code.startsWith("4") && it.parentCode != null }
+    val leafExpenses = accounts.filter { it.code.startsWith("5") && it.parentCode != null }
+    val totalRevenue = (leafRevenues.ifEmpty { accounts.filter { it.code.startsWith("4") } }).sumOf { it.balance }
+    val totalExpense = (leafExpenses.ifEmpty { accounts.filter { it.code.startsWith("5") } }).sumOf { it.balance }
     val netSurplus = totalRevenue - totalExpense
 
     val pendingAids = aidRequests.count { it.status == AidStatus.IN_REVIEW }
@@ -110,12 +112,18 @@ fun DashboardScreen(
         "نوفمبر" to maxOf(2_800_000.0, totalRevenue * 0.28)
     )
 
-    val aidDistributionData = listOf(
-        Triple("مرضية وجراحية", 4_100_000.0, FundPrimaryMedium),
-        Triple("كفالات دورية", 2_850_000.0, FundGoldDark),
-        Triple("مساعدات عينية", 1_200_000.0, StatusInfo),
-        Triple("تشغيلية وإدارية", 550_000.0, Color.Gray)
-    )
+    val aidDistributionData = remember(accounts) {
+        val cashAid = accounts.find { it.code == "5100" }?.balance ?: 0.0
+        val periodicAid = accounts.find { it.code == "5200" }?.balance ?: 0.0
+        val inKindAid = accounts.find { it.code == "5300" }?.balance ?: 0.0
+        val adminExp = accounts.find { it.code == "5400" }?.balance ?: 0.0
+        listOf(
+            Triple("مساعدات نقدية للأعضاء", cashAid, FundPrimaryMedium),
+            Triple("كفالات ومساعدات دورية", periodicAid, FundGoldDark),
+            Triple("مساعدات عينية", inKindAid, StatusInfo),
+            Triple("تشغيلية وإدارية", adminExp, Color.Gray)
+        )
+    }
 
     val aidStatusBars = listOf(
         Triple("مصروفة", disbursedAids, StatusSuccess),
@@ -481,7 +489,7 @@ fun DashboardScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(10.dp))
-                        .background(FundLightSurfaceSecondary)
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
                         .padding(4.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
@@ -506,7 +514,7 @@ fun DashboardScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(10.dp))
-                                .background(FundLightSurfaceSecondary.copy(alpha = 0.6f))
+                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
                                 .clickable { selectedVoucherForPrint = v }
                                 .padding(10.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -584,7 +592,7 @@ fun DashboardScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(10.dp))
-                                .background(if (index % 2 == 0) FundLightSurfaceSecondary.copy(alpha = 0.6f) else Color.Transparent)
+                                .background(if (index % 2 == 0) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f) else Color.Transparent)
                                 .clickable {
                                     onNavigateRoute(AppRoute.MembersRoute(highlightMemberId = m.id))
                                 }

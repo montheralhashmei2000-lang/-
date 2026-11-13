@@ -1,6 +1,9 @@
 package com.example.fund.ui
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -41,11 +44,13 @@ fun HomeShell(authViewModel: AuthViewModel = viewModel()) {
     val navController = rememberNavController()
 
     val persistedLoggedIn by authViewModel.isLoggedIn.collectAsStateWithLifecycle()
+    val currentUser by authViewModel.currentUser.collectAsStateWithLifecycle()
     var isLoggedIn by remember(persistedLoggedIn) { mutableStateOf(persistedLoggedIn) }
 
     var showQrScannerDialog by remember { mutableStateOf(false) }
     var showAiAdvisorDialog by remember { mutableStateOf(false) }
     var showSyncCenterDialog by remember { mutableStateOf(false) }
+    var showGlobalNavigatorDialog by remember { mutableStateOf(false) }
     var isFabMenuExpanded by remember { mutableStateOf(false) }
 
     if (!isLoggedIn) {
@@ -61,10 +66,23 @@ fun HomeShell(authViewModel: AuthViewModel = viewModel()) {
     val currentTitle = currentDestination.resolveTitle()
     val currentScreen = currentDestination.resolveScreen()
     val activeHub = currentDestination.resolveBottomHub()
+    val isTopLevel = currentDestination.isTopLevelHub()
+    val contextGroup = currentDestination.resolveContextGroup()
     val isDashboard = currentDestination?.hasRoute<AppRoute.DashboardRoute>() == true
+    val canNavigateBack = !isTopLevel && navController.previousBackStackEntry != null
+
+    val currentSettingsTab = remember(navBackStackEntry) {
+        if (navBackStackEntry?.destination?.hasRoute<AppRoute.SettingsRoute>() == true) {
+            runCatching { navBackStackEntry?.toRoute<AppRoute.SettingsRoute>()?.initialTab ?: 0 }.getOrDefault(0)
+        } else 0
+    }
 
     LaunchedEffect(isDashboard) {
         if (!isDashboard) isFabMenuExpanded = false
+    }
+
+    BackHandler(enabled = isDashboard && isFabMenuExpanded) {
+        isFabMenuExpanded = false
     }
 
     fun navigateToRoute(route: AppRoute) {
@@ -78,8 +96,32 @@ fun HomeShell(authViewModel: AuthViewModel = viewModel()) {
         }
     }
 
+    fun navigateSibling(route: AppRoute) {
+        val currentRouteId = navController.currentBackStackEntry?.destination?.id
+        navController.navigate(route) {
+            if (currentRouteId != null && !isTopLevel) {
+                popUpTo(currentRouteId) { inclusive = true }
+            }
+            launchSingleTop = true
+        }
+    }
+
     fun navigateToHub(hub: BottomHub) {
-        navController.navigate(hub.toRoute()) {
+        val targetRoute = hub.toRoute()
+        if (hub == activeHub && !isTopLevel) {
+            // Re-selecting active Hub pops detail backstack cleanly to Hub root
+            val popped = navController.popBackStack(targetRoute, inclusive = false)
+            if (!popped) {
+                navController.navigate(targetRoute) {
+                    popUpTo(navController.graph.findStartDestination().id) {
+                        saveState = true
+                    }
+                    launchSingleTop = true
+                }
+            }
+            return
+        }
+        navController.navigate(targetRoute) {
             popUpTo(navController.graph.findStartDestination().id) {
                 saveState = true
             }
@@ -93,7 +135,9 @@ fun HomeShell(authViewModel: AuthViewModel = viewModel()) {
         drawerContent = {
             AppDrawer(
                 currentScreen = currentScreen,
+                currentSettingsTab = currentSettingsTab,
                 onNavigateRoute = { route -> navigateToRoute(route) },
+                onOpenGlobalSearch = { showGlobalNavigatorDialog = true },
                 onCloseDrawer = { coroutineScope.launch { drawerState.close() } }
             )
         }
@@ -105,10 +149,14 @@ fun HomeShell(authViewModel: AuthViewModel = viewModel()) {
                 topBar = {
                     AppTopBar(
                         screenTitle = currentTitle,
+                        canNavigateBack = canNavigateBack,
+                        breadcrumbHint = contextGroup?.let { "${it.hubTitle} ◂ $currentTitle" },
+                        onNavigateBack = { navController.popBackStack() },
                         onOpenDrawer = { coroutineScope.launch { drawerState.open() } },
                         onNavigate = { screen -> navigateToRoute(screen.toRoute()) },
                         onOpenAiAdvisor = { showAiAdvisorDialog = true },
-                        onOpenSyncCenter = { showSyncCenterDialog = true }
+                        onOpenSyncCenter = { showSyncCenterDialog = true },
+                        onOpenGlobalSearch = { showGlobalNavigatorDialog = true }
                     )
                 },
                 bottomBar = {
@@ -149,101 +197,184 @@ fun HomeShell(authViewModel: AuthViewModel = viewModel()) {
                         AppNavigationRail(
                             activeHub = activeHub,
                             onSelectHub = { hub -> navigateToHub(hub) },
-                            onOpenQuickScanner = { showQrScannerDialog = true }
+                            onOpenQuickScanner = { showQrScannerDialog = true },
+                            onOpenGlobalSearch = { showGlobalNavigatorDialog = true }
                         )
                         VerticalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
                     }
 
-                    Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
-                        NavHost(
-                            navController = navController,
-                            startDestination = AppRoute.DashboardRoute,
-                            modifier = Modifier.fillMaxSize()
+                    Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                        // Contextual 1-tap sibling bar inside detail screens
+                        AnimatedVisibility(
+                            visible = contextGroup != null,
+                            enter = fadeIn(tween(180)) + expandVertically(tween(180)),
+                            exit = fadeOut(tween(150)) + shrinkVertically(tween(150))
                         ) {
-                            composable<AppRoute.DashboardRoute> {
-                                DashboardScreen(
-                                    onNavigate = { screen -> navigateToRoute(screen.toRoute()) },
-                                    onNavigateRoute = { route -> navigateToRoute(route) },
-                                    onOpenQrCheck = { showQrScannerDialog = true },
-                                    onOpenAiAdvisor = { showAiAdvisorDialog = true },
-                                    onOpenSyncCenter = { showSyncCenterDialog = true }
+                            contextGroup?.let { group ->
+                                ModuleContextBar(
+                                    contextGroup = group,
+                                    currentScreen = currentScreen,
+                                    currentRole = currentUser.role,
+                                    onSelectParentHub = { hubRoute ->
+                                        val popped = navController.popBackStack(hubRoute, inclusive = false)
+                                        if (!popped) navigateToRoute(hubRoute)
+                                    },
+                                    onSelectSibling = { siblingRoute ->
+                                        navigateSibling(siblingRoute)
+                                    }
                                 )
                             }
+                        }
 
-                            composable<AppRoute.FinanceHubRoute> {
-                                FinanceHubScreen(onNavigateRoute = { route -> navigateToRoute(route) })
-                            }
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth(),
+                            contentAlignment = Alignment.TopCenter
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .widthIn(max = 1040.dp)
+                                    .fillMaxSize()
+                            ) {
+                                NavHost(
+                                    navController = navController,
+                                    startDestination = AppRoute.DashboardRoute,
+                                    enterTransition = {
+                                        if (targetState.destination.isTopLevelHub() && initialState.destination.isTopLevelHub()) {
+                                            fadeIn(tween(190))
+                                        } else {
+                                            slideIntoContainer(
+                                                AnimatedContentTransitionScope.SlideDirection.Start,
+                                                tween(240)
+                                            ) + fadeIn(tween(200))
+                                        }
+                                    },
+                                    exitTransition = {
+                                        if (targetState.destination.isTopLevelHub() && initialState.destination.isTopLevelHub()) {
+                                            fadeOut(tween(180))
+                                        } else {
+                                            slideOutOfContainer(
+                                                AnimatedContentTransitionScope.SlideDirection.Start,
+                                                tween(240)
+                                            ) + fadeOut(tween(180))
+                                        }
+                                    },
+                                    popEnterTransition = {
+                                        slideIntoContainer(
+                                            AnimatedContentTransitionScope.SlideDirection.End,
+                                            tween(240)
+                                        ) + fadeIn(tween(200))
+                                    },
+                                    popExitTransition = {
+                                        slideOutOfContainer(
+                                            AnimatedContentTransitionScope.SlideDirection.End,
+                                            tween(240)
+                                        ) + fadeOut(tween(180))
+                                    },
+                                    modifier = Modifier.fillMaxSize()
+                                ) {
+                                    composable<AppRoute.DashboardRoute> {
+                                        DashboardScreen(
+                                            onNavigate = { screen -> navigateToRoute(screen.toRoute()) },
+                                            onNavigateRoute = { route -> navigateToRoute(route) },
+                                            onOpenQrCheck = { showQrScannerDialog = true },
+                                            onOpenAiAdvisor = { showAiAdvisorDialog = true },
+                                            onOpenSyncCenter = { showSyncCenterDialog = true }
+                                        )
+                                    }
 
-                            composable<AppRoute.MembersHubRoute> {
-                                MembersHubScreen(
-                                    onNavigateRoute = { route -> navigateToRoute(route) },
-                                    onOpenQrCheck = { showQrScannerDialog = true }
-                                )
-                            }
+                                    composable<AppRoute.FinanceHubRoute> {
+                                        FinanceHubScreen(
+                                            onNavigateRoute = { route -> navigateToRoute(route) },
+                                            onOpenGlobalSearch = { showGlobalNavigatorDialog = true }
+                                        )
+                                    }
 
-                            composable<AppRoute.AidsHubRoute> {
-                                AidsHubScreen(onNavigateRoute = { route -> navigateToRoute(route) })
-                            }
+                                    composable<AppRoute.MembersHubRoute> {
+                                        MembersHubScreen(
+                                            onNavigateRoute = { route -> navigateToRoute(route) },
+                                            onOpenQrCheck = { showQrScannerDialog = true },
+                                            onOpenGlobalSearch = { showGlobalNavigatorDialog = true }
+                                        )
+                                    }
 
-                            composable<AppRoute.MembersRoute> { backStackEntry ->
-                                val args = backStackEntry.toRoute<AppRoute.MembersRoute>()
-                                MembersScreen(
-                                    onOpenQrCheck = { showQrScannerDialog = true },
-                                    initialStatusFilter = args.statusFilter,
-                                    highlightMemberId = args.highlightMemberId
-                                )
-                            }
+                                    composable<AppRoute.AidsHubRoute> {
+                                        AidsHubScreen(
+                                            onNavigateRoute = { route -> navigateToRoute(route) },
+                                            onOpenGlobalSearch = { showGlobalNavigatorDialog = true }
+                                        )
+                                    }
 
-                            composable<AppRoute.SubscriptionsRoute> { backStackEntry ->
-                                val args = backStackEntry.toRoute<AppRoute.SubscriptionsRoute>()
-                                SubscriptionsScreen(
-                                    initialSearch = args.searchMemberNo,
-                                    preselectedMemberId = args.preselectedMemberId
-                                )
-                            }
+                                    composable<AppRoute.MembersRoute> { backStackEntry ->
+                                        val args = backStackEntry.toRoute<AppRoute.MembersRoute>()
+                                        MembersScreen(
+                                            onOpenQrCheck = { showQrScannerDialog = true },
+                                            initialStatusFilter = args.statusFilter,
+                                            highlightMemberId = args.highlightMemberId
+                                        )
+                                    }
 
-                            composable<AppRoute.AidsRoute> { backStackEntry ->
-                                val args = backStackEntry.toRoute<AppRoute.AidsRoute>()
-                                AidsScreen(initialStatusFilter = args.statusFilter)
-                            }
+                                    composable<AppRoute.SubscriptionsRoute> { backStackEntry ->
+                                        val args = backStackEntry.toRoute<AppRoute.SubscriptionsRoute>()
+                                        SubscriptionsScreen(
+                                            initialSearch = args.searchMemberNo,
+                                            preselectedMemberId = args.preselectedMemberId
+                                        )
+                                    }
 
-                            composable<AppRoute.BeneficiariesRoute> { BeneficiariesScreen() }
-                            composable<AppRoute.PeriodicAidsRoute> { PeriodicAidsScreen() }
-                            composable<AppRoute.InKindRoute> { InKindScreen() }
-                            composable<AppRoute.TreasuryRoute> {
-                                TreasuryScreen(onNavigate = { screen -> navigateToRoute(screen.toRoute()) })
-                            }
+                                    composable<AppRoute.AidsRoute> { backStackEntry ->
+                                        val args = backStackEntry.toRoute<AppRoute.AidsRoute>()
+                                        AidsScreen(initialStatusFilter = args.statusFilter)
+                                    }
 
-                            composable<AppRoute.VouchersRoute> { backStackEntry ->
-                                val args = backStackEntry.toRoute<AppRoute.VouchersRoute>()
-                                VouchersScreen(
-                                    initialFilter = args.typeFilter,
-                                    initialNewVoucherType = args.openNewType
-                                )
-                            }
+                                    composable<AppRoute.BeneficiariesRoute> { BeneficiariesScreen() }
+                                    composable<AppRoute.PeriodicAidsRoute> { PeriodicAidsScreen() }
+                                    composable<AppRoute.InKindRoute> { InKindScreen() }
+                                    composable<AppRoute.TreasuryRoute> {
+                                        TreasuryScreen(onNavigate = { screen -> navigateToRoute(screen.toRoute()) })
+                                    }
 
-                            composable<AppRoute.JournalRoute> { JournalScreen() }
-                            composable<AppRoute.AccountsRoute> { AccountsScreen() }
-                            composable<AppRoute.BudgetsRoute> { BudgetsScreen() }
-                            composable<AppRoute.FinancialReportsRoute> { FinancialReportsScreen() }
-                            composable<AppRoute.CampaignsRoute> { CampaignsScreen() }
-                            composable<AppRoute.DonorsRoute> { DonorsScreen() }
-                            composable<AppRoute.SchedulerRoute> { SchedulerScreen() }
-                            composable<AppRoute.MessagesRoute> { MessagesScreen() }
-                            composable<AppRoute.ReportsRoute> { ReportsScreen() }
-                            composable<AppRoute.FundInfoRoute> { FundInfoScreen() }
-                            composable<AppRoute.UsersRoute> { UsersScreen() }
-                            composable<AppRoute.AuditRoute> { AuditScreen() }
+                                    composable<AppRoute.VouchersRoute> { backStackEntry ->
+                                        val args = backStackEntry.toRoute<AppRoute.VouchersRoute>()
+                                        VouchersScreen(
+                                            initialFilter = args.typeFilter,
+                                            initialNewVoucherType = args.openNewType
+                                        )
+                                    }
 
-                            composable<AppRoute.SettingsRoute> { backStackEntry ->
-                                val args = backStackEntry.toRoute<AppRoute.SettingsRoute>()
-                                SettingsScreen(initialTab = args.initialTab)
+                                    composable<AppRoute.JournalRoute> { JournalScreen() }
+                                    composable<AppRoute.AccountsRoute> { AccountsScreen() }
+                                    composable<AppRoute.BudgetsRoute> { BudgetsScreen() }
+                                    composable<AppRoute.FinancialReportsRoute> { FinancialReportsScreen() }
+                                    composable<AppRoute.CampaignsRoute> { CampaignsScreen() }
+                                    composable<AppRoute.DonorsRoute> { DonorsScreen() }
+                                    composable<AppRoute.SchedulerRoute> { SchedulerScreen() }
+                                    composable<AppRoute.MessagesRoute> { MessagesScreen() }
+                                    composable<AppRoute.ReportsRoute> { ReportsScreen() }
+                                    composable<AppRoute.FundInfoRoute> { FundInfoScreen() }
+                                    composable<AppRoute.UsersRoute> { UsersScreen() }
+                                    composable<AppRoute.AuditRoute> { AuditScreen() }
+
+                                    composable<AppRoute.SettingsRoute> { backStackEntry ->
+                                        val args = backStackEntry.toRoute<AppRoute.SettingsRoute>()
+                                        SettingsScreen(initialTab = args.initialTab)
+                                    }
+                                }
                             }
                         }
                     }
                 }
             }
         }
+    }
+
+    if (showGlobalNavigatorDialog) {
+        GlobalNavigatorDialog(
+            onDismiss = { showGlobalNavigatorDialog = false },
+            onNavigateRoute = { route -> navigateToRoute(route) },
+            onOpenQrCheck = { showQrScannerDialog = true }
+        )
     }
 
     if (showQrScannerDialog) {
@@ -347,7 +478,7 @@ private fun QuickFabActionChip(
         contentColor = Color.White,
         shape = RoundedCornerShape(14.dp),
         modifier = Modifier
-            .height(44.dp)
+            .height(48.dp)
             .testTag(testTag)
     ) {
         Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))

@@ -23,6 +23,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.fund.data.FundRepository
 import com.example.fund.model.InKindItem
 import com.example.fund.model.InKindMovement
@@ -33,8 +34,8 @@ import java.util.*
 @Composable
 fun InKindScreen() {
     val repo = FundRepository.getInstance()
-    val items by repo.inKindItems.collectAsState()
-    val movements by repo.inKindMovements.collectAsState()
+    val items by repo.inKindItems.collectAsStateWithLifecycle()
+    val movements by repo.inKindMovements.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
     var selectedTab by remember { mutableIntStateOf(0) } // 0: المخزون، 1: سجل الحركات
@@ -62,7 +63,7 @@ fun InKindScreen() {
                 )
                 Text(
                     "إجمالي القيمة التقديرية للمخزون: ${"%,d ﷼".format(totalValueYer)}",
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.bodySmall.copy(fontFeatureSettings = "tnum"),
                     color = StatusSuccess,
                     fontWeight = FontWeight.Bold
                 )
@@ -403,7 +404,7 @@ private fun AddInKindItemDialog(
     onDismiss: () -> Unit,
     onSave: (InKindItem) -> Unit
 ) {
-    val appSettings = FundRepository.getInstance().appSettings.collectAsState().value
+    val appSettings = FundRepository.getInstance().appSettings.collectAsStateWithLifecycle().value
     var name by remember { mutableStateOf("") }
     var category by remember { mutableStateOf("مواد غذائية") }
     var unit by remember { mutableStateOf("كرتون") }

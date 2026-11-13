@@ -122,34 +122,35 @@ fun TrendLineChart(
         }
 
         // Interactive Tooltip Banner for the selected point
-        AnimatedVisibility(visible = selectedIndex != null && selectedIndex!! in resolvedPoints.indices) {
-            val idx = selectedIndex?.coerceIn(0, resolvedPoints.lastIndex) ?: 0
-            val (periodLabel, periodVal) = resolvedPoints[idx]
-            Surface(
-                color = FundDeepHeader,
-                shape = RoundedCornerShape(10.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 8.dp)
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+        val selectedPoint = selectedIndex?.let { resolvedPoints.getOrNull(it) }
+        AnimatedVisibility(visible = selectedPoint != null) {
+            selectedPoint?.let { (periodLabel, periodVal) ->
+                Surface(
+                    color = FundDeepHeader,
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp)
                 ) {
-                    Text(
-                        text = "الفترة المختارة: $periodLabel",
-                        color = Color.White,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = "%,d ﷼".format(periodVal.toLong()),
-                        color = FundGoldLight,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Black,
-                        style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
-                    )
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "الفترة المختارة: $periodLabel",
+                            color = Color.White,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "%,d ﷼".format(periodVal.toLong()),
+                            color = FundGoldLight,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Black,
+                            style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
+                        )
+                    }
                 }
             }
         }
@@ -189,7 +190,7 @@ fun TrendLineChart(
             for (i in 0..3) {
                 val y = height * (i / 3f)
                 drawLine(
-                    color = Color.LightGray.copy(alpha = 0.35f),
+                    color = Color.Gray.copy(alpha = 0.35f),
                     start = Offset(0f, y),
                     end = Offset(width, y),
                     strokeWidth = 1.dp.toPx(),
@@ -467,7 +468,7 @@ fun ProportionalBarChart(
                 .fillMaxWidth()
                 .height(12.dp)
                 .clip(RoundedCornerShape(6.dp))
-                .background(Color(0xFFEEEEEE))
+                .background(MaterialTheme.colorScheme.surfaceVariant)
         ) {
             items.forEach { item ->
                 val fraction = (item.second.toFloat() / total.toFloat()).coerceIn(0f, 1f)
@@ -552,28 +553,30 @@ fun RegionalComparisonBarChart(
             }
         }
 
-        AnimatedVisibility(visible = selectedRegionIdx != null && selectedRegionIdx!! in regionsData.indices) {
-            val (name, rev, exp) = regionsData[selectedRegionIdx!!]
-            val net = rev - exp
-            Surface(
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-                shape = RoundedCornerShape(10.dp),
-                border = BorderStroke(1.dp, FundPrimary.copy(alpha = 0.25f)),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+        val selectedRegionData = selectedRegionIdx?.let { regionsData.getOrNull(it) }
+        AnimatedVisibility(visible = selectedRegionData != null) {
+            selectedRegionData?.let { (name, rev, exp) ->
+                val net = rev - exp
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                    shape = RoundedCornerShape(10.dp),
+                    border = BorderStroke(1.dp, FundPrimary.copy(alpha = 0.25f)),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text(name, fontWeight = FontWeight.Bold, fontSize = 11.sp, color = FundPrimary)
-                    Text(
-                        text = "قبض: %,d | صرف: %,d | صافي: %,d ﷼".format(rev.toLong(), exp.toLong(), net.toLong()),
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = if (net >= 0) StatusSuccess else StatusDanger,
-                        style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
-                    )
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(name, fontWeight = FontWeight.Bold, fontSize = 11.sp, color = FundPrimary)
+                        Text(
+                            text = "قبض: %,d | صرف: %,d | صافي: %,d ﷼".format(rev.toLong(), exp.toLong(), net.toLong()),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (net >= 0) StatusSuccess else StatusDanger,
+                            style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
+                        )
+                    }
                 }
             }
         }

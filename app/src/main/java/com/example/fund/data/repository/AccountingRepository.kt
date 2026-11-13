@@ -83,14 +83,21 @@ class AccountingRepository(
 
     private fun nextVoucherNo(): String {
         val customPrefix = settingsRepository.appSettings.value.voucherNoPrefix.ifBlank { "V" }
-        val prefix = "$customPrefix-${Calendar.getInstance().get(Calendar.YEAR)}-"
-        val count = _vouchers.value.size + 1
-        return "$prefix%03d".format(count)
+        val yearPrefix = "$customPrefix-${Calendar.getInstance().get(Calendar.YEAR)}-"
+        val maxExisting = _vouchers.value.mapNotNull { v ->
+            v.voucherNo.substringAfterLast("-").toIntOrNull()
+        }.maxOrNull() ?: 0
+        val nextNum = maxOf(maxExisting, _vouchers.value.size) + 1
+        return "$yearPrefix%03d".format(nextNum)
     }
 
     private fun nextJournalNo(): String {
-        val count = _journalEntries.value.size + 1
-        return "JE-%06d".format(count)
+        val maxExisting = _journalEntries.value.mapNotNull { je ->
+            val clean = je.entryNo.removeSuffix("-R")
+            clean.substringAfterLast("-").toIntOrNull()
+        }.maxOrNull() ?: 0
+        val nextNum = maxOf(maxExisting, _journalEntries.value.size) + 1
+        return "JE-%06d".format(nextNum)
     }
 
     fun issueVoucher(
@@ -179,12 +186,16 @@ class AccountingRepository(
                 database.withTransaction {
                     database.accountingDao().upsertJournalEntry(JournalEntryEntity.fromDomain(journalEntry, -jeCount))
                     database.accountingDao().upsertVoucher(VoucherEntity.fromDomain(newVoucher, -vCount))
-                    lines.forEach { line ->
-                        val target = updatedAccounts.find { it.code == line.accountCode }
-                        if (target != null) {
-                            database.accountingDao().upsertAccount(AccountEntity.fromDomain(target))
+                    val affectedCodes = lines.map { it.accountCode }.toSet()
+                    val parentCodes = updatedAccounts
+                        .filter { it.code in affectedCodes }
+                        .mapNotNull { it.parentCode }
+                        .toSet()
+                    updatedAccounts
+                        .filter { it.code in affectedCodes || it.code in parentCodes }
+                        .forEach { acc ->
+                            database.accountingDao().upsertAccount(AccountEntity.fromDomain(acc))
                         }
-                    }
                 }
             }
         }
@@ -230,11 +241,16 @@ class AccountingRepository(
             dbScope.launch(dbDispatcher) {
                 database.withTransaction {
                     database.accountingDao().upsertJournalEntry(JournalEntryEntity.fromDomain(entry, -jeCount))
-                    listOf(fromAccountCode, toAccountCode).forEach { code ->
-                        updatedAccounts.find { it.code == code }?.let {
-                            database.accountingDao().upsertAccount(AccountEntity.fromDomain(it))
+                    val affectedCodes = setOf(fromAccountCode, toAccountCode)
+                    val parentCodes = updatedAccounts
+                        .filter { it.code in affectedCodes }
+                        .mapNotNull { it.parentCode }
+                        .toSet()
+                    updatedAccounts
+                        .filter { it.code in affectedCodes || it.code in parentCodes }
+                        .forEach { acc ->
+                            database.accountingDao().upsertAccount(AccountEntity.fromDomain(acc))
                         }
-                    }
                 }
             }
         }
@@ -287,11 +303,16 @@ class AccountingRepository(
                 database.withTransaction {
                     database.accountingDao().upsertVoucher(VoucherEntity.fromDomain(updatedVoucher))
                     database.accountingDao().upsertJournalEntry(JournalEntryEntity.fromDomain(revEntry, -jeCount))
-                    lines.forEach { line ->
-                        updatedAccounts.find { it.code == line.accountCode }?.let {
-                            database.accountingDao().upsertAccount(AccountEntity.fromDomain(it))
+                    val affectedCodes = lines.map { it.accountCode }.toSet()
+                    val parentCodes = updatedAccounts
+                        .filter { it.code in affectedCodes }
+                        .mapNotNull { it.parentCode }
+                        .toSet()
+                    updatedAccounts
+                        .filter { it.code in affectedCodes || it.code in parentCodes }
+                        .forEach { acc ->
+                            database.accountingDao().upsertAccount(AccountEntity.fromDomain(acc))
                         }
-                    }
                 }
             }
         }
@@ -316,10 +337,16 @@ class AccountingRepository(
             balance = openingBalance,
             parentCode = parentCode
         )
-        _accounts.value = (_accounts.value + newAcc).sortedBy { it.code }
+        val nextList = recalculateParentBalances((_accounts.value + newAcc).sortedBy { it.code })
+        _accounts.value = nextList
         db?.let { database ->
             dbScope.launch(dbDispatcher) {
-                database.accountingDao().upsertAccount(AccountEntity.fromDomain(newAcc))
+                database.withTransaction {
+                    database.accountingDao().upsertAccount(AccountEntity.fromDomain(newAcc))
+                    nextList.find { it.code == parentCode }?.let { parentAcc ->
+                        database.accountingDao().upsertAccount(AccountEntity.fromDomain(parentAcc))
+                    }
+                }
             }
         }
         userRepository.logAudit("إضافة حساب محاسبي", "إضافة حساب فرعي ($code - $name) تحت ($parentCode)")
@@ -351,11 +378,16 @@ class AccountingRepository(
             dbScope.launch(dbDispatcher) {
                 database.withTransaction {
                     database.accountingDao().upsertJournalEntry(JournalEntryEntity.fromDomain(entry, -jeCount))
-                    lines.forEach { line ->
-                        updatedAccounts.find { it.code == line.accountCode }?.let {
-                            database.accountingDao().upsertAccount(AccountEntity.fromDomain(it))
+                    val affectedCodes = lines.map { it.accountCode }.toSet()
+                    val parentCodes = updatedAccounts
+                        .filter { it.code in affectedCodes }
+                        .mapNotNull { it.parentCode }
+                        .toSet()
+                    updatedAccounts
+                        .filter { it.code in affectedCodes || it.code in parentCodes }
+                        .forEach { acc ->
+                            database.accountingDao().upsertAccount(AccountEntity.fromDomain(acc))
                         }
-                    }
                 }
             }
         }
@@ -376,9 +408,24 @@ class AccountingRepository(
             }
             deltaByCode[line.accountCode] = (deltaByCode[line.accountCode] ?: 0.0) + delta
         }
-        return currentAccounts.map { acc ->
+        val withLeafUpdates = currentAccounts.map { acc ->
             val delta = deltaByCode[acc.code] ?: 0.0
             if (delta != 0.0) acc.copy(balance = acc.balance + delta) else acc
+        }
+        return recalculateParentBalances(withLeafUpdates)
+    }
+
+    private fun recalculateParentBalances(accountsList: List<Account>): List<Account> {
+        val childrenSumByParent = accountsList
+            .mapNotNull { acc -> acc.parentCode?.let { parent -> parent to acc.balance } }
+            .groupBy({ it.first }, { it.second })
+            .mapValues { (_, balances) -> balances.sum() }
+        return accountsList.map { acc ->
+            if (acc.parentCode == null && childrenSumByParent.containsKey(acc.code)) {
+                acc.copy(balance = childrenSumByParent.getValue(acc.code))
+            } else {
+                acc
+            }
         }
     }
 

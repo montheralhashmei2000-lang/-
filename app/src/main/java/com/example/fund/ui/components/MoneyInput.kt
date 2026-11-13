@@ -20,6 +20,7 @@ import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.fund.data.FundRepository
 import com.example.fund.model.CurrencyCode
 import com.example.fund.util.TafqeetEngine
@@ -88,7 +89,7 @@ fun MoneyInput(
     showTafqeetPreview: Boolean = true
 ) {
     val repo = FundRepository.getInstance()
-    val currencyRates by repo.currencyRates.collectAsState()
+    val currencyRates by repo.currencyRates.collectAsStateWithLifecycle()
     val rate = currencyRates[selectedCurrency] ?: selectedCurrency.defaultRate
     val parsedAmount = amount.toDoubleOrNull() ?: 0.0
     val amountYer = parsedAmount * rate
@@ -213,7 +214,7 @@ fun MoneyInput(
         // Live calculation equivalent preview for foreign currencies
         if (selectedCurrency != CurrencyCode.YER && parsedAmount > 0) {
             Surface(
-                color = FundLightSurfaceSecondary,
+                color = MaterialTheme.colorScheme.surfaceVariant,
                 shape = RoundedCornerShape(8.dp),
                 border = BorderStroke(1.dp, FundGold.copy(alpha = 0.5f)),
                 modifier = Modifier

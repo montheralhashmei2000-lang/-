@@ -246,12 +246,11 @@ fun QrScannerDialog(
                 // Verification Results Card
                 if (hasSearched) {
                     when {
-                        matchedMember != null -> {
-                            val m = matchedMember!!
+                        matchedMember != null -> matchedMember?.let { m ->
                             val isActive = m.status == "نشط"
                             Card(
                                 colors = CardDefaults.cardColors(
-                                    containerColor = if (isActive) FundLightSurfaceSecondary else Color(0xFFFFEBEE)
+                                    containerColor = if (isActive) MaterialTheme.colorScheme.surfaceVariant else StatusDanger.copy(alpha = 0.14f)
                                 ),
                                 border = BorderStroke(1.dp, if (isActive) StatusSuccess else StatusDanger),
                                 shape = RoundedCornerShape(14.dp),
@@ -348,10 +347,9 @@ fun QrScannerDialog(
                             }
                         }
 
-                        matchedVoucher != null -> {
-                            val v = matchedVoucher!!
+                        matchedVoucher != null -> matchedVoucher?.let { v ->
                             Card(
-                                colors = CardDefaults.cardColors(containerColor = FundLightSurfaceSecondary),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                                 border = BorderStroke(1.dp, FundGoldDark),
                                 shape = RoundedCornerShape(12.dp),
                                 modifier = Modifier.fillMaxWidth()

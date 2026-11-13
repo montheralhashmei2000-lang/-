@@ -22,15 +22,17 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.fund.data.FundRepository
 import com.example.fund.model.SchedulerEvent
+import com.example.fund.ui.components.FundEmptyState
 import com.example.ui.theme.*
 
 @Composable
 fun SchedulerScreen() {
     val context = LocalContext.current
     val repo = FundRepository.getInstance()
-    val events by repo.schedulerEvents.collectAsState()
+    val events by repo.schedulerEvents.collectAsStateWithLifecycle()
 
     var showAddDialog by remember { mutableStateOf(false) }
     var selectedFilter by remember { mutableStateOf("الكل") }
@@ -102,92 +104,106 @@ fun SchedulerScreen() {
             }
         }
 
-        LazyColumn(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            items(filteredEvents, key = { it.id }) { ev ->
-                val isDone = completedIds.contains(ev.id)
-                Card(
-                    shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (isDone) FundLightSurfaceSecondary else MaterialTheme.colorScheme.surface
-                    ),
-                    border = androidx.compose.foundation.BorderStroke(
-                        1.dp,
-                        if (isDone) StatusSuccess else MaterialTheme.colorScheme.outline
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                ev.title,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Surface(
-                                color = FundPrimary.copy(alpha = 0.14f),
-                                shape = RoundedCornerShape(8.dp)
+        if (filteredEvents.isEmpty()) {
+            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.TopCenter) {
+                FundEmptyState(
+                    icon = Icons.Default.CalendarMonth,
+                    title = "لا توجد مواعيد في هذا التصنيف",
+                    subtitle = "يمكنك إضافة موعد جديد أو استعراض جميع المواعيد المجدولة.",
+                    actionLabel = if (selectedFilter != "الكل") "عرض الكل" else "موعد جديد",
+                    onAction = {
+                        if (selectedFilter != "الكل") selectedFilter = "الكل" else showAddDialog = true
+                    }
+                )
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                items(filteredEvents, key = { it.id }) { ev ->
+                    val isDone = completedIds.contains(ev.id)
+                    Card(
+                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (isDone) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface
+                        ),
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            if (isDone) StatusSuccess else MaterialTheme.colorScheme.outline
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = ev.type,
-                                    color = FundPrimary,
-                                    fontSize = 11.sp,
+                                    ev.title,
                                     fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                    fontSize = 14.sp,
+                                    modifier = Modifier.weight(1f)
                                 )
-                            }
-                        }
-
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(14.dp)
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Icon(Icons.Default.CalendarMonth, contentDescription = null, modifier = Modifier.size(14.dp), tint = FundPrimary)
-                                Text(ev.date, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
-                            }
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Icon(Icons.Default.Schedule, contentDescription = null, modifier = Modifier.size(14.dp), tint = FundGoldDark)
-                                Text(ev.time, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
-                            }
-                        }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.weight(1f)) {
-                                Icon(Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(14.dp), tint = FundGoldDark)
-                                Text(ev.location, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Surface(
+                                    color = FundPrimary.copy(alpha = 0.14f),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Text(
+                                        text = ev.type,
+                                        color = FundPrimary,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                    )
+                                }
                             }
 
-                            TextButton(
-                                onClick = {
-                                    completedIds = if (isDone) completedIds - ev.id else completedIds + ev.id
-                                },
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(14.dp)
                             ) {
-                                Icon(
-                                    Icons.Default.CheckCircle,
-                                    contentDescription = null,
-                                    tint = if (isDone) StatusSuccess else Color.Gray,
-                                    modifier = Modifier.size(15.dp)
-                                )
-                                Spacer(Modifier.width(4.dp))
-                                Text(
-                                    text = if (isDone) "مكتمل ✔" else "تحديد كمكتمل",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (isDone) StatusSuccess else FundPrimary
-                                )
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Icon(Icons.Default.CalendarMonth, contentDescription = null, modifier = Modifier.size(14.dp), tint = FundPrimary)
+                                    Text(ev.date, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface, style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"))
+                                }
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Icon(Icons.Default.Schedule, contentDescription = null, modifier = Modifier.size(14.dp), tint = FundGoldDark)
+                                    Text(ev.time, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface, style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"))
+                                }
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.weight(1f)) {
+                                    Icon(Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(14.dp), tint = FundGoldDark)
+                                    Text(ev.location, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+
+                                TextButton(
+                                    onClick = {
+                                        completedIds = if (isDone) completedIds - ev.id else completedIds + ev.id
+                                    },
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.CheckCircle,
+                                        contentDescription = null,
+                                        tint = if (isDone) StatusSuccess else Color.Gray,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(
+                                        text = if (isDone) "مكتمل ✔" else "تحديد كمكتمل",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isDone) StatusSuccess else FundPrimary
+                                    )
+                                }
                             }
                         }
                     }
@@ -213,7 +229,7 @@ private fun AddSchedulerEventDialog(
     onDismiss: () -> Unit,
     onAdd: (SchedulerEvent) -> Unit
 ) {
-    val defaultLocation = FundRepository.getInstance().appSettings.collectAsState().value.defaultEventLocation
+    val defaultLocation = FundRepository.getInstance().appSettings.collectAsStateWithLifecycle().value.defaultEventLocation
     var title by remember { mutableStateOf("") }
     var date by remember { mutableStateOf("2026-11-25") }
     var time by remember { mutableStateOf("04:00 م") }

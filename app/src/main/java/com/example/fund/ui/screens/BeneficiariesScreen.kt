@@ -11,6 +11,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.FamilyRestroom
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -21,17 +23,19 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.fund.data.FundRepository
 import com.example.fund.model.Beneficiary
 import com.example.fund.model.PovertyTier
+import com.example.fund.ui.components.FundEmptyState
 import com.example.ui.theme.*
 
 @Composable
 fun BeneficiariesScreen() {
     val context = LocalContext.current
     val repo = FundRepository.getInstance()
-    val beneficiaries by repo.beneficiaries.collectAsState()
-    val regions by repo.regions.collectAsState()
+    val beneficiaries by repo.beneficiaries.collectAsStateWithLifecycle()
+    val regions by repo.regions.collectAsStateWithLifecycle()
 
     var searchQuery by remember { mutableStateOf("") }
     var selectedRegionFilter by remember { mutableStateOf("كل المناطق") }
@@ -78,6 +82,13 @@ fun BeneficiariesScreen() {
             onValueChange = { searchQuery = it },
             placeholder = { Text("ابحث برب الأسرة، الهوية، المنطقة أو القرية...") },
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+            trailingIcon = {
+                if (searchQuery.isNotEmpty()) {
+                    IconButton(onClick = { searchQuery = "" }) {
+                        Icon(Icons.Default.Clear, contentDescription = "مسح البحث")
+                    }
+                }
+            },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp)
@@ -103,57 +114,82 @@ fun BeneficiariesScreen() {
             }
         }
 
-        LazyColumn(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            items(filtered, key = { it.id }) { b ->
-                val tierColor = when (b.povertyTier) {
-                    PovertyTier.EXTREME -> StatusDanger
-                    PovertyTier.HIGH -> Color(0xFFE65100)
-                    PovertyTier.MEDIUM -> FundGoldDark
-                    PovertyTier.LOW -> StatusSuccess
-                }
+        if (filtered.isEmpty()) {
+            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.TopCenter) {
+                FundEmptyState(
+                    icon = Icons.Default.FamilyRestroom,
+                    title = "لا توجد أسر مستفيدة مطابقة",
+                    subtitle = "جرّب تغيير المنطقة المحددة أو مسح عبارة البحث.",
+                    actionLabel = "إعادة ضبط الفلترة",
+                    onAction = {
+                        searchQuery = ""
+                        selectedRegionFilter = "كل المناطق"
+                    }
+                )
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                items(filtered, key = { it.id }) { b ->
+                    val tierColor = when (b.povertyTier) {
+                        PovertyTier.EXTREME -> StatusDanger
+                        PovertyTier.HIGH -> Color(0xFFE65100)
+                        PovertyTier.MEDIUM -> FundGoldDark
+                        PovertyTier.LOW -> StatusSuccess
+                    }
 
-                Card(
-                    shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(b.familyHeadName, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                            Surface(
-                                color = tierColor.copy(alpha = 0.15f),
-                                shape = RoundedCornerShape(8.dp),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, tierColor)
+                    Card(
+                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(b.familyHeadName, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                Surface(
+                                    color = tierColor.copy(alpha = 0.15f),
+                                    shape = RoundedCornerShape(8.dp),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, tierColor)
+                                ) {
+                                    Text(
+                                        text = b.povertyTier.title,
+                                        color = tierColor,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+
+                            Text("المنطقة: ${b.region} • القرية: ${b.village} | الهاتف: ${b.phone}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Text(
-                                    text = b.povertyTier.title,
-                                    color = tierColor,
-                                    fontSize = 10.sp,
+                                    "أفراد الأسرة: ${b.membersCount} أفراد",
+                                    fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                    style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
+                                )
+                                Text(
+                                    "الدخل الشهري: %,d ﷼".format(b.monthlyIncomeYer.toLong()),
+                                    fontSize = 12.sp,
+                                    color = Color.Gray,
+                                    style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
                                 )
                             }
-                        }
 
-                        Text("المنطقة: ${b.region} • القرية: ${b.village} | الهاتف: ${b.phone}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text("أفراد الأسرة: ${b.membersCount} أفراد", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                            Text("الدخل الشهري: %,d ﷼".format(b.monthlyIncomeYer.toLong()), fontSize = 12.sp, color = Color.Gray)
-                        }
-
-                        if (b.address.isNotEmpty()) {
-                            Text("الحالة الاجتماعية: ${b.address}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            if (b.address.isNotEmpty()) {
+                                Text("الحالة الاجتماعية: ${b.address}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                         }
                     }
                 }
@@ -180,7 +216,7 @@ private fun AddBeneficiaryDialog(
     onAdd: (Beneficiary) -> Unit
 ) {
     val repo = FundRepository.getInstance()
-    val regions by repo.regions.collectAsState()
+    val regions by repo.regions.collectAsStateWithLifecycle()
 
     var name by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }

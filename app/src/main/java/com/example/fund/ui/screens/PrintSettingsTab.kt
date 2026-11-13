@@ -395,7 +395,7 @@ fun PrintSettingsTab(
                                 .size(34.dp)
                                 .clip(CircleShape)
                                 .background(swatch)
-                                .border(if (selected) 3.dp else 1.dp, if (selected) FundGold else Color.LightGray, CircleShape),
+                                .border(if (selected) 3.dp else 1.dp, if (selected) FundGold else MaterialTheme.colorScheme.outline, CircleShape),
                             contentAlignment = Alignment.Center
                         ) {
                             if (selected) {
@@ -596,8 +596,8 @@ private fun FontSizeStepperCard(
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(8.dp),
-        color = FundLightSurfaceSecondary,
-        border = BorderStroke(1.dp, Color(0xFFD8E4D2))
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
     ) {
         Column(
             modifier = Modifier.padding(6.dp),
@@ -639,8 +639,8 @@ private fun SignatureConfigCard(
 ) {
     Surface(
         shape = RoundedCornerShape(10.dp),
-        color = if (enabled) Color(0xFFF9FBF8) else Color(0xFFF3F3F3),
-        border = BorderStroke(1.dp, if (enabled) Color(0xFFD8E4D2) else Color.LightGray),
+        color = if (enabled) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, if (enabled) FundPrimary.copy(alpha = 0.45f) else MaterialTheme.colorScheme.outline),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {

@@ -12,15 +12,25 @@ import com.example.fund.model.PrintFontOption
 import com.example.fund.security.EncryptedSessionManager
 import com.example.fund.util.generateQrSvg
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.navigation.NavHostController
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
 import com.example.fund.ui.components.ThousandSeparatorTransformation
 import com.example.fund.ui.navigation.AppRoute
 import com.example.fund.ui.navigation.BottomHub
 import com.example.fund.ui.navigation.Screen
+import com.example.fund.ui.navigation.isTopLevelHub
+import com.example.fund.ui.navigation.resolveBottomHub
+import com.example.fund.ui.navigation.resolveContextGroup
+import com.example.fund.ui.navigation.resolveTitle
 import com.example.fund.ui.navigation.toRoute
 import com.example.fund.util.OfficialPrintHelper
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -29,6 +39,9 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36])
 class ExampleRobolectricTest {
+
+    @get:Rule
+    val composeTestRule = createComposeRule()
 
     @Test
     fun `read string from context`() {
@@ -195,5 +208,68 @@ class ExampleRobolectricTest {
         assertEquals(AppRoute.AidsHubRoute, BottomHub.AIDS.toRoute())
         assertTrue(Screen.VOUCHERS.toRoute() is AppRoute.VouchersRoute)
         assertTrue(Screen.SETTINGS.toRoute() is AppRoute.SettingsRoute)
+        assertEquals(23, Screen.entries.size)
+        Screen.entries.forEach { screen ->
+            assertNotNull(screen.toRoute())
+        }
+    }
+
+    @Test
+    fun `navigation destinations resolve top-level hubs and sibling context groups`() {
+        lateinit var navController: NavHostController
+        composeTestRule.setContent {
+            navController = rememberNavController()
+            NavHost(navController = navController, startDestination = AppRoute.DashboardRoute) {
+                composable<AppRoute.DashboardRoute> {}
+                composable<AppRoute.FinanceHubRoute> {}
+                composable<AppRoute.MembersHubRoute> {}
+                composable<AppRoute.AidsHubRoute> {}
+                composable<AppRoute.VouchersRoute> {}
+                composable<AppRoute.MembersRoute> {}
+                composable<AppRoute.AidsRoute> {}
+                composable<AppRoute.SettingsRoute> {}
+            }
+        }
+        composeTestRule.waitForIdle()
+
+        // Start destination is Dashboard hub
+        assertTrue(navController.currentDestination.isTopLevelHub())
+        assertNull(navController.currentDestination.resolveContextGroup())
+        assertEquals(BottomHub.HOME, navController.currentDestination.resolveBottomHub())
+
+        // Finance hub -> no sibling bar; Vouchers -> Finance context group
+        composeTestRule.runOnUiThread { navController.navigate(AppRoute.FinanceHubRoute) }
+        composeTestRule.waitForIdle()
+        assertTrue(navController.currentDestination.isTopLevelHub())
+        assertNull(navController.currentDestination.resolveContextGroup())
+
+        composeTestRule.runOnUiThread { navController.navigate(AppRoute.VouchersRoute()) }
+        composeTestRule.waitForIdle()
+        assertFalse(navController.currentDestination.isTopLevelHub())
+        assertEquals(BottomHub.FINANCE, navController.currentDestination.resolveBottomHub())
+        assertEquals(Screen.VOUCHERS.title, navController.currentDestination.resolveTitle())
+        val financeGroup = navController.currentDestination.resolveContextGroup()
+        assertNotNull(financeGroup)
+        assertEquals(AppRoute.FinanceHubRoute, financeGroup?.hubRoute)
+        assertTrue(financeGroup!!.items.any { it.screen == Screen.TREASURY })
+
+        // Members child -> Members context group
+        composeTestRule.runOnUiThread { navController.navigate(AppRoute.MembersRoute()) }
+        composeTestRule.waitForIdle()
+        assertFalse(navController.currentDestination.isTopLevelHub())
+        assertEquals(BottomHub.MEMBERS, navController.currentDestination.resolveBottomHub())
+        assertEquals(AppRoute.MembersHubRoute, navController.currentDestination.resolveContextGroup()?.hubRoute)
+
+        // Aids child -> Aids context group
+        composeTestRule.runOnUiThread { navController.navigate(AppRoute.AidsRoute()) }
+        composeTestRule.waitForIdle()
+        assertEquals(BottomHub.AIDS, navController.currentDestination.resolveBottomHub())
+        assertEquals(AppRoute.AidsHubRoute, navController.currentDestination.resolveContextGroup()?.hubRoute)
+
+        // Settings -> Admin context group
+        composeTestRule.runOnUiThread { navController.navigate(AppRoute.SettingsRoute(initialTab = 4)) }
+        composeTestRule.waitForIdle()
+        assertEquals(BottomHub.HOME, navController.currentDestination.resolveBottomHub())
+        assertEquals("الإدارة والرقابة", navController.currentDestination.resolveContextGroup()?.hubTitle)
     }
 }

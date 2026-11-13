@@ -161,9 +161,9 @@ fun LocalServerSyncDialog(
                     // Live Sync Stage & Progress Card
                     Card(
                         colors = CardDefaults.cardColors(
-                            containerColor = if (!isOnline) Color(0xFFFFF3E0)
-                            else if (syncQueue.isNotEmpty()) Color(0xFFE3F2FD)
-                            else FundLightSurfaceSecondary
+                            containerColor = if (!isOnline) StatusPending.copy(alpha = 0.14f)
+                            else if (syncQueue.isNotEmpty()) StatusInfo.copy(alpha = 0.14f)
+                            else MaterialTheme.colorScheme.surfaceVariant
                         ),
                         shape = RoundedCornerShape(14.dp),
                         border = androidx.compose.foundation.BorderStroke(
@@ -197,13 +197,13 @@ fun LocalServerSyncDialog(
                                         text = syncStageMsg,
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = Color(0xFF14210F)
+                                        color = MaterialTheme.colorScheme.onSurface
                                     )
                                 }
                                 Text(
                                     text = "آخر مزامنة: $lastSync",
                                     fontSize = 10.sp,
-                                    color = Color.DarkGray
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
 

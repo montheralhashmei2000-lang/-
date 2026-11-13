@@ -1,13 +1,15 @@
 package com.example.fund.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.MenuOpen
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -20,6 +22,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.fund.data.FundRepository
 import com.example.fund.model.AidStatus
 import com.example.fund.model.UserRole
@@ -29,20 +32,24 @@ import com.example.ui.theme.*
 @Composable
 fun AppTopBar(
     screenTitle: String,
+    canNavigateBack: Boolean = false,
+    breadcrumbHint: String? = null,
+    onNavigateBack: () -> Unit = {},
     onOpenDrawer: () -> Unit,
     onNavigate: (Screen) -> Unit,
     onOpenAiAdvisor: () -> Unit,
-    onOpenSyncCenter: () -> Unit = {}
+    onOpenSyncCenter: () -> Unit = {},
+    onOpenGlobalSearch: () -> Unit = {}
 ) {
     val repo = FundRepository.getInstance()
-    val isOnline by repo.isOnline.collectAsState()
-    val isSyncing by repo.isSyncing.collectAsState()
-    val syncProgress by repo.syncProgress.collectAsState()
-    val syncStageMsg by repo.syncStageMessage.collectAsState()
-    val syncQueue by repo.syncQueue.collectAsState()
-    val messages by repo.internalMessages.collectAsState()
-    val aidRequests by repo.aidRequests.collectAsState()
-    val currentUser by repo.currentUser.collectAsState()
+    val isOnline by repo.isOnline.collectAsStateWithLifecycle()
+    val isSyncing by repo.isSyncing.collectAsStateWithLifecycle()
+    val syncProgress by repo.syncProgress.collectAsStateWithLifecycle()
+    val syncStageMsg by repo.syncStageMessage.collectAsStateWithLifecycle()
+    val syncQueue by repo.syncQueue.collectAsStateWithLifecycle()
+    val messages by repo.internalMessages.collectAsStateWithLifecycle()
+    val aidRequests by repo.aidRequests.collectAsStateWithLifecycle()
+    val currentUser by repo.currentUser.collectAsStateWithLifecycle()
 
     val unreadCount = messages.count { !it.isRead }
     val pendingAidsCount = aidRequests.count { it.status == AidStatus.IN_REVIEW }
@@ -51,7 +58,7 @@ fun AppTopBar(
     var roleMenuExpanded by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.fillMaxWidth()) {
-        // Sleek, Compact Mobile Top Bar (48dp touch height)
+        // Sleek, Compact Mobile Top Bar with contextual Up/Back or Drawer Menu + Quick Search
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -61,34 +68,56 @@ fun AppTopBar(
                     )
                 )
                 .statusBarsPadding()
-                .padding(horizontal = 8.dp, vertical = 4.dp)
+                .padding(horizontal = 6.dp, vertical = 4.dp)
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(48.dp),
+                    .height(50.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                // Start (Right in RTL): Drawer Icon + Title + Active User Identity
+                // Leading: Contextual Back Button (detail screens) or Drawer Menu (Hubs) + Title
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
                     modifier = Modifier.weight(1f)
                 ) {
-                    IconButton(
-                        onClick = onOpenDrawer,
-                        modifier = Modifier.size(48.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.Menu,
-                            contentDescription = "القائمة",
-                            tint = Color.White,
-                            modifier = Modifier.size(22.dp)
-                        )
+                    if (canNavigateBack) {
+                        IconButton(
+                            onClick = onNavigateBack,
+                            modifier = Modifier
+                                .size(48.dp)
+                                .testTag("topbar_back_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "رجوع",
+                                tint = Color.White,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                    } else {
+                        IconButton(
+                            onClick = onOpenDrawer,
+                            modifier = Modifier
+                                .size(48.dp)
+                                .testTag("topbar_menu_button")
+                        ) {
+                            Icon(
+                                Icons.Default.Menu,
+                                contentDescription = "القائمة الجانبية",
+                                tint = Color.White,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
                     }
 
-                    Column(modifier = Modifier.weight(1f)) {
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable(enabled = canNavigateBack) { onOpenDrawer() }
+                    ) {
                         Text(
                             text = screenTitle,
                             fontWeight = FontWeight.Bold,
@@ -98,9 +127,9 @@ fun AppTopBar(
                             overflow = TextOverflow.Ellipsis
                         )
                         Text(
-                            text = "${currentUser.fullName} • ${currentUser.role.title}",
+                            text = breadcrumbHint ?: "${currentUser.fullName} • ${currentUser.role.title}",
                             color = FundGoldLight,
-                            fontSize = 9.sp,
+                            fontSize = 10.sp,
                             fontWeight = FontWeight.SemiBold,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -108,11 +137,26 @@ fun AppTopBar(
                     }
                 }
 
-                // End (Left in RTL): Compact Server/Sync Pill + Alerts + AI + User Menu
+                // Trailing Actions: Global Search + Sync Status + Alerts + AI + User Menu
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
+                    IconButton(
+                        onClick = onOpenGlobalSearch,
+                        modifier = Modifier
+                            .minimumInteractiveComponentSize()
+                            .size(40.dp)
+                            .testTag("topbar_global_search_btn")
+                    ) {
+                        Icon(
+                            Icons.Default.Search,
+                            contentDescription = "البحث والتنقل السريع",
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
                     // Compact Server & Sync Pill
                     Surface(
                         color = if (isOnline) Color.White.copy(alpha = 0.14f) else StatusPending.copy(alpha = 0.85f),
@@ -142,18 +186,21 @@ fun AppTopBar(
                                 color = Color.White,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
-                                maxLines = 1
+                                maxLines = 1,
+                                style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
                             )
                         }
                     }
 
-                    // Combined Notifications & Messages Bell
-                    Box {
+                    // Notifications Bell with Badge
+                    Box(contentAlignment = Alignment.Center) {
                         IconButton(
                             onClick = {
                                 if (pendingAidsCount > 0) onNavigate(Screen.AIDS) else onNavigate(Screen.MESSAGES)
                             },
-                            modifier = Modifier.size(38.dp)
+                            modifier = Modifier
+                                .minimumInteractiveComponentSize()
+                                .size(40.dp)
                         ) {
                             Icon(
                                 Icons.Default.Notifications,
@@ -166,13 +213,13 @@ fun AppTopBar(
                             Box(
                                 modifier = Modifier
                                     .align(Alignment.TopEnd)
-                                    .offset(x = (-2).dp, y = 2.dp)
-                                    .size(15.dp)
+                                    .offset(x = (-3).dp, y = 3.dp)
+                                    .size(16.dp)
                                     .background(StatusDanger, CircleShape),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    text = "$totalAlerts",
+                                    text = if (totalAlerts > 9) "9+" else "$totalAlerts",
                                     color = Color.White,
                                     fontSize = 8.sp,
                                     fontWeight = FontWeight.Bold
@@ -184,7 +231,9 @@ fun AppTopBar(
                     // AI Advisor Icon
                     IconButton(
                         onClick = onOpenAiAdvisor,
-                        modifier = Modifier.size(38.dp)
+                        modifier = Modifier
+                            .minimumInteractiveComponentSize()
+                            .size(40.dp)
                     ) {
                         Icon(
                             Icons.Default.AutoAwesome,
@@ -194,25 +243,25 @@ fun AppTopBar(
                         )
                     }
 
-                    // Active Profile & Role Chip
+                    // Active Profile & Role Chip (48dp touch target)
                     Box {
                         Surface(
                             color = FundGold.copy(alpha = 0.22f),
                             shape = RoundedCornerShape(14.dp),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, FundGold),
+                            border = BorderStroke(1.dp, FundGold),
                             modifier = Modifier
-                                .height(32.dp)
+                                .height(34.dp)
                                 .clickable { roleMenuExpanded = true }
                                 .testTag("topbar_user_chip")
                         ) {
                             Row(
                                 modifier = Modifier.padding(horizontal = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                horizontalArrangement = Arrangement.spacedBy(3.dp)
                             ) {
                                 Icon(
                                     Icons.Default.Person,
-                                    contentDescription = null,
+                                    contentDescription = "حساب المستخدم",
                                     tint = FundGoldLight,
                                     modifier = Modifier.size(14.dp)
                                 )
@@ -238,6 +287,15 @@ fun AppTopBar(
                                     }
                                 },
                                 onClick = { roleMenuExpanded = false }
+                            )
+                            HorizontalDivider()
+                            DropdownMenuItem(
+                                leadingIcon = { Icon(Icons.AutoMirrored.Filled.MenuOpen, contentDescription = null, tint = FundPrimary) },
+                                text = { Text("فتح القائمة الكاملة (23 شاشة)", fontWeight = FontWeight.Bold, fontSize = 12.sp) },
+                                onClick = {
+                                    roleMenuExpanded = false
+                                    onOpenDrawer()
+                                }
                             )
                             HorizontalDivider()
                             UserRole.entries.forEach { role ->
@@ -287,7 +345,7 @@ fun AppTopBar(
             }
         }
 
-        // Slim Animated Sync Progress Bar (only visible during active sync)
+        // Slim Animated Sync Progress Bar
         AnimatedVisibility(visible = isSyncing) {
             Surface(color = Color(0xFF0D47A1), modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
@@ -312,7 +370,7 @@ fun AppTopBar(
             }
         }
 
-        // Slim Offline / Pending Sync Strip (only visible when Offline or Sync Queue not empty)
+        // Slim Offline / Pending Sync Strip
         if (!isOnline || syncQueue.isNotEmpty()) {
             Surface(
                 color = if (!isOnline) Color(0xFFE65100) else Color(0xFF0D47A1),

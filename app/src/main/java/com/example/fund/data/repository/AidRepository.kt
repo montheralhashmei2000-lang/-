@@ -82,7 +82,8 @@ class AidRepository(
     ): AidRequest {
         val member = memberRepository.members.value.find { it.id == memberId }
         val memberName = member?.fullName ?: "مستفيد خارجي"
-        val count = _aidRequests.value.size + 1
+        val maxSuffix = _aidRequests.value.mapNotNull { it.requestNo.substringAfterLast("-").toIntOrNull() }.maxOrNull() ?: 0
+        val count = maxOf(maxSuffix, _aidRequests.value.size) + 1
         val reqNo = "REQ-${Calendar.getInstance().get(Calendar.YEAR)}-%03d".format(count)
 
         val req = AidRequest(

@@ -7,6 +7,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Handshake
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
@@ -18,11 +20,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.fund.data.FundRepository
 import com.example.fund.model.CurrencyCode
 import com.example.fund.model.Donor
 import com.example.fund.model.PaymentMethod
 import com.example.fund.model.UserRole
+import com.example.fund.ui.components.FundEmptyState
 import com.example.fund.ui.components.MoneyInput
 import com.example.ui.theme.*
 
@@ -30,8 +34,8 @@ import com.example.ui.theme.*
 fun DonorsScreen() {
     val context = LocalContext.current
     val repo = FundRepository.getInstance()
-    val donors by repo.donors.collectAsState()
-    val currentUser by repo.currentUser.collectAsState()
+    val donors by repo.donors.collectAsStateWithLifecycle()
+    val currentUser by repo.currentUser.collectAsStateWithLifecycle()
     val canManage = currentUser.role != UserRole.VIEWER
 
     var searchQuery by remember { mutableStateOf("") }
@@ -82,89 +86,121 @@ fun DonorsScreen() {
             onValueChange = { searchQuery = it },
             placeholder = { Text("ابحث باسم الداعم أو الهاتف...") },
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+            trailingIcon = {
+                if (searchQuery.isNotEmpty()) {
+                    IconButton(onClick = { searchQuery = "" }) {
+                        Icon(Icons.Default.Clear, contentDescription = "مسح البحث")
+                    }
+                }
+            },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp)
         )
 
-        LazyColumn(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            items(filtered, key = { it.id }) { d ->
-                val pledgePercent = if (d.pledgeAmountYer > 0) ((d.pledgeFulfilledYer / d.pledgeAmountYer) * 100).toInt() else 100
-                val remainingPledge = (d.pledgeAmountYer - d.pledgeFulfilledYer).coerceAtLeast(0.0)
+        if (filtered.isEmpty()) {
+            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.TopCenter) {
+                FundEmptyState(
+                    icon = Icons.Default.Handshake,
+                    title = "لا يوجد داعمون مطابقون",
+                    subtitle = if (searchQuery.isNotBlank()) "لم نعثر على داعم يطابق عبارة البحث المدخلة." else "سجّل بيانات الداعمين والمانحين لمتابعة تعهداتهم.",
+                    actionLabel = if (searchQuery.isNotBlank()) "مسح البحث" else if (canManage) "إضافة داعم" else null,
+                    onAction = if (searchQuery.isNotBlank()) ({ searchQuery = "" }) else if (canManage) ({ showAddDialog = true }) else null
+                )
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                items(filtered, key = { it.id }) { d ->
+                    val pledgePercent = if (d.pledgeAmountYer > 0) ((d.pledgeFulfilledYer / d.pledgeAmountYer) * 100).toInt() else 100
+                    val remainingPledge = (d.pledgeAmountYer - d.pledgeFulfilledYer).coerceAtLeast(0.0)
 
-                Card(
-                    shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column {
-                                Text(d.name, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                                Text("النوع: ${d.type} | هاتف: ${d.phone}", fontSize = 11.sp, color = Color.Gray)
-                            }
-                            Surface(
-                                color = FundGold.copy(alpha = 0.2f),
-                                shape = RoundedCornerShape(8.dp)
-                            ) {
-                                Text(
-                                    text = "وفاء $pledgePercent%",
-                                    color = FundGoldDark,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-                                )
-                            }
-                        }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text("إجمالي التبرعات: %,d ﷼".format(d.totalDonatedYer.toLong()), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = FundPrimary)
-                            Text("التعهد الكلي: %,d ﷼".format(d.pledgeAmountYer.toLong()), fontSize = 12.sp, color = Color.DarkGray)
-                        }
-
-                        if (d.pledgeAmountYer > 0) {
-                            LinearProgressIndicator(
-                                progress = { (d.pledgeFulfilledYer / d.pledgeAmountYer.coerceAtLeast(1.0)).toFloat().coerceIn(0f, 1f) },
-                                modifier = Modifier.fillMaxWidth().height(6.dp),
-                                color = StatusSuccess,
-                                trackColor = Color(0xFFEEEEEE)
-                            )
-                        }
-
-                        if (canManage) {
-                            HorizontalDivider(color = Color(0xFFEEEEEE))
+                    Card(
+                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(
-                                    text = if (remainingPledge > 0) "متبقي من التعهد: %,d ﷼".format(remainingPledge.toLong()) else "مكتمل الوفاء بالتعهد ✔",
-                                    fontSize = 11.sp,
-                                    color = if (remainingPledge > 0) StatusPending else StatusSuccess,
-                                    fontWeight = FontWeight.Bold
-                                )
-
-                                Button(
-                                    onClick = { donorForPayment = d },
-                                    colors = ButtonDefaults.buttonColors(containerColor = FundPrimary),
-                                    shape = RoundedCornerShape(8.dp),
-                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                                Column {
+                                    Text(d.name, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                    Text("النوع: ${d.type} | هاتف: ${d.phone}", fontSize = 11.sp, color = Color.Gray)
+                                }
+                                Surface(
+                                    color = FundGold.copy(alpha = 0.2f),
+                                    shape = RoundedCornerShape(8.dp)
                                 ) {
-                                    Icon(Icons.Default.Payments, contentDescription = null, modifier = Modifier.size(14.dp))
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("تسجيل دفعة تعهد", fontSize = 11.sp)
+                                    Text(
+                                        text = "وفاء $pledgePercent%",
+                                        color = FundGoldDark,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                        style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
+                                    )
+                                }
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    "إجمالي التبرعات: %,d ﷼".format(d.totalDonatedYer.toLong()),
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = FundPrimary,
+                                    style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
+                                )
+                                Text(
+                                    "التعهد الكلي: %,d ﷼".format(d.pledgeAmountYer.toLong()),
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
+                                )
+                            }
+
+                            if (d.pledgeAmountYer > 0) {
+                                LinearProgressIndicator(
+                                    progress = { (d.pledgeFulfilledYer / d.pledgeAmountYer.coerceAtLeast(1.0)).toFloat().coerceIn(0f, 1f) },
+                                    modifier = Modifier.fillMaxWidth().height(6.dp),
+                                    color = StatusSuccess,
+                                    trackColor = MaterialTheme.colorScheme.surfaceVariant
+                                )
+                            }
+
+                            if (canManage) {
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = if (remainingPledge > 0) "متبقي من التعهد: %,d ﷼".format(remainingPledge.toLong()) else "مكتمل الوفاء بالتعهد ✔",
+                                        fontSize = 11.sp,
+                                        color = if (remainingPledge > 0) StatusPending else StatusSuccess,
+                                        fontWeight = FontWeight.Bold,
+                                        style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
+                                    )
+
+                                    Button(
+                                        onClick = { donorForPayment = d },
+                                        colors = ButtonDefaults.buttonColors(containerColor = FundPrimary),
+                                        shape = RoundedCornerShape(8.dp),
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                                    ) {
+                                        Icon(Icons.Default.Payments, contentDescription = null, modifier = Modifier.size(14.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("تسجيل دفعة تعهد", fontSize = 11.sp)
+                                    }
                                 }
                             }
                         }

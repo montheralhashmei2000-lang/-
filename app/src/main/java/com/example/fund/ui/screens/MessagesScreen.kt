@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.MarkEmailRead
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -18,16 +19,21 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.fund.data.FundRepository
+import com.example.fund.ui.components.FundEmptyState
 import com.example.ui.theme.*
 
 @Composable
 fun MessagesScreen() {
     val context = LocalContext.current
     val repo = FundRepository.getInstance()
-    val messages by repo.internalMessages.collectAsState()
+    val messages by repo.internalMessages.collectAsStateWithLifecycle()
 
     var showComposeDialog by remember { mutableStateOf(false) }
+    var unreadOnly by remember { mutableStateOf(false) }
+    val unreadCount = messages.count { !it.isRead }
+    val displayed = if (unreadOnly) messages.filter { !it.isRead } else messages
 
     Column(
         modifier = Modifier
@@ -56,36 +62,61 @@ fun MessagesScreen() {
             }
         }
 
-        LazyColumn(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            items(messages, key = { it.id }) { msg ->
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { repo.markMessageRead(msg.id) },
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = if (msg.isRead) MaterialTheme.colorScheme.surface else FundLightSurfaceSecondary),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, if (msg.isRead) MaterialTheme.colorScheme.outline else FundPrimary)
-                ) {
-                    Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(msg.subject, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = if (msg.isRead) MaterialTheme.colorScheme.onSurface else FundPrimary)
-                            if (!msg.isRead) {
-                                Surface(color = FundGoldDark, shape = RoundedCornerShape(4.dp)) {
-                                    Text("جديدة", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(
+                selected = !unreadOnly,
+                onClick = { unreadOnly = false },
+                label = { Text("الكل (${messages.size})", fontSize = 11.sp) }
+            )
+            FilterChip(
+                selected = unreadOnly,
+                onClick = { unreadOnly = true },
+                label = { Text("غير مقروءة ($unreadCount)", fontSize = 11.sp) }
+            )
+        }
+
+        if (displayed.isEmpty()) {
+            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.TopCenter) {
+                FundEmptyState(
+                    icon = Icons.Default.MarkEmailRead,
+                    title = if (unreadOnly) "جميع الرسائل مقروءة" else "لا توجد مراسلات حالياً",
+                    subtitle = if (unreadOnly) "تمت قراءة كافة الرسائل الإدارية الواردة." else "ابدأ بإرسال رسالة إدارية للفريق.",
+                    actionLabel = if (unreadOnly) "عرض كل الرسائل" else "رسالة جديدة",
+                    onAction = { if (unreadOnly) unreadOnly = false else showComposeDialog = true }
+                )
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                items(displayed, key = { it.id }) { msg ->
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { repo.markMessageRead(msg.id) },
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = if (msg.isRead) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceVariant),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, if (msg.isRead) MaterialTheme.colorScheme.outline else FundPrimary)
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(msg.subject, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = if (msg.isRead) MaterialTheme.colorScheme.onSurface else FundPrimary)
+                                if (!msg.isRead) {
+                                    Surface(color = FundGoldDark, shape = RoundedCornerShape(4.dp)) {
+                                        Text("جديدة", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                                    }
                                 }
                             }
-                        }
 
-                        Text("من: ${msg.senderName} (${msg.senderRole}) إلى: ${msg.recipientRole}", fontSize = 11.sp, color = Color.Gray)
-                        Text(msg.body, fontSize = 12.sp, lineHeight = 18.sp)
-                        Text(msg.timestamp, fontSize = 10.sp, color = Color.LightGray, modifier = Modifier.align(Alignment.End))
+                            Text("من: ${msg.senderName} (${msg.senderRole}) إلى: ${msg.recipientRole}", fontSize = 11.sp, color = Color.Gray)
+                            Text(msg.body, fontSize = 12.sp, lineHeight = 18.sp)
+                            Text(msg.timestamp, fontSize = 10.sp, color = Color.Gray, modifier = Modifier.align(Alignment.End), style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"))
+                        }
                     }
                 }
             }

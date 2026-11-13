@@ -17,6 +17,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.fund.data.FundRepository
 import com.example.fund.model.Budget
 import com.example.fund.model.UserRole
@@ -26,9 +27,9 @@ import com.example.ui.theme.*
 fun BudgetsScreen() {
     val context = LocalContext.current
     val repo = FundRepository.getInstance()
-    val budgets by repo.budgets.collectAsState()
-    val settings by repo.appSettings.collectAsState()
-    val currentUser by repo.currentUser.collectAsState()
+    val budgets by repo.budgets.collectAsStateWithLifecycle()
+    val settings by repo.appSettings.collectAsStateWithLifecycle()
+    val currentUser by repo.currentUser.collectAsStateWithLifecycle()
     val canManage = currentUser.role == UserRole.ADMIN || currentUser.role == UserRole.ACCOUNTANT
 
     var showAddDialog by remember { mutableStateOf(false) }
@@ -77,10 +78,10 @@ fun BudgetsScreen() {
                     verticalAlignment = Alignment.Bottom
                 ) {
                     Column {
-                        Text("المنصرف الفعلي: %,d ﷼".format(totalSpent.toLong()), color = Color.White, fontWeight = FontWeight.Black, fontSize = 18.sp)
-                        Text("من أصل معتمد: %,d ﷼".format(totalBudget.toLong()), color = FundGoldLight, fontSize = 12.sp)
+                        Text("المنصرف الفعلي: %,d ﷼".format(totalSpent.toLong()), color = Color.White, fontWeight = FontWeight.Black, fontSize = 18.sp, style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"))
+                        Text("من أصل معتمد: %,d ﷼".format(totalBudget.toLong()), color = FundGoldLight, fontSize = 12.sp, style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"))
                     }
-                    Text("${(overallRatio * 100).toInt()}%", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                    Text("${(overallRatio * 100).toInt()}%", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp, style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"))
                 }
 
                 LinearProgressIndicator(
@@ -144,20 +145,21 @@ fun BudgetsScreen() {
                             progress = { ratio.coerceIn(0f, 1f) },
                             modifier = Modifier.fillMaxWidth().height(8.dp),
                             color = if (isOver) StatusDanger else if (ratio >= settings.budgetAlertPercent / 100f) FundGoldDark else FundPrimary,
-                            trackColor = Color(0xFFEEEEEE)
+                            trackColor = MaterialTheme.colorScheme.surfaceVariant
                         )
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text("المنصرف: %,d ﷼".format(b.actualSpent.toLong()), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text("المعتمد: %,d ﷼".format(b.budgetedAmount.toLong()), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("المنصرف: %,d ﷼".format(b.actualSpent.toLong()), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"))
+                            Text("المعتمد: %,d ﷼".format(b.budgetedAmount.toLong()), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"))
                             Text(
                                 text = if (remaining >= 0) "المتبقي: %,d ﷼".format(remaining.toLong()) else "تجاوز السقف: %,d ﷼".format(-remaining.toLong()),
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = if (remaining >= 0) StatusSuccess else StatusDanger
+                                color = if (remaining >= 0) StatusSuccess else StatusDanger,
+                                style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
                             )
                         }
                     }

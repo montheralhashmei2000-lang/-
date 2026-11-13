@@ -25,9 +25,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.fund.data.FundRepository
 import com.example.fund.model.*
+import com.example.fund.ui.components.FundEmptyState
 import com.example.fund.ui.viewmodel.AccountingViewModel
 import com.example.fund.util.OfficialPrintHelper
 import com.example.ui.theme.*
+import kotlin.math.abs
 
 @Composable
 fun FinancialReportsScreen(accountingViewModel: AccountingViewModel = viewModel()) {
@@ -98,7 +100,7 @@ fun FinancialReportsScreen(accountingViewModel: AccountingViewModel = viewModel(
         ScrollableTabRow(
             selectedTabIndex = activeTab,
             edgePadding = 0.dp,
-            containerColor = FundLightSurfaceSecondary,
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
             contentColor = FundPrimary,
             modifier = Modifier.fillMaxWidth()
         ) {
@@ -184,6 +186,13 @@ private fun TrialBalanceTab(accounts: List<Account>, entries: List<JournalEntry>
             onValueChange = { accountQuery = it },
             placeholder = { Text("تصفية حسابات ميزان المراجعة بالاسم أو الكود...") },
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+            trailingIcon = {
+                if (accountQuery.isNotEmpty()) {
+                    IconButton(onClick = { accountQuery = "" }) {
+                        Icon(Icons.Default.Close, contentDescription = "مسح")
+                    }
+                }
+            },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(10.dp)
@@ -238,7 +247,7 @@ private fun TrialBalanceTab(accounts: List<Account>, entries: List<JournalEntry>
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(FundLightSurfaceSecondary, RoundedCornerShape(6.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(6.dp))
                         .padding(8.dp),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
@@ -247,34 +256,44 @@ private fun TrialBalanceTab(accounts: List<Account>, entries: List<JournalEntry>
                     Text("رصيد دائن", fontWeight = FontWeight.Bold, fontSize = 11.sp, modifier = Modifier.weight(1f))
                 }
 
-                HorizontalDivider(color = Color(0xFFEEEEEE))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
 
-                rows.forEachIndexed { index, (acc, deb, cred) ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(if (index % 2 == 0) Color.Transparent else FundLightSurfaceSecondary.copy(alpha = 0.5f))
-                            .padding(8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column(modifier = Modifier.weight(2f)) {
-                            Text(acc.name, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                            Text(acc.code, fontSize = 9.sp, color = Color.Gray, style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"))
+                if (rows.isEmpty()) {
+                    FundEmptyState(
+                        icon = Icons.Default.SearchOff,
+                        title = "لا توجد حسابات مطابقة",
+                        subtitle = "جرّب مسح عبارة البحث لعرض جميع حسابات ميزان المراجعة.",
+                        actionLabel = "مسح البحث",
+                        onAction = { accountQuery = "" }
+                    )
+                } else {
+                    rows.forEachIndexed { index, (acc, deb, cred) ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(if (index % 2 == 0) Color.Transparent else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
+                                .padding(8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(2f)) {
+                                Text(acc.name, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                Text(acc.code, fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"))
+                            }
+                            Text(
+                                text = if (deb > 0) "%,d".format(deb.toLong()) else "-",
+                                fontSize = 11.sp,
+                                fontWeight = if (deb > 0) FontWeight.Bold else FontWeight.Normal,
+                                modifier = Modifier.weight(1f),
+                                style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
+                            )
+                            Text(
+                                text = if (cred > 0) "%,d".format(cred.toLong()) else "-",
+                                fontSize = 11.sp,
+                                fontWeight = if (cred > 0) FontWeight.Bold else FontWeight.Normal,
+                                modifier = Modifier.weight(1f),
+                                style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
+                            )
                         }
-                        Text(
-                            text = if (deb > 0) "%,d".format(deb.toLong()) else "-",
-                            fontSize = 11.sp,
-                            fontWeight = if (deb > 0) FontWeight.Bold else FontWeight.Normal,
-                            modifier = Modifier.weight(1f),
-                            style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
-                        )
-                        Text(
-                            text = if (cred > 0) "%,d".format(cred.toLong()) else "-",
-                            fontSize = 11.sp,
-                            fontWeight = if (cred > 0) FontWeight.Bold else FontWeight.Normal,
-                            modifier = Modifier.weight(1f),
-                            style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
-                        )
                     }
                 }
 
@@ -315,8 +334,10 @@ private fun TrialBalanceTab(accounts: List<Account>, entries: List<JournalEntry>
 // ----------------------------------------------------------------------------
 @Composable
 private fun IncomeStatementTab(accounts: List<Account>) {
-    val revenues = accounts.filter { it.code.startsWith("4") }
-    val expenses = accounts.filter { it.code.startsWith("5") }
+    val revenues = accounts.filter { it.code.startsWith("4") && it.parentCode != null }
+        .ifEmpty { accounts.filter { it.code.startsWith("4") } }
+    val expenses = accounts.filter { it.code.startsWith("5") && it.parentCode != null }
+        .ifEmpty { accounts.filter { it.code.startsWith("5") } }
 
     val totalRevenues = revenues.sumOf { it.balance }
     val totalExpenses = expenses.sumOf { it.balance }
@@ -373,7 +394,7 @@ private fun StatementGroup(title: String, accounts: List<Account>, total: Double
                 Text("%,d ﷼".format(total.toLong()), fontWeight = FontWeight.Black, fontSize = 13.sp, color = color)
             }
 
-            HorizontalDivider(color = Color(0xFFEEEEEE))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
 
             accounts.forEach { acc ->
                 Row(
@@ -381,7 +402,12 @@ private fun StatementGroup(title: String, accounts: List<Account>, total: Double
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text("${acc.name} (${acc.code})", fontSize = 11.sp)
-                    Text("%,d ﷼".format(acc.balance.toLong()), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        "%,d ﷼".format(acc.balance.toLong()),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
+                    )
                 }
             }
         }
@@ -393,9 +419,12 @@ private fun StatementGroup(title: String, accounts: List<Account>, total: Double
 // ----------------------------------------------------------------------------
 @Composable
 private fun BalanceSheetTab(accounts: List<Account>) {
-    val assets = accounts.filter { it.code.startsWith("1") }
-    val liabilities = accounts.filter { it.code.startsWith("2") }
-    val equity = accounts.filter { it.code.startsWith("3") }
+    val assets = accounts.filter { it.code.startsWith("1") && it.parentCode != null }
+        .ifEmpty { accounts.filter { it.code.startsWith("1") } }
+    val liabilities = accounts.filter { it.code.startsWith("2") && it.parentCode != null }
+        .ifEmpty { accounts.filter { it.code.startsWith("2") } }
+    val equity = accounts.filter { it.code.startsWith("3") && it.parentCode != null }
+        .ifEmpty { accounts.filter { it.code.startsWith("3") } }
 
     val totalAssets = assets.sumOf { it.balance }
     val totalLiabilities = liabilities.sumOf { it.balance }
@@ -413,7 +442,7 @@ private fun BalanceSheetTab(accounts: List<Account>) {
         StatementGroup("حقوق الملكية والاحتياطي (3000)", equity, totalEquity, FundGoldDark)
 
         Card(
-            colors = CardDefaults.cardColors(containerColor = FundLightSurfaceSecondary),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
             shape = RoundedCornerShape(12.dp),
             border = androidx.compose.foundation.BorderStroke(1.dp, FundPrimary)
         ) {
@@ -424,7 +453,13 @@ private fun BalanceSheetTab(accounts: List<Account>) {
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text("مجموع الالتزامات وحقوق الملكية:", fontWeight = FontWeight.Black, fontSize = 13.sp)
-                Text("%,d ﷼".format(totalLiabEquity.toLong()), fontWeight = FontWeight.Black, fontSize = 13.sp, color = FundPrimary)
+                Text(
+                    "%,d ﷼".format(totalLiabEquity.toLong()),
+                    fontWeight = FontWeight.Black,
+                    fontSize = 13.sp,
+                    color = FundPrimary,
+                    style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
+                )
             }
         }
     }
@@ -440,11 +475,12 @@ private fun AccountLedgerTab(accounts: List<Account>, entries: List<JournalEntry
 
     val activeAccount = accounts.find { it.code == selectedCode } ?: accounts.first()
 
-    // Filter lines and calculate running balance
+    // Filter lines and calculate running balance according to account normal side
     var running = 0.0
     val ledgerRows = entries.sortedBy { it.date }.flatMap { entry ->
         entry.lines.filter { it.accountCode == selectedCode }.map { line ->
-            running += (line.debit - line.credit)
+            val delta = if (activeAccount.isDebitNormal) (line.debit - line.credit) else (line.credit - line.debit)
+            running += delta
             Quadruple(entry.date, entry.description, line.debit, line.credit, running)
         }
     }
@@ -490,7 +526,7 @@ private fun AccountLedgerTab(accounts: List<Account>, entries: List<JournalEntry
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(FundLightSurfaceSecondary, RoundedCornerShape(6.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(6.dp))
                         .padding(8.dp),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
@@ -500,33 +536,34 @@ private fun AccountLedgerTab(accounts: List<Account>, entries: List<JournalEntry
                     Text("الرصيد", fontWeight = FontWeight.Bold, fontSize = 11.sp, modifier = Modifier.weight(1f))
                 }
 
-                HorizontalDivider(color = Color(0xFFEEEEEE))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
 
                 if (ledgerRows.isEmpty()) {
                     Box(modifier = Modifier.fillMaxWidth().padding(20.dp), contentAlignment = Alignment.Center) {
-                        Text("لا توجد حركات مسجلة لهذا الحساب حالياً.", fontSize = 12.sp, color = Color.Gray)
+                        Text("لا توجد حركات مسجلة لهذا الحساب حالياً.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 } else {
                     ledgerRows.forEachIndexed { index, (date, desc, deb, cred, bal) ->
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .background(if (index % 2 == 0) Color.Transparent else FundLightSurfaceSecondary.copy(alpha = 0.5f))
+                                .background(if (index % 2 == 0) Color.Transparent else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
                                 .padding(8.dp),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Column(modifier = Modifier.weight(2f)) {
                                 Text(desc, fontSize = 11.sp, maxLines = 1, fontWeight = FontWeight.Bold)
-                                Text(date, fontSize = 9.sp, color = Color.Gray)
+                                Text(date, fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
-                            Text(if (deb > 0) "%,d".format(deb.toLong()) else "-", fontSize = 11.sp, modifier = Modifier.weight(1f))
-                            Text(if (cred > 0) "%,d".format(cred.toLong()) else "-", fontSize = 11.sp, modifier = Modifier.weight(1f))
+                            Text(if (deb > 0) "%,d".format(deb.toLong()) else "-", fontSize = 11.sp, modifier = Modifier.weight(1f), style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"))
+                            Text(if (cred > 0) "%,d".format(cred.toLong()) else "-", fontSize = 11.sp, modifier = Modifier.weight(1f), style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"))
                             Text(
                                 "%,d".format(bal.toLong()),
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = FundPrimary,
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier.weight(1f),
+                                style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
                             )
                         }
                     }
@@ -544,10 +581,12 @@ private data class Quadruple<A, B, C, D, E>(val first: A, val second: B, val thi
 @Composable
 private fun ReconciliationTab(accounts: List<Account>, onAdjustEntry: (String, String, Double) -> Unit) {
     var selectedCode by remember { mutableStateOf("1100") }
-    var actualCountStr by remember { mutableStateOf("4850000") }
-
     val activeAcc = accounts.find { it.code == selectedCode } ?: accounts.first()
     val bookBalance = activeAcc.balance
+    var actualCountStr by remember(selectedCode, bookBalance) {
+        mutableStateOf(bookBalance.toLong().toString())
+    }
+
     val actualBalance = actualCountStr.toDoubleOrNull() ?: 0.0
     val difference = actualBalance - bookBalance
 
@@ -566,25 +605,29 @@ private fun ReconciliationTab(accounts: List<Account>, onAdjustEntry: (String, S
                 Text("مطابقة وتسوية أرصدة الخزينة والبنوك", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = FundPrimary)
 
                 // Select Cash / Bank
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     listOf("1100" to "الخزينة النقدية", "1200" to "بنك الكريمي", "1300" to "المحافظ").forEach { (code, name) ->
                         FilterChip(
                             selected = selectedCode == code,
-                            onClick = {
-                                selectedCode = code
-                                val b = accounts.find { it.code == code }?.balance ?: 0.0
-                                actualCountStr = b.toLong().toString()
-                            },
+                            onClick = { selectedCode = code },
                             label = { Text(name, fontSize = 11.sp) }
                         )
                     }
                 }
 
-                Text("الرصيد الدفتري الحالي: %,d ﷼".format(bookBalance.toLong()), fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                Text(
+                    "الرصيد الدفتري الحالي: %,d ﷼".format(bookBalance.toLong()),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
+                )
 
                 OutlinedTextField(
                     value = actualCountStr,
-                    onValueChange = { actualCountStr = it },
+                    onValueChange = { input -> actualCountStr = input.filter { it.isDigit() || it == '.' } },
                     label = { Text("الرصيد الفعلي بعد الجرد / كشف البنك (﷼)") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
@@ -593,21 +636,26 @@ private fun ReconciliationTab(accounts: List<Account>, onAdjustEntry: (String, S
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(if (difference == 0.0) FundLightSurfaceSecondary else Color(0xFFFFF3E0), RoundedCornerShape(8.dp))
+                        .background(
+                            if (abs(difference) < 0.01) MaterialTheme.colorScheme.surfaceVariant
+                            else StatusPending.copy(alpha = 0.14f),
+                            RoundedCornerShape(8.dp)
+                        )
                         .padding(10.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text("فارق المطابقة والتسوية:", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                     Text(
-                        text = if (difference == 0.0) "مطابق تماماً ✔ (صفر)" else "%,d ﷼ ${if (difference > 0) "(فائض)" else "(عجز)"}".format(difference.toLong()),
+                        text = if (abs(difference) < 0.01) "مطابق تماماً ✔ (صفر)" else "%,d ﷼ ${if (difference > 0) "(فائض)" else "(عجز)"}".format(difference.toLong()),
                         fontWeight = FontWeight.Bold,
-                        color = if (difference == 0.0) StatusSuccess else StatusDanger,
-                        fontSize = 13.sp
+                        color = if (abs(difference) < 0.01) StatusSuccess else StatusDanger,
+                        fontSize = 13.sp,
+                        style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
                     )
                 }
 
-                if (difference != 0.0) {
+                if (abs(difference) >= 1.0) {
                     Button(
                         onClick = { onAdjustEntry(activeAcc.code, activeAcc.name, difference) },
                         colors = ButtonDefaults.buttonColors(containerColor = FundGoldDark),
@@ -696,7 +744,7 @@ private fun CurrenciesTab(rates: Map<CurrencyCode, Double>, onUpdateRate: (Curre
         // Instant Multi-Currency Calculator Card
         Card(
             shape = RoundedCornerShape(14.dp),
-            colors = CardDefaults.cardColors(containerColor = FundLightSurfaceSecondary),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
             border = androidx.compose.foundation.BorderStroke(1.dp, FundGold)
         ) {
             Column(

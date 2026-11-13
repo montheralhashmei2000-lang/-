@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.fund.data.FundRepository
 import com.example.fund.model.*
 import com.example.fund.util.OfficialPrintHelper
@@ -41,8 +42,8 @@ fun VoucherPrintDialog(
 ) {
     val context = LocalContext.current
     val repo = FundRepository.getInstance()
-    val fundInfo by repo.fundInfo.collectAsState()
-    val ps by repo.printSettings.collectAsState()
+    val fundInfo by repo.fundInfo.collectAsStateWithLifecycle()
+    val ps by repo.printSettings.collectAsStateWithLifecycle()
 
     var showQuickCustomize by remember { mutableStateOf(false) }
     var isMiniPreview by remember { mutableStateOf(false) }

@@ -22,10 +22,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.fund.data.FundRepository
 import com.example.fund.model.Voucher
 import com.example.fund.model.VoucherStatus
 import com.example.fund.model.VoucherType
+import com.example.fund.ui.components.FundEmptyState
+import com.example.fund.ui.components.SensitiveActionConfirmDialog
 import com.example.fund.ui.components.VoucherPrintDialog
 import com.example.fund.ui.navigation.Screen
 import com.example.ui.theme.*
@@ -36,10 +39,11 @@ fun TreasuryScreen(
 ) {
     val context = LocalContext.current
     val repo = FundRepository.getInstance()
-    val accounts by repo.accounts.collectAsState()
-    val vouchers by repo.vouchers.collectAsState()
+    val accounts by repo.accounts.collectAsStateWithLifecycle()
+    val vouchers by repo.vouchers.collectAsStateWithLifecycle()
 
     var showTransferDialog by remember { mutableStateOf(false) }
+    var pendingTransfer by remember { mutableStateOf<Triple<String, String, Pair<Double, String>>?>(null) }
     var selectedVoucherForPrint by remember { mutableStateOf<Voucher?>(null) }
 
     val cashAcc = accounts.find { it.code == "1100" }
@@ -89,7 +93,13 @@ fun TreasuryScreen(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text("إجمالي السيولة النقدية والمصرفية", color = Color.White.copy(alpha = 0.85f), fontSize = 12.sp)
-                        Text("%,d ﷼".format(totalLiquidity.toLong()), color = Color.White, fontWeight = FontWeight.Black, fontSize = 22.sp)
+                        Text(
+                            text = "%,d ﷼".format(totalLiquidity.toLong()),
+                            color = Color.White,
+                            fontWeight = FontWeight.Black,
+                            fontSize = 22.sp,
+                            style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
+                        )
                     }
 
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -124,15 +134,15 @@ fun TreasuryScreen(
                 ) {
                     Column {
                         Text("إجمالي المقبوضات", color = Color.White.copy(alpha = 0.75f), fontSize = 10.sp)
-                        Text("%,d ﷼".format(totalReceipts.toLong()), color = FundGoldLight, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        Text("%,d ﷼".format(totalReceipts.toLong()), color = FundGoldLight, fontWeight = FontWeight.Bold, fontSize = 12.sp, style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"))
                     }
                     Column {
                         Text("إجمالي المدفوعات", color = Color.White.copy(alpha = 0.75f), fontSize = 10.sp)
-                        Text("%,d ﷼".format(totalPayments.toLong()), color = Color(0xFFFFCDD2), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        Text("%,d ﷼".format(totalPayments.toLong()), color = Color(0xFFFFCDD2), fontWeight = FontWeight.Bold, fontSize = 12.sp, style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"))
                     }
                     Column {
                         Text("صافي التدفق النقدي", color = Color.White.copy(alpha = 0.75f), fontSize = 10.sp)
-                        Text("%,d ﷼".format((totalReceipts - totalPayments).toLong()), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        Text("%,d ﷼".format((totalReceipts - totalPayments).toLong()), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp, style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"))
                     }
                 }
             }
@@ -177,64 +187,77 @@ fun TreasuryScreen(
         )
 
         // Transactions List
-        LazyColumn(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            items(filteredVouchers, key = { it.id }) { v ->
-                val isReceipt = v.type == VoucherType.RECEIPT
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    shape = RoundedCornerShape(12.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { selectedVoucherForPrint = v }
-                ) {
-                    Row(
+        if (filteredVouchers.isEmpty()) {
+            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.TopCenter) {
+                FundEmptyState(
+                    icon = Icons.Default.AccountBalanceWallet,
+                    title = "لا توجد حركات مالية مطابقة",
+                    subtitle = "لم يتم تسجيل سندات على الحساب المحدد بعد.",
+                    actionLabel = if (selectedAccountFilter != "الكل") "عرض كل الحسابات" else null,
+                    onAction = if (selectedAccountFilter != "الكل") ({ selectedAccountFilter = "الكل" }) else null
+                )
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(filteredVouchers, key = { it.id }) { v ->
+                    val isReceipt = v.type == VoucherType.RECEIPT
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        shape = RoundedCornerShape(12.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                            .clickable { selectedVoucherForPrint = v }
                     ) {
                         Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            modifier = Modifier.weight(1f)
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(34.dp)
-                                    .background(
-                                        if (isReceipt) StatusSuccess.copy(alpha = 0.12f) else StatusDanger.copy(alpha = 0.12f),
-                                        RoundedCornerShape(8.dp)
-                                    ),
-                                contentAlignment = Alignment.Center
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                modifier = Modifier.weight(1f)
                             ) {
-                                Icon(
-                                    imageVector = if (isReceipt) Icons.Default.ArrowDownward else Icons.Default.ArrowUpward,
-                                    contentDescription = null,
-                                    tint = if (isReceipt) StatusSuccess else StatusDanger,
-                                    modifier = Modifier.size(18.dp)
+                                Box(
+                                    modifier = Modifier
+                                        .size(34.dp)
+                                        .background(
+                                            if (isReceipt) StatusSuccess.copy(alpha = 0.12f) else StatusDanger.copy(alpha = 0.12f),
+                                            RoundedCornerShape(8.dp)
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = if (isReceipt) Icons.Default.ArrowDownward else Icons.Default.ArrowUpward,
+                                        contentDescription = null,
+                                        tint = if (isReceipt) StatusSuccess else StatusDanger,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+
+                                Column {
+                                    Text(v.partyName, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                    Text("${v.voucherNo} | ${v.date} | ${v.paymentMethod.title}", fontSize = 11.sp, color = Color.Gray)
+                                    Text(v.description, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                                }
+                            }
+
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text(
+                                    text = "${if (isReceipt) "+" else "-"} %,d ﷼".format(v.amountYer.toLong()),
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isReceipt) StatusSuccess else StatusDanger,
+                                    fontSize = 13.sp,
+                                    style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
                                 )
+                                Text("معاينة السند 🖨", fontSize = 10.sp, color = FundPrimary)
                             }
-
-                            Column {
-                                Text(v.partyName, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                Text("${v.voucherNo} | ${v.date} | ${v.paymentMethod.title}", fontSize = 11.sp, color = Color.Gray)
-                                Text(v.description, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-                            }
-                        }
-
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text(
-                                text = "${if (isReceipt) "+" else "-"} %,d ﷼".format(v.amountYer.toLong()),
-                                fontWeight = FontWeight.Bold,
-                                color = if (isReceipt) StatusSuccess else StatusDanger,
-                                fontSize = 13.sp
-                            )
-                            Text("معاينة السند 🖨", fontSize = 10.sp, color = FundPrimary)
                         }
                     }
                 }
@@ -246,14 +269,30 @@ fun TreasuryScreen(
         TreasuryInternalTransferDialog(
             onDismiss = { showTransferDialog = false },
             onTransfer = { fromCode, toCode, amount, notes ->
+                showTransferDialog = false
+                pendingTransfer = Triple(fromCode, toCode, amount to notes)
+            }
+        )
+    }
+
+    pendingTransfer?.let { (fromCode, toCode, amountNotes) ->
+        val (amount, notes) = amountNotes
+        SensitiveActionConfirmDialog(
+            title = "تأكيد التحويل الداخلي وترحيل القيد",
+            message = "سيتم تحويل مبلغ %,d ﷼ من حساب ($fromCode) إلى حساب ($toCode) وترحيل القيد المزدوج في الدفتر المحاسبي.".format(amount.toLong()),
+            confirmText = "تأكيد وترحيل التحويل",
+            confirmColor = FundPrimary,
+            icon = Icons.Default.SwapHoriz,
+            onConfirm = {
                 val ok = repo.transferBetweenTreasuryAccounts(fromCode, toCode, amount, notes)
                 if (ok) {
                     Toast.makeText(context, "تم تنفيذ التحويل الداخلي وترحيل القيد المزدوج بنجاح ✔", Toast.LENGTH_SHORT).show()
-                    showTransferDialog = false
                 } else {
                     Toast.makeText(context, "تأكد من اختلاف الحسابين وكفاية الرصيد المتاح!", Toast.LENGTH_LONG).show()
                 }
-            }
+                pendingTransfer = null
+            },
+            onDismiss = { pendingTransfer = null }
         )
     }
 
@@ -347,14 +386,14 @@ private fun TreasuryInternalTransferDialog(
 private fun AccountBalancePill(label: String, balance: Double, icon: androidx.compose.ui.graphics.vector.ImageVector, modifier: Modifier) {
     Card(
         modifier = modifier,
-        colors = CardDefaults.cardColors(containerColor = FundLightSurfaceSecondary),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
         shape = RoundedCornerShape(12.dp),
         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
     ) {
         Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Icon(icon, contentDescription = null, tint = FundPrimary, modifier = Modifier.size(16.dp))
             Text(label, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-            Text("%,d ﷼".format(balance.toLong()), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = FundPrimary)
+            Text("%,d ﷼".format(balance.toLong()), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = FundPrimary, style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"))
         }
     }
 }

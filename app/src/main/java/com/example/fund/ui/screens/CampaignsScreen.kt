@@ -9,6 +9,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -18,11 +19,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.fund.data.FundRepository
 import com.example.fund.model.Campaign
 import com.example.fund.model.CurrencyCode
 import com.example.fund.model.PaymentMethod
 import com.example.fund.model.UserRole
+import com.example.fund.ui.components.FundEmptyState
 import com.example.fund.ui.components.MoneyInput
 import com.example.ui.theme.*
 
@@ -30,8 +33,8 @@ import com.example.ui.theme.*
 fun CampaignsScreen() {
     val context = LocalContext.current
     val repo = FundRepository.getInstance()
-    val campaigns by repo.campaigns.collectAsState()
-    val currentUser by repo.currentUser.collectAsState()
+    val campaigns by repo.campaigns.collectAsStateWithLifecycle()
+    val currentUser by repo.currentUser.collectAsStateWithLifecycle()
     val canManage = currentUser.role != UserRole.VIEWER
 
     var showNewCampaignDialog by remember { mutableStateOf(false) }
@@ -73,14 +76,25 @@ fun CampaignsScreen() {
             }
         }
 
-        LazyColumn(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            items(campaigns, key = { it.id }) { c ->
-                val ratio = (c.collectedAmountYer / c.goalAmountYer.coerceAtLeast(1.0)).toFloat().coerceIn(0f, 1f)
-                val remaining = (c.collectedAmountYer - c.spentAmountYer).coerceAtLeast(0.0)
-                val isCompleted = c.status == "مكتملة" || ratio >= 1.0f
+        if (campaigns.isEmpty()) {
+            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.TopCenter) {
+                FundEmptyState(
+                    icon = Icons.Default.Campaign,
+                    title = "لا توجد حملات تبرعات مسجلة",
+                    subtitle = "أطلق حملة خيرية أو مشروعاً تنموياً لمتابعة التبرعات والمصروفات المخصصة.",
+                    actionLabel = if (canManage) "حملة جديدة" else null,
+                    onAction = if (canManage) ({ showNewCampaignDialog = true }) else null
+                )
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                items(campaigns, key = { it.id }) { c ->
+                    val ratio = (c.collectedAmountYer / c.goalAmountYer.coerceAtLeast(1.0)).toFloat().coerceIn(0f, 1f)
+                    val remaining = (c.collectedAmountYer - c.spentAmountYer).coerceAtLeast(0.0)
+                    val isCompleted = c.status == "مكتملة" || ratio >= 1.0f
 
                 Card(
                     shape = RoundedCornerShape(14.dp),
@@ -115,22 +129,22 @@ fun CampaignsScreen() {
                             progress = { ratio },
                             modifier = Modifier.fillMaxWidth().height(8.dp),
                             color = if (isCompleted) StatusSuccess else FundGold,
-                            trackColor = Color(0xFFEEEEEE)
+                            trackColor = MaterialTheme.colorScheme.surfaceVariant
                         )
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text("المحصل: ${"%,d".format(c.collectedAmountYer.toLong())} ﷼ (${(ratio * 100).toInt()}%)", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = FundPrimary)
-                            Text("المصروف: %,d ﷼".format(c.spentAmountYer.toLong()), fontSize = 11.sp, color = StatusDanger)
-                            Text("المتبقي: %,d ﷼".format(remaining.toLong()), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = FundGoldDark)
+                            Text("المحصل: ${"%,d".format(c.collectedAmountYer.toLong())} ﷼ (${(ratio * 100).toInt()}%)", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = FundPrimary, style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"))
+                            Text("المصروف: %,d ﷼".format(c.spentAmountYer.toLong()), fontSize = 11.sp, color = StatusDanger, style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"))
+                            Text("المتبقي: %,d ﷼".format(remaining.toLong()), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = FundGoldDark, style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"))
                         }
 
-                        Text("المبلغ المستهدف الكلي: %,d ﷼".format(c.goalAmountYer.toLong()), fontSize = 11.sp, color = Color.Gray)
+                        Text("المبلغ المستهدف الكلي: %,d ﷼".format(c.goalAmountYer.toLong()), fontSize = 11.sp, color = Color.Gray, style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"))
 
                         if (canManage) {
-                            HorizontalDivider(color = Color(0xFFEEEEEE))
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
 
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -161,6 +175,7 @@ fun CampaignsScreen() {
                         }
                     }
                 }
+            }
             }
         }
     }

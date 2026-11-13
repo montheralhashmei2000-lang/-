@@ -134,6 +134,13 @@ fun AidsScreen(
             onValueChange = { searchQuery = it },
             placeholder = { Text("ابحث برقم الطلب، اسم العضو، أو نوع المساعدة...") },
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+            trailingIcon = {
+                if (searchQuery.isNotEmpty()) {
+                    IconButton(onClick = { searchQuery = "" }) {
+                        Icon(Icons.Default.Close, contentDescription = "مسح البحث")
+                    }
+                }
+            },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp)
@@ -161,9 +168,9 @@ fun AidsScreen(
         }
 
         // AI Inline Advisor Banner if active
-        if (aiEvaluationText != null) {
+        aiEvaluationText?.let { evalText ->
             Card(
-                colors = CardDefaults.cardColors(containerColor = FundLightSurfaceSecondary),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                 border = androidx.compose.foundation.BorderStroke(1.dp, FundGold),
                 shape = RoundedCornerShape(12.dp),
                 modifier = Modifier.fillMaxWidth()
@@ -182,7 +189,7 @@ fun AidsScreen(
                             Icon(Icons.Default.Close, contentDescription = "إغلاق", modifier = Modifier.size(18.dp))
                         }
                     }
-                    Text(aiEvaluationText!!, fontSize = 12.sp, lineHeight = 18.sp)
+                    Text(evalText, fontSize = 12.sp, lineHeight = 18.sp)
                 }
             }
         }
@@ -375,7 +382,7 @@ private fun AidRequestCardItem(
                 Text("الملاحظات: ${req.notes}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
 
-            HorizontalDivider(color = Color(0xFFEEEEEE))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
 
             // Action workflow
             Row(

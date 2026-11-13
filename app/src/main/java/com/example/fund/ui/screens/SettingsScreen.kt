@@ -390,7 +390,7 @@ private fun RegionsAndVillagesTab(
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = FundLightSurfaceSecondary),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
         border = androidx.compose.foundation.BorderStroke(1.dp, FundPrimary.copy(alpha = 0.35f))
     ) {
         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

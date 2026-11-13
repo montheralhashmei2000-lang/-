@@ -30,6 +30,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.fund.model.AidStatus
 import com.example.fund.model.VoucherStatus
+import com.example.fund.ui.components.FundEmptyState
 import com.example.fund.ui.navigation.AppRoute
 import com.example.fund.ui.navigation.Screen
 import com.example.fund.ui.navigation.toRoute
@@ -49,6 +50,7 @@ data class HubModuleItem(
 @Composable
 fun FinanceHubScreen(
     onNavigateRoute: (AppRoute) -> Unit,
+    onOpenGlobalSearch: () -> Unit = {},
     dashboardViewModel: DashboardViewModel = viewModel()
 ) {
     val accounts by dashboardViewModel.accounts.collectAsStateWithLifecycle()
@@ -118,7 +120,7 @@ fun FinanceHubScreen(
             subtitle = "إحصائيات شاملة وتقارير الأداء التنفيذية",
             icon = Screen.REPORTS.icon,
             accentColor = Color(0xFF5D4037),
-            badgeText = "PDF",
+            badgeText = "PDF / CSV",
             route = AppRoute.ReportsRoute,
             screenKey = Screen.REPORTS
         )
@@ -130,6 +132,10 @@ fun FinanceHubScreen(
         summaryMetricLabel = "إجمالي السيولة المتاحة",
         summaryMetricValue = "%,d ﷼".format(liquidity),
         modules = modules,
+        extraActionLabel = "سند سريع",
+        extraActionIcon = Icons.Default.AddCircleOutline,
+        onExtraAction = { onNavigateRoute(AppRoute.VouchersRoute(openNewType = "RECEIPT")) },
+        onOpenGlobalSearch = onOpenGlobalSearch,
         onNavigateRoute = onNavigateRoute
     )
 }
@@ -138,6 +144,7 @@ fun FinanceHubScreen(
 fun MembersHubScreen(
     onNavigateRoute: (AppRoute) -> Unit,
     onOpenQrCheck: () -> Unit,
+    onOpenGlobalSearch: () -> Unit = {},
     dashboardViewModel: DashboardViewModel = viewModel()
 ) {
     val members by dashboardViewModel.members.collectAsStateWithLifecycle()
@@ -180,9 +187,10 @@ fun MembersHubScreen(
         summaryMetricLabel = "الأعضاء المسجلون ($pendingCount معلق)",
         summaryMetricValue = "$activeCount / ${members.size} نشط",
         modules = modules,
-        extraActionLabel = "فحص بطاقة عضو (QR)",
+        extraActionLabel = "فحص بطاقة QR",
         extraActionIcon = Icons.Default.QrCodeScanner,
         onExtraAction = onOpenQrCheck,
+        onOpenGlobalSearch = onOpenGlobalSearch,
         onNavigateRoute = onNavigateRoute
     )
 }
@@ -190,6 +198,7 @@ fun MembersHubScreen(
 @Composable
 fun AidsHubScreen(
     onNavigateRoute: (AppRoute) -> Unit,
+    onOpenGlobalSearch: () -> Unit = {},
     dashboardViewModel: DashboardViewModel = viewModel()
 ) {
     val aidRequests by dashboardViewModel.aidRequests.collectAsStateWithLifecycle()
@@ -252,6 +261,10 @@ fun AidsHubScreen(
         summaryMetricLabel = "طلبات بانتظار الاعتماد ($disbursed مصروفة)",
         summaryMetricValue = "$inReview طلب قيد المراجعة",
         modules = modules,
+        extraActionLabel = "مراجعة المعلقة",
+        extraActionIcon = Icons.Default.AssignmentLate,
+        onExtraAction = { onNavigateRoute(AppRoute.AidsRoute(statusFilter = "قيد المراجعة")) },
+        onOpenGlobalSearch = onOpenGlobalSearch,
         onNavigateRoute = onNavigateRoute
     )
 }
@@ -266,11 +279,22 @@ private fun AdaptiveHubScaffold(
     extraActionLabel: String? = null,
     extraActionIcon: ImageVector? = null,
     onExtraAction: (() -> Unit)? = null,
+    onOpenGlobalSearch: () -> Unit = {},
     onNavigateRoute: (AppRoute) -> Unit
 ) {
+    var localFilter by remember { mutableStateOf("") }
+    val filteredModules = remember(modules, localFilter) {
+        if (localFilter.isBlank()) modules
+        else modules.filter {
+            it.title.contains(localFilter, ignoreCase = true) ||
+                it.subtitle.contains(localFilter, ignoreCase = true)
+        }
+    }
+
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val isWideScreen = maxWidth >= 720.dp
-        var selectedDetailModule by remember { mutableStateOf(modules.first()) }
+        var selectedScreenKey by remember(hubTitle) { mutableStateOf(modules.first().screenKey) }
+        val selectedDetailModule = modules.find { it.screenKey == selectedScreenKey } ?: modules.first()
 
         if (isWideScreen) {
             // Canonical Tablet / Landscape List-Detail Layout
@@ -283,7 +307,7 @@ private fun AdaptiveHubScaffold(
                 // Master List Pane
                 Column(
                     modifier = Modifier
-                        .width(310.dp)
+                        .width(320.dp)
                         .fillMaxHeight(),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
@@ -297,22 +321,51 @@ private fun AdaptiveHubScaffold(
                         onExtraAction = onExtraAction
                     )
 
-                    LazyColumn(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        items(modules, key = { it.screenKey.name }) { item ->
-                            val isSelected = selectedDetailModule.screenKey == item.screenKey
-                            HubModuleRowCard(
-                                item = item,
-                                selected = isSelected,
-                                onClick = { selectedDetailModule = item }
+                    OutlinedTextField(
+                        value = localFilter,
+                        onValueChange = { localFilter = it },
+                        placeholder = { Text("تصفية شاشات القسم...", fontSize = 12.sp) },
+                        leadingIcon = { Icon(Icons.Default.FilterList, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                        trailingIcon = {
+                            if (localFilter.isNotEmpty()) {
+                                IconButton(onClick = { localFilter = "" }) {
+                                    Icon(Icons.Default.Clear, contentDescription = "مسح")
+                                }
+                            }
+                        },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    if (filteredModules.isEmpty()) {
+                        Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.TopCenter) {
+                            FundEmptyState(
+                                icon = Icons.Default.SearchOff,
+                                title = "لا توجد شاشة مطابقة",
+                                subtitle = "امسح عبارة التصفية لعرض جميع الشاشات.",
+                                actionLabel = "إظهار الكل",
+                                onAction = { localFilter = "" }
                             )
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(filteredModules, key = { it.screenKey.name }) { item ->
+                                val isSelected = selectedDetailModule.screenKey == item.screenKey
+                                HubModuleRowCard(
+                                    item = item,
+                                    selected = isSelected,
+                                    onClick = { selectedScreenKey = item.screenKey }
+                                )
+                            }
                         }
                     }
                 }
 
-                // Detail Content Pane
+                // Detail Content Pane with Expand Full-Screen Option
                 Surface(
                     modifier = Modifier
                         .weight(1f)
@@ -321,15 +374,53 @@ private fun AdaptiveHubScaffold(
                     color = MaterialTheme.colorScheme.background,
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
                 ) {
-                    RenderEmbeddedScreen(
-                        screen = selectedDetailModule.screenKey,
-                        onNavigateRoute = onNavigateRoute,
-                        onOpenQrCheck = onExtraAction ?: {}
-                    )
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(MaterialTheme.colorScheme.surface)
+                                .padding(horizontal = 14.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    selectedDetailModule.icon,
+                                    contentDescription = null,
+                                    tint = selectedDetailModule.accentColor,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Text(
+                                    selectedDetailModule.title,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp
+                                )
+                            }
+                            TextButton(
+                                onClick = { onNavigateRoute(selectedDetailModule.route) },
+                                modifier = Modifier.heightIn(min = 48.dp)
+                            ) {
+                                Icon(Icons.Default.OpenInFull, contentDescription = null, modifier = Modifier.size(15.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("فتح مستقل", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+                        Box(modifier = Modifier.weight(1f)) {
+                            RenderEmbeddedScreen(
+                                screen = selectedDetailModule.screenKey,
+                                onNavigateRoute = onNavigateRoute,
+                                onOpenQrCheck = onExtraAction ?: {}
+                            )
+                        }
+                    }
                 }
             }
         } else {
-            // Compact Phone Layout: Summary Banner + Rich 2-Column Module Grid
+            // Compact Phone Layout: Summary Banner + Quick Search + Rich 2-Column Module Grid
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -346,17 +437,66 @@ private fun AdaptiveHubScaffold(
                     onExtraAction = onExtraAction
                 )
 
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(2),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                    modifier = Modifier.weight(1f)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    items(modules, key = { it.screenKey.name }) { item ->
-                        HubGridCard(
-                            item = item,
-                            onClick = { onNavigateRoute(item.route) }
+                    OutlinedTextField(
+                        value = localFilter,
+                        onValueChange = { localFilter = it },
+                        placeholder = { Text("ابحث داخل $hubTitle...", fontSize = 12.sp) },
+                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                        trailingIcon = {
+                            if (localFilter.isNotEmpty()) {
+                                IconButton(onClick = { localFilter = "" }) {
+                                    Icon(Icons.Default.Clear, contentDescription = "مسح")
+                                }
+                            }
+                        },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    FilledTonalIconButton(
+                        onClick = onOpenGlobalSearch,
+                        modifier = Modifier.size(52.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.TravelExplore,
+                            contentDescription = "البحث الشامل في كل الشاشات",
+                            tint = FundPrimary
                         )
+                    }
+                }
+
+                if (filteredModules.isEmpty()) {
+                    Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.TopCenter) {
+                        FundEmptyState(
+                            icon = Icons.Default.SearchOff,
+                            title = "لا توجد شاشة مطابقة",
+                            subtitle = "جرّب مسح التصفية أو استخدام البحث الشامل للوصول لأي سجل.",
+                            actionLabel = "البحث الشامل",
+                            onAction = onOpenGlobalSearch,
+                            secondaryActionLabel = "إظهار الكل",
+                            onSecondaryAction = { localFilter = "" }
+                        )
+                    }
+                } else {
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(2),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        items(filteredModules, key = { it.screenKey.name }) { item ->
+                            HubGridCard(
+                                item = item,
+                                onClick = { onNavigateRoute(item.route) }
+                            )
+                        }
                     }
                 }
             }
@@ -423,7 +563,8 @@ private fun HubBannerCard(
                                 contentColor = Color.Black
                             ),
                             contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                            shape = RoundedCornerShape(10.dp)
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.heightIn(min = 42.dp)
                         ) {
                             if (extraActionIcon != null) {
                                 Icon(extraActionIcon, contentDescription = null, modifier = Modifier.size(16.dp))

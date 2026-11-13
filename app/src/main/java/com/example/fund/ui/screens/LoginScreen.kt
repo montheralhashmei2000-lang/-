@@ -279,7 +279,7 @@ fun LoginScreen(
                 ScrollableTabRow(
                     selectedTabIndex = activeMode.ordinal,
                     edgePadding = 0.dp,
-                    containerColor = FundLightSurfaceSecondary,
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
                     contentColor = FundPrimary,
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -325,7 +325,7 @@ fun LoginScreen(
                                             },
                                         shape = RoundedCornerShape(10.dp),
                                         colors = CardDefaults.cardColors(
-                                            containerColor = if (isSelected) FundPrimary.copy(alpha = 0.14f) else FundLightSurfaceSecondary
+                                            containerColor = if (isSelected) FundPrimary.copy(alpha = 0.14f) else MaterialTheme.colorScheme.surfaceVariant
                                         ),
                                         border = BorderStroke(
                                             1.dp,
@@ -422,7 +422,7 @@ fun LoginScreen(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .background(FundLightSurfaceSecondary, RoundedCornerShape(10.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(10.dp))
                                     .padding(horizontal = 10.dp, vertical = 6.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
@@ -604,7 +604,7 @@ fun LoginScreen(
                                                     .padding(horizontal = 4.dp)
                                                     .size(38.dp)
                                                     .background(
-                                                        if (filled) FundPrimary.copy(alpha = 0.14f) else FundLightSurfaceSecondary,
+                                                        if (filled) FundPrimary.copy(alpha = 0.14f) else MaterialTheme.colorScheme.surfaceVariant,
                                                         RoundedCornerShape(10.dp)
                                                     )
                                                     .border(
@@ -698,7 +698,7 @@ fun LoginScreen(
                                     Box(
                                         modifier = Modifier
                                             .size(44.dp)
-                                            .background(FundLightSurfaceSecondary, RoundedCornerShape(10.dp))
+                                            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(10.dp))
                                             .border(1.5.dp, FundPrimary, RoundedCornerShape(10.dp)),
                                         contentAlignment = Alignment.Center
                                     ) {
@@ -853,7 +853,7 @@ fun LoginScreen(
                                             authViewModel.updateServerNode(nTitle, nHost, ping)
                                         },
                                     colors = CardDefaults.cardColors(
-                                        containerColor = if (selected) FundPrimary.copy(alpha = 0.1f) else FundLightSurfaceSecondary
+                                        containerColor = if (selected) FundPrimary.copy(alpha = 0.1f) else MaterialTheme.colorScheme.surfaceVariant
                                     ),
                                     border = BorderStroke(
                                         1.dp,

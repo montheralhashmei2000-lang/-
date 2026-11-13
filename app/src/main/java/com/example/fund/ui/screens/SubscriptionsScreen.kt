@@ -9,6 +9,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
@@ -121,6 +122,13 @@ fun SubscriptionsScreen(
             onValueChange = { searchQuery = it },
             placeholder = { Text("ابحث برقم الإيصال، اسم العضو، أو الشهر...") },
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+            trailingIcon = {
+                if (searchQuery.isNotEmpty()) {
+                    IconButton(onClick = { searchQuery = "" }) {
+                        Icon(Icons.Default.Close, contentDescription = "مسح البحث")
+                    }
+                }
+            },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp)
@@ -206,17 +214,22 @@ fun SubscriptionsScreen(
             preselectedMemberId = preselectedMemberId,
             onDismiss = { showCollectDialog = false },
             onCollect = { memberId, amount, curr, month, method, ref, notes ->
-                repo.addSubscription(
-                    memberId = memberId,
-                    amountOriginal = amount,
-                    currency = curr,
-                    monthYear = month,
-                    paymentMethod = method,
-                    referenceNo = ref,
-                    notes = notes
-                )
-                Toast.makeText(context, "تم تحصيل الاشتراك وإصدار السند والقيد المحاسبي بنجاح", Toast.LENGTH_SHORT).show()
-                showCollectDialog = false
+                runCatching {
+                    repo.addSubscription(
+                        memberId = memberId,
+                        amountOriginal = amount,
+                        currency = curr,
+                        monthYear = month,
+                        paymentMethod = method,
+                        referenceNo = ref,
+                        notes = notes
+                    )
+                }.onSuccess {
+                    Toast.makeText(context, "تم تحصيل الاشتراك وإصدار السند والقيد المحاسبي بنجاح", Toast.LENGTH_SHORT).show()
+                    showCollectDialog = false
+                }.onFailure { err ->
+                    Toast.makeText(context, err.message ?: "تعذر تسجيل تحصيل الاشتراك", Toast.LENGTH_SHORT).show()
+                }
             }
         )
     }

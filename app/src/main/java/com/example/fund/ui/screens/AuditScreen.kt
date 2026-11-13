@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.VerifiedUser
@@ -18,15 +19,17 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.fund.data.FundRepository
+import com.example.fund.ui.components.FundEmptyState
 import com.example.ui.theme.*
 
 @Composable
 fun AuditScreen() {
     val repo = FundRepository.getInstance()
-    val logs by repo.auditLogs.collectAsState()
-    val currentUser by repo.currentUser.collectAsState()
-    val serverConfig by repo.serverConfig.collectAsState()
+    val logs by repo.auditLogs.collectAsStateWithLifecycle()
+    val currentUser by repo.currentUser.collectAsStateWithLifecycle()
+    val serverConfig by repo.serverConfig.collectAsStateWithLifecycle()
 
     var searchQuery by remember { mutableStateOf("") }
     var selectedFilter by remember { mutableStateOf("الكل") }
@@ -111,6 +114,13 @@ fun AuditScreen() {
             onValueChange = { searchQuery = it },
             placeholder = { Text("ابحث بنوع العملية، اسم الموظف، أو تفاصيل الحركة...") },
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+            trailingIcon = {
+                if (searchQuery.isNotEmpty()) {
+                    IconButton(onClick = { searchQuery = "" }) {
+                        Icon(Icons.Default.Clear, contentDescription = "مسح البحث")
+                    }
+                }
+            },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp)
@@ -135,52 +145,72 @@ fun AuditScreen() {
             }
         }
 
-        LazyColumn(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            items(filteredLogs, key = { it.id }) { log ->
-                val badgeColor = when {
-                    log.actionType.contains("إلغاء") || log.actionType.contains("تصفير") || log.actionType.contains("رفض") -> StatusDanger
-                    log.actionType.contains("مزامنة") || log.actionType.contains("خادم") -> StatusInfo
-                    log.actionType.contains("سند") || log.actionType.contains("اعتماد") -> StatusSuccess
-                    else -> FundPrimary
-                }
-                Card(
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Surface(
-                                color = badgeColor.copy(alpha = 0.12f),
-                                shape = RoundedCornerShape(6.dp)
+        if (filteredLogs.isEmpty()) {
+            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.TopCenter) {
+                FundEmptyState(
+                    icon = Icons.Default.Security,
+                    title = "لا توجد سجلات رقابية مطابقة",
+                    subtitle = "جرّب تغيير تصنيف السجل أو مسح عبارة البحث.",
+                    actionLabel = "إعادة ضبط الفلترة",
+                    onAction = {
+                        searchQuery = ""
+                        selectedFilter = "الكل"
+                    }
+                )
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(filteredLogs, key = { it.id }) { log ->
+                    val badgeColor = when {
+                        log.actionType.contains("إلغاء") || log.actionType.contains("تصفير") || log.actionType.contains("رفض") -> StatusDanger
+                        log.actionType.contains("مزامنة") || log.actionType.contains("خادم") -> StatusInfo
+                        log.actionType.contains("سند") || log.actionType.contains("اعتماد") -> StatusSuccess
+                        else -> FundPrimary
+                    }
+                    Card(
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
+                                Surface(
+                                    color = badgeColor.copy(alpha = 0.12f),
+                                    shape = RoundedCornerShape(6.dp)
+                                ) {
+                                    Text(
+                                        text = log.actionType,
+                                        color = badgeColor,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                    )
+                                }
                                 Text(
-                                    text = log.actionType,
-                                    color = badgeColor,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                    log.timestamp,
+                                    fontSize = 10.sp,
+                                    color = Color.Gray,
+                                    style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
                                 )
                             }
-                            Text(log.timestamp, fontSize = 10.sp, color = Color.Gray)
-                        }
 
-                        Text(log.description, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
+                            Text(log.description, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
 
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text("الموظف المنفذ: ${log.userName}", fontSize = 10.sp, color = FundPrimary, fontWeight = FontWeight.SemiBold)
-                            Text("العقدة: ${log.ipOrDevice}", fontSize = 10.sp, color = Color.Gray)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("الموظف المنفذ: ${log.userName}", fontSize = 10.sp, color = FundPrimary, fontWeight = FontWeight.SemiBold)
+                                Text("العقدة: ${log.ipOrDevice}", fontSize = 10.sp, color = Color.Gray)
+                            }
                         }
                     }
                 }

@@ -312,7 +312,7 @@ private fun VoucherListItem(
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         shape = RoundedCornerShape(14.dp),
-        border = BorderStroke(1.dp, if (isVoid) Color.LightGray else MaterialTheme.colorScheme.outline),
+        border = BorderStroke(1.dp, if (isVoid) MaterialTheme.colorScheme.outline.copy(alpha = 0.5f) else MaterialTheme.colorScheme.outline),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -382,7 +382,7 @@ private fun VoucherListItem(
                 )
             }
 
-            HorizontalDivider(color = Color(0xFFEEEEEE))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -448,7 +448,10 @@ private fun NewVoucherDialog(
                             type = VoucherType.RECEIPT
                             selectedCounterpartCode = "4100"
                         },
-                        colors = ButtonDefaults.buttonColors(containerColor = if (type == VoucherType.RECEIPT) StatusSuccess else Color.LightGray),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (type == VoucherType.RECEIPT) StatusSuccess else MaterialTheme.colorScheme.surfaceVariant,
+                            contentColor = if (type == VoucherType.RECEIPT) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                        ),
                         modifier = Modifier.weight(1f).heightIn(min = 48.dp)
                     ) {
                         Text("سند قبض (+)")
@@ -458,7 +461,10 @@ private fun NewVoucherDialog(
                             type = VoucherType.PAYMENT
                             selectedCounterpartCode = "5100"
                         },
-                        colors = ButtonDefaults.buttonColors(containerColor = if (type == VoucherType.PAYMENT) StatusDanger else Color.LightGray),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (type == VoucherType.PAYMENT) StatusDanger else MaterialTheme.colorScheme.surfaceVariant,
+                            contentColor = if (type == VoucherType.PAYMENT) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                        ),
                         modifier = Modifier.weight(1f).heightIn(min = 48.dp)
                     ) {
                         Text("سند صرف (-)")

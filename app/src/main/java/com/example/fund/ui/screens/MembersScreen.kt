@@ -158,6 +158,13 @@ fun MembersScreen(
             onValueChange = { searchQuery = it },
             placeholder = { Text("ابحث بالاسم، رقم العضوية، المنطقة أو القرية...") },
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+            trailingIcon = {
+                if (searchQuery.isNotEmpty()) {
+                    IconButton(onClick = { searchQuery = "" }) {
+                        Icon(Icons.Default.Close, contentDescription = "مسح البحث")
+                    }
+                }
+            },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp)
@@ -256,6 +263,7 @@ fun MembersScreen(
     memberToEdit?.let { member ->
         MemberFormDialog(
             initialMember = member,
+            existingMemberNos = members.map { it.memberNo }.toSet(),
             membersViewModel = membersViewModel,
             onDismiss = { memberToEdit = null },
             onSave = { updated ->
@@ -271,6 +279,7 @@ fun MembersScreen(
     if (showAddDialog) {
         MemberFormDialog(
             initialMember = null,
+            existingMemberNos = members.map { it.memberNo }.toSet(),
             membersViewModel = membersViewModel,
             onDismiss = { showAddDialog = false },
             onSave = { newMember ->
@@ -409,7 +418,7 @@ private fun MemberCardItem(
                 )
             }
 
-            HorizontalDivider(color = Color(0xFFEEEEEE))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
 
             // Action Buttons
             Row(
@@ -453,6 +462,7 @@ private fun MemberCardItem(
 @Composable
 private fun MemberFormDialog(
     initialMember: Member?,
+    existingMemberNos: Set<String>,
     membersViewModel: MembersViewModel,
     onDismiss: () -> Unit,
     onSave: (Member) -> Unit
@@ -698,8 +708,17 @@ private fun MemberFormDialog(
                             dueBalanceYer = due
                         )
                     } else {
+                        val maxExisting = existingMemberNos
+                            .mapNotNull { it.substringAfterLast("-").toIntOrNull() }
+                            .maxOrNull() ?: 1000
+                        var nextSeq = maxOf(maxExisting + 1, 1001)
+                        var generatedMemberNo = "$prefix$nextSeq"
+                        while (generatedMemberNo in existingMemberNos) {
+                            nextSeq++
+                            generatedMemberNo = "$prefix$nextSeq"
+                        }
                         Member(
-                            memberNo = "$prefix${(1000..9999).random()}",
+                            memberNo = generatedMemberNo,
                             fullName = fullName.trim(),
                             phone = phone.trim(),
                             nationalId = nationalId.trim(),

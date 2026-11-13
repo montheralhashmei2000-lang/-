@@ -8,7 +8,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountTree
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -19,17 +21,19 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.fund.data.FundRepository
 import com.example.fund.model.AccountType
 import com.example.fund.model.UserRole
+import com.example.fund.ui.components.FundEmptyState
 import com.example.ui.theme.*
 
 @Composable
 fun AccountsScreen() {
     val context = LocalContext.current
     val repo = FundRepository.getInstance()
-    val accounts by repo.accounts.collectAsState()
-    val currentUser by repo.currentUser.collectAsState()
+    val accounts by repo.accounts.collectAsStateWithLifecycle()
+    val currentUser by repo.currentUser.collectAsStateWithLifecycle()
     val canAdd = currentUser.role == UserRole.ADMIN || currentUser.role == UserRole.ACCOUNTANT
 
     var searchQuery by remember { mutableStateOf("") }
@@ -89,6 +93,13 @@ fun AccountsScreen() {
             onValueChange = { searchQuery = it },
             placeholder = { Text("ابحث برقم الحساب أو الاسم...") },
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+            trailingIcon = {
+                if (searchQuery.isNotEmpty()) {
+                    IconButton(onClick = { searchQuery = "" }) {
+                        Icon(Icons.Default.Clear, contentDescription = "مسح البحث")
+                    }
+                }
+            },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp)
@@ -110,43 +121,59 @@ fun AccountsScreen() {
             }
         }
 
-        LazyColumn(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            items(filtered, key = { it.code }) { acc ->
-                val isParent = acc.parentCode == null
-                Card(
-                    shape = RoundedCornerShape(10.dp),
-                    colors = CardDefaults.cardColors(containerColor = if (isParent) FundLightSurfaceSecondary else MaterialTheme.colorScheme.surface),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, if (isParent) FundPrimary.copy(alpha = 0.5f) else MaterialTheme.colorScheme.outline),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 10.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+        if (filtered.isEmpty()) {
+            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.TopCenter) {
+                FundEmptyState(
+                    icon = Icons.Default.AccountTree,
+                    title = "لا توجد حسابات مطابقة",
+                    subtitle = "جرّب تغيير تصنيف الحساب أو مسح عبارة البحث.",
+                    actionLabel = "إعادة ضبط الفلترة",
+                    onAction = {
+                        searchQuery = ""
+                        selectedTypeFilter = "الكل"
+                    }
+                )
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(filtered, key = { it.code }) { acc ->
+                    val isParent = acc.parentCode == null
+                    Card(
+                        shape = RoundedCornerShape(10.dp),
+                        colors = CardDefaults.cardColors(containerColor = if (isParent) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, if (isParent) FundPrimary.copy(alpha = 0.5f) else MaterialTheme.colorScheme.outline),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Column(modifier = Modifier.padding(start = if (isParent) 0.dp else 14.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Text(acc.name, fontWeight = if (isParent) FontWeight.Black else FontWeight.Bold, fontSize = 13.sp)
-                                if (isParent) {
-                                    Surface(color = FundPrimary.copy(alpha = 0.1f), shape = RoundedCornerShape(4.dp)) {
-                                        Text("حساب رئيسي", fontSize = 9.sp, color = FundPrimary, modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.padding(start = if (isParent) 0.dp else 14.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Text(acc.name, fontWeight = if (isParent) FontWeight.Black else FontWeight.Bold, fontSize = 13.sp)
+                                    if (isParent) {
+                                        Surface(color = FundPrimary.copy(alpha = 0.1f), shape = RoundedCornerShape(4.dp)) {
+                                            Text("حساب رئيسي", fontSize = 9.sp, color = FundPrimary, modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp))
+                                        }
                                     }
                                 }
+                                Text("رمز الحساب: ${acc.code} | النوع: ${acc.type.title} | الطبيعة: ${if (acc.isDebitNormal) "مدين" else "دائن"}", fontSize = 10.sp, color = Color.Gray)
                             }
-                            Text("رمز الحساب: ${acc.code} | النوع: ${acc.type.title} | الطبيعة: ${if (acc.isDebitNormal) "مدين" else "دائن"}", fontSize = 10.sp, color = Color.Gray)
-                        }
 
-                        Text(
-                            text = "%,d ﷼".format(acc.balance.toLong()),
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp,
-                            color = FundPrimary
-                        )
+                            Text(
+                                text = "%,d ﷼".format(acc.balance.toLong()),
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                                color = FundPrimary,
+                                style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
+                            )
+                        }
                     }
                 }
             }

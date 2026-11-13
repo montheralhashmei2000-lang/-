@@ -1,8 +1,6 @@
 package com.example.fund.ui.navigation
 
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.MenuBook
-import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.*
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation.NavDestination
@@ -74,6 +72,20 @@ sealed interface AppRoute {
     @Serializable data class SettingsRoute(val initialTab: Int = 0) : AppRoute
 }
 
+data class SiblingNavItem(
+    val shortTitle: String,
+    val fullTitle: String,
+    val icon: ImageVector,
+    val screen: Screen,
+    val route: AppRoute
+)
+
+data class HubContextGroup(
+    val hubTitle: String,
+    val hubRoute: AppRoute,
+    val items: List<SiblingNavItem>
+)
+
 fun Screen.toRoute(): AppRoute = when (this) {
     Screen.LOGIN -> AppRoute.LoginRoute
     Screen.DASHBOARD -> AppRoute.DashboardRoute
@@ -84,7 +96,7 @@ fun Screen.toRoute(): AppRoute = when (this) {
     Screen.PERIODIC_AIDS -> AppRoute.PeriodicAidsRoute
     Screen.IN_KIND -> AppRoute.InKindRoute
     Screen.TREASURY -> AppRoute.TreasuryRoute
-    Screen.VOUCHERS -> AppRoute.VOUCHERS_ROUTE_DEFAULT
+    Screen.VOUCHERS -> AppRoute.VouchersRoute()
     Screen.JOURNAL -> AppRoute.JournalRoute
     Screen.ACCOUNTS -> AppRoute.AccountsRoute
     Screen.BUDGETS -> AppRoute.BudgetsRoute
@@ -100,14 +112,19 @@ fun Screen.toRoute(): AppRoute = when (this) {
     Screen.SETTINGS -> AppRoute.SettingsRoute()
 }
 
-private val AppRoute.Companion.VOUCHERS_ROUTE_DEFAULT: AppRoute.VouchersRoute
-    get() = AppRoute.VouchersRoute()
-
 fun BottomHub.toRoute(): AppRoute = when (this) {
     BottomHub.HOME -> AppRoute.DashboardRoute
     BottomHub.FINANCE -> AppRoute.FinanceHubRoute
     BottomHub.MEMBERS -> AppRoute.MembersHubRoute
     BottomHub.AIDS -> AppRoute.AidsHubRoute
+}
+
+fun NavDestination?.isTopLevelHub(): Boolean {
+    if (this == null) return true
+    return hasRoute<AppRoute.DashboardRoute>() ||
+        hasRoute<AppRoute.FinanceHubRoute>() ||
+        hasRoute<AppRoute.MembersHubRoute>() ||
+        hasRoute<AppRoute.AidsHubRoute>()
 }
 
 fun NavDestination?.resolveTitle(): String {
@@ -198,5 +215,86 @@ fun NavDestination?.resolveBottomHub(): BottomHub {
             hasRoute<AppRoute.CampaignsRoute>() -> BottomHub.AIDS
 
         else -> BottomHub.HOME
+    }
+}
+
+private val financeSiblings = HubContextGroup(
+    hubTitle = BottomHub.FINANCE.title,
+    hubRoute = AppRoute.FinanceHubRoute,
+    items = listOf(
+        SiblingNavItem("السندات", Screen.VOUCHERS.title, Screen.VOUCHERS.icon, Screen.VOUCHERS, AppRoute.VouchersRoute()),
+        SiblingNavItem("القيود", Screen.JOURNAL.title, Screen.JOURNAL.icon, Screen.JOURNAL, AppRoute.JournalRoute),
+        SiblingNavItem("الخزينة", Screen.TREASURY.title, Screen.TREASURY.icon, Screen.TREASURY, AppRoute.TreasuryRoute),
+        SiblingNavItem("الحسابات", Screen.ACCOUNTS.title, Screen.ACCOUNTS.icon, Screen.ACCOUNTS, AppRoute.AccountsRoute),
+        SiblingNavItem("الموازنات", Screen.BUDGETS.title, Screen.BUDGETS.icon, Screen.BUDGETS, AppRoute.BudgetsRoute),
+        SiblingNavItem("القوائم المالية", Screen.FINANCIAL_REPORTS.title, Screen.FINANCIAL_REPORTS.icon, Screen.FINANCIAL_REPORTS, AppRoute.FinancialReportsRoute),
+        SiblingNavItem("التقارير", Screen.REPORTS.title, Screen.REPORTS.icon, Screen.REPORTS, AppRoute.ReportsRoute)
+    )
+)
+
+private val membersSiblings = HubContextGroup(
+    hubTitle = BottomHub.MEMBERS.title,
+    hubRoute = AppRoute.MembersHubRoute,
+    items = listOf(
+        SiblingNavItem("الأعضاء", Screen.MEMBERS.title, Screen.MEMBERS.icon, Screen.MEMBERS, AppRoute.MembersRoute()),
+        SiblingNavItem("الاشتراكات", Screen.SUBSCRIPTIONS.title, Screen.SUBSCRIPTIONS.icon, Screen.SUBSCRIPTIONS, AppRoute.SubscriptionsRoute()),
+        SiblingNavItem("المانحون", Screen.DONORS.title, Screen.DONORS.icon, Screen.DONORS, AppRoute.DonorsRoute)
+    )
+)
+
+private val aidsSiblings = HubContextGroup(
+    hubTitle = BottomHub.AIDS.title,
+    hubRoute = AppRoute.AidsHubRoute,
+    items = listOf(
+        SiblingNavItem("الطلبات", Screen.AIDS.title, Screen.AIDS.icon, Screen.AIDS, AppRoute.AidsRoute()),
+        SiblingNavItem("الأسر المستفيدة", Screen.BENEFICIARIES.title, Screen.BENEFICIARIES.icon, Screen.BENEFICIARIES, AppRoute.BeneficiariesRoute),
+        SiblingNavItem("الكفالات", Screen.PERIODIC_AIDS.title, Screen.PERIODIC_AIDS.icon, Screen.PERIODIC_AIDS, AppRoute.PeriodicAidsRoute),
+        SiblingNavItem("العينية", Screen.IN_KIND.title, Screen.IN_KIND.icon, Screen.IN_KIND, AppRoute.InKindRoute),
+        SiblingNavItem("الحملات", Screen.CAMPAIGNS.title, Screen.CAMPAIGNS.icon, Screen.CAMPAIGNS, AppRoute.CampaignsRoute)
+    )
+)
+
+private val adminSiblings = HubContextGroup(
+    hubTitle = "الإدارة والرقابة",
+    hubRoute = AppRoute.DashboardRoute,
+    items = listOf(
+        SiblingNavItem("الصندوق", Screen.FUND_INFO.title, Screen.FUND_INFO.icon, Screen.FUND_INFO, AppRoute.FundInfoRoute),
+        SiblingNavItem("المواعيد", Screen.SCHEDULER.title, Screen.SCHEDULER.icon, Screen.SCHEDULER, AppRoute.SchedulerRoute),
+        SiblingNavItem("الرسائل", Screen.MESSAGES.title, Screen.MESSAGES.icon, Screen.MESSAGES, AppRoute.MessagesRoute),
+        SiblingNavItem("الرقابة", Screen.AUDIT.title, Screen.AUDIT.icon, Screen.AUDIT, AppRoute.AuditRoute),
+        SiblingNavItem("المستخدمون", Screen.USERS.title, Screen.USERS.icon, Screen.USERS, AppRoute.UsersRoute),
+        SiblingNavItem("الإعدادات", Screen.SETTINGS.title, Screen.SETTINGS.icon, Screen.SETTINGS, AppRoute.SettingsRoute())
+    )
+)
+
+fun NavDestination?.resolveContextGroup(): HubContextGroup? {
+    if (this == null || isTopLevelHub()) return null
+    return when {
+        hasRoute<AppRoute.VouchersRoute>() ||
+            hasRoute<AppRoute.JournalRoute>() ||
+            hasRoute<AppRoute.AccountsRoute>() ||
+            hasRoute<AppRoute.TreasuryRoute>() ||
+            hasRoute<AppRoute.BudgetsRoute>() ||
+            hasRoute<AppRoute.FinancialReportsRoute>() ||
+            hasRoute<AppRoute.ReportsRoute>() -> financeSiblings
+
+        hasRoute<AppRoute.MembersRoute>() ||
+            hasRoute<AppRoute.SubscriptionsRoute>() ||
+            hasRoute<AppRoute.DonorsRoute>() -> membersSiblings
+
+        hasRoute<AppRoute.AidsRoute>() ||
+            hasRoute<AppRoute.BeneficiariesRoute>() ||
+            hasRoute<AppRoute.PeriodicAidsRoute>() ||
+            hasRoute<AppRoute.InKindRoute>() ||
+            hasRoute<AppRoute.CampaignsRoute>() -> aidsSiblings
+
+        hasRoute<AppRoute.FundInfoRoute>() ||
+            hasRoute<AppRoute.SchedulerRoute>() ||
+            hasRoute<AppRoute.MessagesRoute>() ||
+            hasRoute<AppRoute.AuditRoute>() ||
+            hasRoute<AppRoute.UsersRoute>() ||
+            hasRoute<AppRoute.SettingsRoute>() -> adminSiblings
+
+        else -> null
     }
 }

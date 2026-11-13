@@ -6,14 +6,20 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.fund.data.FundRepository
+import com.example.fund.model.AidStatus
 import com.example.fund.ui.navigation.BottomHub
 import com.example.ui.theme.*
 
@@ -22,6 +28,11 @@ fun AppBottomBar(
     activeHub: BottomHub,
     onSelectHub: (BottomHub) -> Unit
 ) {
+    val repo = FundRepository.getInstance()
+    val aidRequests by repo.aidRequests.collectAsStateWithLifecycle()
+    val syncQueue by repo.syncQueue.collectAsStateWithLifecycle()
+    val pendingAidsCount = aidRequests.count { it.status == AidStatus.IN_REVIEW }
+
     NavigationBar(
         containerColor = MaterialTheme.colorScheme.surface,
         tonalElevation = 8.dp,
@@ -29,14 +40,33 @@ fun AppBottomBar(
     ) {
         BottomHub.entries.forEach { hub ->
             val selected = activeHub == hub
+            val badgeCount = when (hub) {
+                BottomHub.AIDS -> pendingAidsCount
+                BottomHub.FINANCE -> syncQueue.size
+                else -> 0
+            }
+
             NavigationBarItem(
                 selected = selected,
                 onClick = { onSelectHub(hub) },
                 icon = {
-                    Icon(
-                        imageVector = hub.icon,
-                        contentDescription = hub.title
-                    )
+                    BadgedBox(
+                        badge = {
+                            if (badgeCount > 0) {
+                                Badge(
+                                    containerColor = if (hub == BottomHub.AIDS) StatusPending else StatusDanger,
+                                    contentColor = Color.White
+                                ) {
+                                    Text(if (badgeCount > 9) "9+" else "$badgeCount", fontSize = 9.sp)
+                                }
+                            }
+                        }
+                    ) {
+                        Icon(
+                            imageVector = hub.icon,
+                            contentDescription = hub.title
+                        )
+                    }
                 },
                 label = {
                     Text(
@@ -63,19 +93,60 @@ fun AppNavigationRail(
     activeHub: BottomHub,
     onSelectHub: (BottomHub) -> Unit,
     onOpenQuickScanner: () -> Unit,
+    onOpenGlobalSearch: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val repo = FundRepository.getInstance()
+    val aidRequests by repo.aidRequests.collectAsStateWithLifecycle()
+    val syncQueue by repo.syncQueue.collectAsStateWithLifecycle()
+    val pendingAidsCount = aidRequests.count { it.status == AidStatus.IN_REVIEW }
+
     NavigationRail(
         containerColor = MaterialTheme.colorScheme.surface,
+        header = {
+            IconButton(
+                onClick = onOpenGlobalSearch,
+                modifier = Modifier
+                    .padding(top = 8.dp)
+                    .minimumInteractiveComponentSize()
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Search,
+                    contentDescription = "البحث والتنقل السريع",
+                    tint = FundPrimary
+                )
+            }
+        },
         modifier = modifier
     ) {
-        Spacer(modifier = Modifier.weight(0.2f))
+        Spacer(modifier = Modifier.weight(0.15f))
         BottomHub.entries.forEach { hub ->
             val selected = activeHub == hub
+            val badgeCount = when (hub) {
+                BottomHub.AIDS -> pendingAidsCount
+                BottomHub.FINANCE -> syncQueue.size
+                else -> 0
+            }
+
             NavigationRailItem(
                 selected = selected,
                 onClick = { onSelectHub(hub) },
-                icon = { Icon(hub.icon, contentDescription = hub.title) },
+                icon = {
+                    BadgedBox(
+                        badge = {
+                            if (badgeCount > 0) {
+                                Badge(
+                                    containerColor = if (hub == BottomHub.AIDS) StatusPending else StatusDanger,
+                                    contentColor = Color.White
+                                ) {
+                                    Text(if (badgeCount > 9) "9+" else "$badgeCount", fontSize = 9.sp)
+                                }
+                            }
+                        }
+                    ) {
+                        Icon(hub.icon, contentDescription = hub.title)
+                    }
+                },
                 label = {
                     Text(
                         text = hub.title,
@@ -96,7 +167,7 @@ fun AppNavigationRail(
         FloatingActionButton(
             onClick = onOpenQuickScanner,
             containerColor = FundPrimary,
-            contentColor = androidx.compose.ui.graphics.Color.White,
+            contentColor = Color.White,
             modifier = Modifier.padding(bottom = 16.dp)
         ) {
             Icon(

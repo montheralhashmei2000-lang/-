@@ -413,7 +413,7 @@ private fun JournalEntryCardItem(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(FundLightSurfaceSecondary, RoundedCornerShape(8.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
                     .padding(8.dp)
             ) {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -421,7 +421,7 @@ private fun JournalEntryCardItem(
                     Text("مدين (له)", fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                     Text("دائن (منه)", fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                 }
-                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = Color(0xFFD8E4D2))
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
 
                 entry.lines.forEach { line ->
                     Row(

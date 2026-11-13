@@ -92,10 +92,14 @@ class MemberRepository(
         referenceNo: String,
         notes: String
     ): Subscription {
-        val member = _members.value.find { it.id == memberId }!!
+        val member = requireNotNull(_members.value.find { it.id == memberId }) {
+            "لم يتم العثور على العضو المطلوب ($memberId)"
+        }
         val rate = accountingRepository.currencyRates.value[currency] ?: currency.defaultRate
         val amountYer = amountOriginal * rate
-        val receiptNo = "SUB-${Calendar.getInstance().get(Calendar.YEAR)}-%03d".format(_subscriptions.value.size + 1)
+        val maxSuffix = _subscriptions.value.mapNotNull { it.receiptNo.substringAfterLast("-").toIntOrNull() }.maxOrNull() ?: 0
+        val nextNum = maxOf(maxSuffix, _subscriptions.value.size) + 1
+        val receiptNo = "SUB-${Calendar.getInstance().get(Calendar.YEAR)}-%03d".format(nextNum)
         val today = nowStr()
 
         val sub = Subscription(

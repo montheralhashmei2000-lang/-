@@ -18,34 +18,53 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.fund.data.FundRepository
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.fund.model.Member
 import com.example.fund.model.UserRole
+import com.example.fund.ui.components.FundEmptyState
 import com.example.fund.ui.components.MemberCardDialog
+import com.example.fund.ui.components.SensitiveActionConfirmDialog
+import com.example.fund.ui.viewmodel.MembersViewModel
 import com.example.ui.theme.*
 import java.text.SimpleDateFormat
 import java.util.*
 
 @Composable
 fun MembersScreen(
-    onOpenQrCheck: () -> Unit
+    onOpenQrCheck: () -> Unit,
+    initialStatusFilter: String = "الكل",
+    highlightMemberId: String = "",
+    membersViewModel: MembersViewModel = viewModel()
 ) {
     val context = LocalContext.current
-    val repo = FundRepository.getInstance()
-    val members by repo.members.collectAsState()
-    val regions by repo.regions.collectAsState()
-    val currentUser by repo.currentUser.collectAsState()
+    val members by membersViewModel.members.collectAsStateWithLifecycle()
+    val regions by membersViewModel.regions.collectAsStateWithLifecycle()
+    val currentUser by membersViewModel.currentUser.collectAsStateWithLifecycle()
     val canEdit = currentUser.role != UserRole.VIEWER
 
     var searchQuery by remember { mutableStateOf("") }
-    var selectedStatusFilter by remember { mutableStateOf("الكل") }
+    var selectedStatusFilter by remember(initialStatusFilter) { mutableStateOf(initialStatusFilter) }
     var selectedRegionFilter by remember { mutableStateOf("كل المناطق") }
     var selectedMemberForCard by remember { mutableStateOf<Member?>(null) }
     var memberToEdit by remember { mutableStateOf<Member?>(null) }
+    var memberToToggleStatus by remember { mutableStateOf<Member?>(null) }
     var showAddDialog by remember { mutableStateOf(false) }
+    var handledHighlightId by remember { mutableStateOf("") }
+
+    LaunchedEffect(highlightMemberId, members) {
+        if (highlightMemberId.isNotBlank() && highlightMemberId != handledHighlightId) {
+            val found = members.find { it.id == highlightMemberId }
+            if (found != null) {
+                selectedMemberForCard = found
+                handledHighlightId = highlightMemberId
+            }
+        }
+    }
 
     val filteredMembers = members.filter { m ->
         val matchesSearch = m.fullName.contains(searchQuery, ignoreCase = true) ||
@@ -90,7 +109,10 @@ fun MembersScreen(
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                IconButton(onClick = onOpenQrCheck) {
+                IconButton(
+                    onClick = onOpenQrCheck,
+                    modifier = Modifier.testTag("members_qr_button")
+                ) {
                     Icon(Icons.Default.QrCodeScanner, contentDescription = "مسح QR", tint = FundGoldDark)
                 }
 
@@ -98,12 +120,34 @@ fun MembersScreen(
                     Button(
                         onClick = { showAddDialog = true },
                         colors = ButtonDefaults.buttonColors(containerColor = FundPrimary),
-                        shape = RoundedCornerShape(10.dp)
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.testTag("add_member_button")
                     ) {
                         Icon(Icons.Default.PersonAdd, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
                         Text("عضو جديد", fontSize = 12.sp)
                     }
+                }
+            }
+        }
+
+        if (!canEdit) {
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f),
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(Icons.Default.Visibility, contentDescription = null, tint = FundPrimary, modifier = Modifier.size(16.dp))
+                    Text(
+                        "وضع القراءة فقط: دور (${currentUser.role.title}) يتيح عرض السجلات وبطاقات العضوية دون التعديل.",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }
@@ -160,19 +204,42 @@ fun MembersScreen(
             }
         }
 
-        // Members List
-        LazyColumn(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            items(filteredMembers, key = { it.id }) { member ->
-                MemberCardItem(
-                    member = member,
-                    canEdit = canEdit,
-                    onViewCard = { selectedMemberForCard = member },
-                    onEditMember = { memberToEdit = member },
-                    onToggleStatus = { repo.toggleMemberStatus(member.id) }
+        // Members List or Empty State
+        if (filteredMembers.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                contentAlignment = Alignment.TopCenter
+            ) {
+                FundEmptyState(
+                    icon = Icons.Default.PeopleOutline,
+                    title = "لا يوجد أعضاء مطابقون",
+                    subtitle = "لم يتم العثور على أعضاء مطابقين لعبارة البحث أو فلاتر المنطقة والحالة الحالية.",
+                    actionLabel = if (canEdit) "إضافة عضو جديد" else null,
+                    onAction = if (canEdit) ({ showAddDialog = true }) else null,
+                    secondaryActionLabel = "إعادة ضبط الفلاتر",
+                    onSecondaryAction = {
+                        searchQuery = ""
+                        selectedStatusFilter = "الكل"
+                        selectedRegionFilter = "كل المناطق"
+                    }
                 )
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                items(filteredMembers, key = { it.id }) { member ->
+                    MemberCardItem(
+                        member = member,
+                        canEdit = canEdit,
+                        onViewCard = { selectedMemberForCard = member },
+                        onEditMember = { memberToEdit = member },
+                        onToggleStatus = { memberToToggleStatus = member }
+                    )
+                }
             }
         }
     }
@@ -189,10 +256,11 @@ fun MembersScreen(
     memberToEdit?.let { member ->
         MemberFormDialog(
             initialMember = member,
+            membersViewModel = membersViewModel,
             onDismiss = { memberToEdit = null },
             onSave = { updated ->
-                repo.addVillageByRegionName(updated.region, updated.village)
-                repo.updateMember(updated)
+                membersViewModel.addVillageByRegionName(updated.region, updated.village)
+                membersViewModel.updateMember(updated)
                 Toast.makeText(context, "تم تحديث بيانات العضو بنجاح", Toast.LENGTH_SHORT).show()
                 memberToEdit = null
             }
@@ -203,13 +271,40 @@ fun MembersScreen(
     if (showAddDialog) {
         MemberFormDialog(
             initialMember = null,
+            membersViewModel = membersViewModel,
             onDismiss = { showAddDialog = false },
             onSave = { newMember ->
-                repo.addVillageByRegionName(newMember.region, newMember.village)
-                repo.addMember(newMember)
+                membersViewModel.addVillageByRegionName(newMember.region, newMember.village)
+                membersViewModel.addMember(newMember)
                 Toast.makeText(context, "تم تسجيل العضو الجديد بنجاح", Toast.LENGTH_SHORT).show()
                 showAddDialog = false
             }
+        )
+    }
+
+    // Confirm Suspend / Activate Member Dialog
+    memberToToggleStatus?.let { target ->
+        val willSuspend = target.status == "نشط"
+        SensitiveActionConfirmDialog(
+            title = if (willSuspend) "تأكيد تعليق العضوية" else "تأكيد إعادة تفعيل العضوية",
+            message = if (willSuspend) {
+                "هل أنت متأكد من تعليق عضوية (${target.fullName} - ${target.memberNo})؟ لن يتمكن من الاستفادة من الاعتمادات الجديدة حتى إعادة التفعيل."
+            } else {
+                "هل تريد إعادة تفعيل عضوية (${target.fullName} - ${target.memberNo}) ليعود عضواً نشطاً في الصندوق؟"
+            },
+            confirmText = if (willSuspend) "تأكيد التعليق" else "تفعيل العضوية",
+            confirmColor = if (willSuspend) StatusDanger else StatusSuccess,
+            icon = if (willSuspend) Icons.Default.PersonOff else Icons.Default.HowToReg,
+            onConfirm = {
+                membersViewModel.toggleMemberStatus(target.id)
+                Toast.makeText(
+                    context,
+                    if (willSuspend) "تم تعليق العضوية" else "تم إعادة تفعيل العضوية بنجاح",
+                    Toast.LENGTH_SHORT
+                ).show()
+                memberToToggleStatus = null
+            },
+            onDismiss = { memberToToggleStatus = null }
         )
     }
 }
@@ -302,13 +397,15 @@ private fun MemberCardItem(
                     text = "إجمالي السداد: %,d ﷼".format(member.totalPaidYer.toLong()),
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
-                    color = FundPrimary
+                    color = FundPrimary,
+                    style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
                 )
                 Text(
                     text = "المستحق: %,d ﷼".format(member.dueBalanceYer.toLong()),
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
-                    color = if (member.dueBalanceYer > 0) StatusDanger else StatusSuccess
+                    color = if (member.dueBalanceYer > 0) StatusDanger else StatusSuccess,
+                    style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
                 )
             }
 
@@ -356,13 +453,13 @@ private fun MemberCardItem(
 @Composable
 private fun MemberFormDialog(
     initialMember: Member?,
+    membersViewModel: MembersViewModel,
     onDismiss: () -> Unit,
     onSave: (Member) -> Unit
 ) {
     val context = LocalContext.current
-    val repo = FundRepository.getInstance()
-    val regions by repo.regions.collectAsState()
-    val settings by repo.appSettings.collectAsState()
+    val regions by membersViewModel.regions.collectAsStateWithLifecycle()
+    val settings by membersViewModel.appSettings.collectAsStateWithLifecycle()
 
     val isEditing = initialMember != null
     var fullName by remember { mutableStateOf(initialMember?.fullName ?: "") }
@@ -458,7 +555,7 @@ private fun MemberFormDialog(
                             onClick = {
                                 val r = newRegionInput.trim()
                                 if (r.isNotBlank()) {
-                                    repo.addRegion(r)
+                                    membersViewModel.addVillageByRegionName(r, "")
                                     selectedRegion = r
                                     selectedVillage = ""
                                     newRegionInput = ""

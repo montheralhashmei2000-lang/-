@@ -24,32 +24,36 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.fund.data.FundRepository
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.fund.model.RegionGroup
 import com.example.fund.ui.components.FundLogoImage
 import com.example.fund.ui.components.encodeImageUriToBase64
+import com.example.fund.ui.viewmodel.SettingsViewModel
 import com.example.ui.theme.*
 
 @Composable
-fun SettingsScreen() {
-    val repo = FundRepository.getInstance()
-    val fundInfo by repo.fundInfo.collectAsState()
-    val regions by repo.regions.collectAsState()
-    val members by repo.members.collectAsState()
-    val beneficiaries by repo.beneficiaries.collectAsState()
-    val appSettings by repo.appSettings.collectAsState()
-    val printSettings by repo.printSettings.collectAsState()
-    val vouchers by repo.vouchers.collectAsState()
-    val rates by repo.currencyRates.collectAsState()
-    val isDark by repo.isDarkMode.collectAsState()
-    val fontScale by repo.fontScale.collectAsState()
-    val serverConfig by repo.serverConfig.collectAsState()
-    val autoSync by repo.autoSyncOnConnect.collectAsState()
-    val isOnline by repo.isOnline.collectAsState()
-    val syncQueue by repo.syncQueue.collectAsState()
+fun SettingsScreen(
+    initialTab: Int = 0,
+    settingsViewModel: SettingsViewModel = viewModel()
+) {
+    val fundInfo by settingsViewModel.fundInfo.collectAsStateWithLifecycle()
+    val regions by settingsViewModel.regions.collectAsStateWithLifecycle()
+    val members by settingsViewModel.members.collectAsStateWithLifecycle()
+    val beneficiaries by settingsViewModel.beneficiaries.collectAsStateWithLifecycle()
+    val appSettings by settingsViewModel.appSettings.collectAsStateWithLifecycle()
+    val printSettings by settingsViewModel.printSettings.collectAsStateWithLifecycle()
+    val vouchers by settingsViewModel.vouchers.collectAsStateWithLifecycle()
+    val rates by settingsViewModel.currencyRates.collectAsStateWithLifecycle()
+    val isDark by settingsViewModel.isDarkMode.collectAsStateWithLifecycle()
+    val fontScale by settingsViewModel.fontScale.collectAsStateWithLifecycle()
+    val serverConfig by settingsViewModel.serverConfig.collectAsStateWithLifecycle()
+    val autoSync by settingsViewModel.autoSyncOnConnect.collectAsStateWithLifecycle()
+    val isOnline by settingsViewModel.isOnline.collectAsStateWithLifecycle()
+    val syncQueue by settingsViewModel.syncQueue.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
-    var selectedTab by remember { mutableIntStateOf(0) }
+    var selectedTab by remember(initialTab) { mutableIntStateOf(initialTab.coerceIn(0, 5)) }
     val tabTitles = listOf(
         "المظهر والهوية",
         "المناطق والقرى",
@@ -113,14 +117,14 @@ fun SettingsScreen() {
                 0 -> GeneralAndIdentityTab(
                     isDark = isDark,
                     fontScale = fontScale,
-                    onDarkChange = { repo.setDarkModePreference(it) },
-                    onFontScaleChange = { repo.setFontScalePreference(it) },
+                    onDarkChange = { settingsViewModel.setDarkModePreference(it) },
+                    onFontScaleChange = { settingsViewModel.setFontScalePreference(it) },
                     onLogoBase64Selected = { base64 ->
-                        repo.updateFundLogo(base64)
+                        settingsViewModel.updateFundLogo(base64)
                         Toast.makeText(context, "تم تحديث شعار الصندوق بنجاح", Toast.LENGTH_SHORT).show()
                     },
                     onSaveFundInfo = { updated ->
-                        repo.updateFundInfo(updated)
+                        settingsViewModel.updateFundInfo(updated)
                         Toast.makeText(context, "تم حفظ البيانات الرسمية للصندوق", Toast.LENGTH_SHORT).show()
                     },
                     fundInfo = fundInfo
@@ -131,25 +135,25 @@ fun SettingsScreen() {
                     membersCountByRegion = { rName -> members.count { it.region == rName } },
                     beneficiariesCountByRegion = { rName -> beneficiaries.count { it.region == rName } },
                     onAddRegion = { name ->
-                        if (repo.addRegion(name)) {
+                        if (settingsViewModel.addRegion(name)) {
                             Toast.makeText(context, "تمت إضافة المنطقة: $name", Toast.LENGTH_SHORT).show()
                         } else {
                             Toast.makeText(context, "اسم المنطقة موجود مسبقاً أو فارغ", Toast.LENGTH_SHORT).show()
                         }
                     },
                     onDeleteRegion = { reg ->
-                        repo.deleteRegion(reg.id)
+                        settingsViewModel.deleteRegion(reg.id)
                         Toast.makeText(context, "تم حذف المنطقة ${reg.name}", Toast.LENGTH_SHORT).show()
                     },
                     onAddVillage = { regId, vName ->
-                        if (repo.addVillageToRegion(regId, vName)) {
+                        if (settingsViewModel.addVillageToRegion(regId, vName)) {
                             Toast.makeText(context, "تمت إضافة القرية ($vName)", Toast.LENGTH_SHORT).show()
                         } else {
                             Toast.makeText(context, "القرية موجودة مسبقاً أو فارغة", Toast.LENGTH_SHORT).show()
                         }
                     },
                     onRemoveVillage = { regId, vName ->
-                        repo.removeVillageFromRegion(regId, vName)
+                        settingsViewModel.removeVillageFromRegion(regId, vName)
                     }
                 )
 
@@ -157,8 +161,8 @@ fun SettingsScreen() {
                     appSettings = appSettings,
                     maxAidCeilingYer = fundInfo.maxAidCeilingYer,
                     onSave = { newSettings, newCeiling ->
-                        repo.updateAppSettings(newSettings)
-                        repo.updateFundInfo(fundInfo.copy(maxAidCeilingYer = newCeiling))
+                        settingsViewModel.updateAppSettings(newSettings)
+                        settingsViewModel.updateFundInfo(fundInfo.copy(maxAidCeilingYer = newCeiling))
                         Toast.makeText(context, "تم حفظ إعدادات الأعضاء والمساعدات والمستودع", Toast.LENGTH_SHORT).show()
                     }
                 )
@@ -167,12 +171,12 @@ fun SettingsScreen() {
                     rates = rates,
                     appSettings = appSettings,
                     onSaveRates = { usd, sar ->
-                        repo.updateCurrencyRate(com.example.fund.model.CurrencyCode.USD, usd)
-                        repo.updateCurrencyRate(com.example.fund.model.CurrencyCode.SAR, sar)
+                        settingsViewModel.updateCurrencyRate(com.example.fund.model.CurrencyCode.USD, usd)
+                        settingsViewModel.updateCurrencyRate(com.example.fund.model.CurrencyCode.SAR, sar)
                         Toast.makeText(context, "تم تحديث وحفظ أسعار الصرف", Toast.LENGTH_SHORT).show()
                     },
                     onSaveSettings = { newSettings ->
-                        repo.updateAppSettings(newSettings)
+                        settingsViewModel.updateAppSettings(newSettings)
                         Toast.makeText(context, "تم حفظ الإعدادات المالية والموازنات", Toast.LENGTH_SHORT).show()
                     }
                 )
@@ -182,17 +186,17 @@ fun SettingsScreen() {
                     printSettings = printSettings,
                     sampleVoucher = vouchers.firstOrNull(),
                     onSave = { updated ->
-                        repo.updatePrintSettings(updated)
+                        settingsViewModel.updatePrintSettings(updated)
                         Toast.makeText(context, "تم حفظ إعدادات الطباعة والسندات بنجاح", Toast.LENGTH_SHORT).show()
                     },
                     onResetDefault = {
-                        repo.resetPrintSettingsToDefault()
+                        settingsViewModel.resetPrintSettingsToDefault()
                         Toast.makeText(context, "تمت استعادة القالب الافتراضي للطباعة", Toast.LENGTH_SHORT).show()
                     }
                 )
 
                 5 -> SystemServerBackupTab(
-                    repo = repo,
+                    settingsViewModel = settingsViewModel,
                     fundInfo = fundInfo,
                     appSettings = appSettings,
                     serverConfig = serverConfig,

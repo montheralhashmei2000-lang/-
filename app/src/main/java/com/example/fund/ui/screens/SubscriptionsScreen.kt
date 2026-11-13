@@ -17,28 +17,44 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.fund.data.FundRepository
 import com.example.fund.model.CurrencyCode
 import com.example.fund.model.Member
 import com.example.fund.model.PaymentMethod
 import com.example.fund.model.UserRole
+import com.example.fund.ui.components.FundEmptyState
 import com.example.fund.ui.components.MoneyInput
 import com.example.ui.theme.*
 
 @Composable
-fun SubscriptionsScreen() {
+fun SubscriptionsScreen(
+    initialSearch: String = "",
+    preselectedMemberId: String = ""
+) {
     val context = LocalContext.current
     val repo = FundRepository.getInstance()
-    val subscriptions by repo.subscriptions.collectAsState()
-    val members by repo.members.collectAsState()
-    val currentUser by repo.currentUser.collectAsState()
+    val subscriptions by repo.subscriptions.collectAsStateWithLifecycle()
+    val members by repo.members.collectAsStateWithLifecycle()
+    val currentUser by repo.currentUser.collectAsStateWithLifecycle()
     val canCollect = currentUser.role != UserRole.VIEWER
 
     var showCollectDialog by remember { mutableStateOf(false) }
-    var searchQuery by remember { mutableStateOf("") }
+    var searchQuery by remember(initialSearch) { mutableStateOf(initialSearch) }
+    var handledPreselect by remember { mutableStateOf("") }
+
+    LaunchedEffect(preselectedMemberId, members, canCollect) {
+        if (preselectedMemberId.isNotBlank() && preselectedMemberId != handledPreselect && canCollect) {
+            if (members.any { it.id == preselectedMemberId }) {
+                handledPreselect = preselectedMemberId
+                showCollectDialog = true
+            }
+        }
+    }
 
     val totalCollected = subscriptions.sumOf { it.amountYer }
 
@@ -69,15 +85,27 @@ fun SubscriptionsScreen() {
             ) {
                 Column {
                     Text("إجمالي تحصيلات الاشتراكات المسجلة", color = Color.White.copy(alpha = 0.85f), fontSize = 12.sp)
-                    Text("%,d ﷼".format(totalCollected.toLong()), color = Color.White, fontWeight = FontWeight.Black, fontSize = 20.sp)
-                    Text("عدد العمليات: ${subscriptions.size} اشتراك", color = FundGoldLight, fontSize = 11.sp)
+                    Text(
+                        "%,d ﷼".format(totalCollected.toLong()),
+                        color = Color.White,
+                        fontWeight = FontWeight.Black,
+                        fontSize = 20.sp,
+                        style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
+                    )
+                    Text(
+                        "عدد العمليات: ${subscriptions.size} اشتراك",
+                        color = FundGoldLight,
+                        fontSize = 11.sp,
+                        style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
+                    )
                 }
 
                 if (canCollect) {
                     Button(
                         onClick = { showCollectDialog = true },
                         colors = ButtonDefaults.buttonColors(containerColor = FundGold),
-                        shape = RoundedCornerShape(10.dp)
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.testTag("collect_subscription_button")
                     ) {
                         Icon(Icons.Default.Add, contentDescription = null, tint = Color.Black)
                         Spacer(modifier = Modifier.width(4.dp))
@@ -98,51 +126,72 @@ fun SubscriptionsScreen() {
             shape = RoundedCornerShape(12.dp)
         )
 
-        // Subscriptions List
-        LazyColumn(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            items(filteredSubs, key = { it.id }) { sub ->
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    shape = RoundedCornerShape(12.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(sub.memberName, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                            Text(
-                                "%,d ﷼".format(sub.amountYer.toLong()),
-                                fontWeight = FontWeight.Bold,
-                                color = FundPrimary,
-                                fontSize = 14.sp
-                            )
-                        }
+        // Subscriptions List or Empty State
+        if (filteredSubs.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                contentAlignment = Alignment.TopCenter
+            ) {
+                FundEmptyState(
+                    icon = Icons.Default.Payments,
+                    title = "لا توجد تحصيلات اشتراكات مطابقة",
+                    subtitle = "لم يتم العثور على إيصالات تحصيل مطابقة لبحثك، يمكنك مسح البحث أو تسجيل تحصيل جديد.",
+                    actionLabel = if (canCollect) "تحصيل اشتراك جديد" else null,
+                    onAction = if (canCollect) ({ showCollectDialog = true }) else null,
+                    secondaryActionLabel = if (searchQuery.isNotBlank()) "مسح البحث" else null,
+                    onSecondaryAction = if (searchQuery.isNotBlank()) ({ searchQuery = "" }) else null
+                )
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(filteredSubs, key = { it.id }) { sub ->
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        shape = RoundedCornerShape(12.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(sub.memberName, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                Text(
+                                    "%,d ﷼".format(sub.amountYer.toLong()),
+                                    fontWeight = FontWeight.Bold,
+                                    color = FundPrimary,
+                                    fontSize = 14.sp,
+                                    style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
+                                )
+                            }
 
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text("إيصال: ${sub.receiptNo} | شهر: ${sub.monthYear}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(sub.paymentMethod.title, fontSize = 11.sp, color = FundGoldDark)
-                        }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("إيصال: ${sub.receiptNo} | شهر: ${sub.monthYear}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(sub.paymentMethod.title, fontSize = 11.sp, color = FundGoldDark)
+                            }
 
-                        if (sub.currency != CurrencyCode.YER) {
-                            Text(
-                                "أصل المبلغ: ${sub.amountOriginal} ${sub.currency.name} (سعر الصرف: %,.0f)".format(sub.exchangeRate),
-                                fontSize = 10.sp,
-                                color = Color.Gray
-                            )
-                        }
+                            if (sub.currency != CurrencyCode.YER) {
+                                Text(
+                                    "أصل المبلغ: ${sub.amountOriginal} ${sub.currency.name} (سعر الصرف: %,.0f)".format(sub.exchangeRate),
+                                    fontSize = 10.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
+                                )
+                            }
 
-                        if (sub.notes.isNotEmpty()) {
-                            Text("ملاحظة: ${sub.notes}", fontSize = 11.sp, color = Color.DarkGray)
+                            if (sub.notes.isNotEmpty()) {
+                                Text("ملاحظة: ${sub.notes}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                         }
                     }
                 }
@@ -154,6 +203,7 @@ fun SubscriptionsScreen() {
     if (showCollectDialog) {
         CollectSubscriptionDialog(
             members = members,
+            preselectedMemberId = preselectedMemberId,
             onDismiss = { showCollectDialog = false },
             onCollect = { memberId, amount, curr, month, method, ref, notes ->
                 repo.addSubscription(
@@ -176,13 +226,17 @@ fun SubscriptionsScreen() {
 @Composable
 private fun CollectSubscriptionDialog(
     members: List<Member>,
+    preselectedMemberId: String = "",
     onDismiss: () -> Unit,
     onCollect: (String, Double, CurrencyCode, String, PaymentMethod, String, String) -> Unit
 ) {
-    var selectedMember by remember { mutableStateOf(members.firstOrNull()) }
+    val context = LocalContext.current
+    var selectedMember by remember(preselectedMemberId, members) {
+        mutableStateOf(members.find { it.id == preselectedMemberId } ?: members.firstOrNull())
+    }
     var memberDropdownExpanded by remember { mutableStateOf(false) }
 
-    val defaultFee = FundRepository.getInstance().appSettings.collectAsState().value.monthlySubscriptionFeeYer.toLong().toString()
+    val defaultFee = FundRepository.getInstance().appSettings.collectAsStateWithLifecycle().value.monthlySubscriptionFeeYer.toLong().toString()
     var amountStr by remember(defaultFee) { mutableStateOf(defaultFee) }
     var selectedCurrency by remember { mutableStateOf(CurrencyCode.YER) }
     var monthYear by remember { mutableStateOf("2026-11") }
@@ -281,9 +335,15 @@ private fun CollectSubscriptionDialog(
                 onClick = {
                     val amount = amountStr.toDoubleOrNull() ?: 0.0
                     val m = selectedMember
-                    if (m != null && amount > 0) {
-                        onCollect(m.id, amount, selectedCurrency, monthYear, selectedMethod, refNo, notes)
+                    if (m == null) {
+                        Toast.makeText(context, "يرجى اختيار العضو أولاً", Toast.LENGTH_SHORT).show()
+                        return@Button
                     }
+                    if (amount <= 0.0) {
+                        Toast.makeText(context, "يرجى إدخال مبلغ صحيح أكبر من الصفر", Toast.LENGTH_SHORT).show()
+                        return@Button
+                    }
+                    onCollect(m.id, amount, selectedCurrency, monthYear, selectedMethod, refNo, notes)
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = FundPrimary)
             ) {

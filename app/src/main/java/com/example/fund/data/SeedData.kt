@@ -513,12 +513,48 @@ object SeedData {
         AuditLog("al4", "2026-10-18 09:45", "المحاسب (accountant)", "محاسب", "صرف مساعدة", "صرف مساعدة جراحية للأخ منصور علي ثابت سند V-2026-003")
     )
 
-    val users = listOf(
-        AppUser("u1", "admin", "المدير العام - عبدالحافظ المعمري", UserRole.ADMIN, true, "2026-11-07 18:22"),
-        AppUser("u2", "accountant", "أمين الصندوق والمحاسب - صالح نصر", UserRole.ACCOUNTANT, true, "2026-11-07 16:10"),
-        AppUser("u3", "reviewer", "المراجع القانوني - فهد النعماني", UserRole.REVIEWER, true, "2026-11-06 12:00"),
-        AppUser("u4", "viewer", "المراقب الميداني - قاسم الناصري", UserRole.VIEWER, true, "2026-11-05 09:30")
-    )
+    val defaultDemoPassword: String = "123456"
+
+    val users by lazy {
+        listOf(
+            AppUser(
+                id = "u1",
+                username = "admin",
+                fullName = "المدير العام - عبدالحافظ المعمري",
+                role = UserRole.ADMIN,
+                isActive = true,
+                lastLogin = "2026-11-07 18:22",
+                passwordHash = com.example.fund.security.SecurityUtils.hashPassword(defaultDemoPassword)
+            ),
+            AppUser(
+                id = "u2",
+                username = "accountant",
+                fullName = "أمين الصندوق والمحاسب - صالح نصر",
+                role = UserRole.ACCOUNTANT,
+                isActive = true,
+                lastLogin = "2026-11-07 16:10",
+                passwordHash = com.example.fund.security.SecurityUtils.hashPassword(defaultDemoPassword)
+            ),
+            AppUser(
+                id = "u3",
+                username = "reviewer",
+                fullName = "المراجع القانوني - فهد النعماني",
+                role = UserRole.REVIEWER,
+                isActive = true,
+                lastLogin = "2026-11-06 12:00",
+                passwordHash = com.example.fund.security.SecurityUtils.hashPassword(defaultDemoPassword)
+            ),
+            AppUser(
+                id = "u4",
+                username = "viewer",
+                fullName = "المراقب الميداني - قاسم الناصري",
+                role = UserRole.VIEWER,
+                isActive = true,
+                lastLogin = "2026-11-05 09:30",
+                passwordHash = com.example.fund.security.SecurityUtils.hashPassword(defaultDemoPassword)
+            )
+        )
+    }
 
     val currencyRates = mutableMapOf(
         CurrencyCode.YER to 1.0,

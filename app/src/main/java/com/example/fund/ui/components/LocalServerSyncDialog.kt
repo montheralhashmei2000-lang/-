@@ -25,30 +25,32 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import com.example.fund.data.FundRepository
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.fund.ui.viewmodel.SyncViewModel
 import com.example.ui.theme.*
 
 @Composable
 fun LocalServerSyncDialog(
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    syncViewModel: SyncViewModel = viewModel()
 ) {
     val context = LocalContext.current
-    val repo = FundRepository.getInstance()
-    val isOnline by repo.isOnline.collectAsState()
-    val autoSync by repo.autoSyncOnConnect.collectAsState()
-    val isSyncing by repo.isSyncing.collectAsState()
-    val syncProgress by repo.syncProgress.collectAsState()
-    val syncStageMsg by repo.syncStageMessage.collectAsState()
-    val serverConfig by repo.serverConfig.collectAsState()
-    val syncQueue by repo.syncQueue.collectAsState()
-    val syncHistory by repo.syncHistory.collectAsState()
-    val lastSync by repo.lastSyncTimestamp.collectAsState()
+    val isOnline by syncViewModel.isOnline.collectAsStateWithLifecycle()
+    val autoSync by syncViewModel.autoSyncOnConnect.collectAsStateWithLifecycle()
+    val isSyncing by syncViewModel.isSyncing.collectAsStateWithLifecycle()
+    val syncProgress by syncViewModel.syncProgress.collectAsStateWithLifecycle()
+    val syncStageMsg by syncViewModel.syncStageMessage.collectAsStateWithLifecycle()
+    val serverConfig by syncViewModel.serverConfig.collectAsStateWithLifecycle()
+    val syncQueue by syncViewModel.syncQueue.collectAsStateWithLifecycle()
+    val syncHistory by syncViewModel.syncHistory.collectAsStateWithLifecycle()
+    val lastSync by syncViewModel.lastSyncTimestamp.collectAsStateWithLifecycle()
 
     var activeTab by remember { mutableIntStateOf(0) } // 0: طابور المزامنة, 1: سجل الدفعات, 2: إعداد الخادم المحلي
     var customHost by remember(serverConfig) { mutableStateOf(serverConfig.serverHost) }
     var customName by remember(serverConfig) { mutableStateOf(serverConfig.serverName) }
 
-    val totalRecords = repo.getTotalLocalRecordsCount()
+    val totalRecords = syncViewModel.getTotalLocalRecordsCount()
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -229,7 +231,7 @@ fun LocalServerSyncDialog(
                                     Switch(
                                         checked = isOnline,
                                         onCheckedChange = {
-                                            repo.toggleOnline()
+                                            syncViewModel.toggleOnline()
                                             val msg = if (!isOnline) "تم الاتصال بالشبكة ومزامنة العمليات التلقائية" else "تم التحويل للوضع المحلي (Offline)"
                                             Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                                         }
@@ -248,7 +250,7 @@ fun LocalServerSyncDialog(
                                 ) {
                                     Checkbox(
                                         checked = autoSync,
-                                        onCheckedChange = { repo.setAutoSyncOnConnect(it) }
+                                        onCheckedChange = { syncViewModel.setAutoSyncOnConnect(it) }
                                     )
                                     Text(
                                         "مزامنة تلقائية فور الاتصال",
@@ -266,7 +268,7 @@ fun LocalServerSyncDialog(
                             ) {
                                 OutlinedButton(
                                     onClick = {
-                                        repo.simulateOfflineFieldOperations()
+                                        syncViewModel.simulateOfflineFieldOperations()
                                         activeTab = 0
                                         Toast.makeText(
                                             context,
@@ -287,9 +289,9 @@ fun LocalServerSyncDialog(
                                 Button(
                                     onClick = {
                                         if (!isOnline) {
-                                            repo.toggleOnline() // Reconnects and syncs
+                                            syncViewModel.toggleOnline() // Reconnects and syncs
                                         }
-                                        repo.syncNow()
+                                        syncViewModel.syncNow()
                                         Toast.makeText(context, "تمت مزامنة كافة العمليات مع الخادم بنجاح ✔", Toast.LENGTH_SHORT).show()
                                     },
                                     colors = ButtonDefaults.buttonColors(containerColor = FundPrimary),
@@ -519,7 +521,7 @@ fun LocalServerSyncDialog(
                                             .clickable {
                                                 customName = pName
                                                 customHost = pHost
-                                                repo.updateServerNode(pName, pHost, ping)
+                                                syncViewModel.updateServerNode(pName, pHost, ping)
                                                 Toast.makeText(context, "تم التبديل إلى: $pName", Toast.LENGTH_SHORT).show()
                                             },
                                         colors = CardDefaults.cardColors(
@@ -547,7 +549,7 @@ fun LocalServerSyncDialog(
                                                 onClick = {
                                                     customName = pName
                                                     customHost = pHost
-                                                    repo.updateServerNode(pName, pHost, ping)
+                                                    syncViewModel.updateServerNode(pName, pHost, ping)
                                                 }
                                             )
                                         }
@@ -565,7 +567,7 @@ fun LocalServerSyncDialog(
                                 Button(
                                     onClick = {
                                         if (customHost.isNotBlank()) {
-                                            repo.updateServerNode(customName, customHost.trim(), 10)
+                                            syncViewModel.updateServerNode(customName, customHost.trim(), 10)
                                             Toast.makeText(context, "تم حفظ عنوان الخادم المحلي وفحص الاتصال بنجاح ✔", Toast.LENGTH_SHORT).show()
                                         }
                                     },

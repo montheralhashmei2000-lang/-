@@ -18,11 +18,11 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import com.example.fund.data.FundRepository
 import com.example.fund.model.AppSettings
 import com.example.fund.model.CurrencyCode
 import com.example.fund.model.FundInfo
 import com.example.fund.model.LocalServerConfig
+import com.example.fund.ui.viewmodel.SettingsViewModel
 import com.example.ui.theme.*
 
 @Composable
@@ -306,7 +306,7 @@ fun FinanceCurrenciesBudgetsTab(
 
 @Composable
 fun SystemServerBackupTab(
-    repo: FundRepository,
+    settingsViewModel: SettingsViewModel,
     fundInfo: FundInfo,
     appSettings: AppSettings,
     serverConfig: LocalServerConfig,
@@ -331,18 +331,18 @@ fun SystemServerBackupTab(
             Text("إعدادات الخادم المحلي والمزامنة", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = FundPrimary)
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text("حالة الاتصال بالخادم", fontSize = 13.sp)
-                Switch(checked = isOnline, onCheckedChange = { repo.toggleOnline() })
+                Switch(checked = isOnline, onCheckedChange = { settingsViewModel.toggleOnline() })
             }
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text("المزامنة التلقائية فور الاتصال بالشبكة", fontSize = 13.sp, modifier = Modifier.weight(1f))
-                Switch(checked = autoSync, onCheckedChange = { repo.setAutoSyncOnConnect(it) })
+                Switch(checked = autoSync, onCheckedChange = { settingsViewModel.setAutoSyncOnConnect(it) })
             }
             OutlinedTextField(value = serverName, onValueChange = { serverName = it }, label = { Text("اسم عقدة الخادم") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
             OutlinedTextField(value = serverHost, onValueChange = { serverHost = it }, label = { Text("عنوان الخادم والمنفذ (Host:Port)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(
                     onClick = {
-                        repo.updateServerNode(serverName.trim(), serverHost.trim())
+                        settingsViewModel.updateServerNode(serverName.trim(), serverHost.trim())
                         Toast.makeText(context, "تم تحديث إعدادات الخادم المحلي", Toast.LENGTH_SHORT).show()
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = FundPrimary)
@@ -350,7 +350,7 @@ fun SystemServerBackupTab(
                     Text("حفظ العقدة")
                 }
                 OutlinedButton(onClick = {
-                    repo.syncNow()
+                    settingsViewModel.syncNow()
                     Toast.makeText(context, "تم تشغيل المزامنة الفورية (المعلق: $pendingSyncCount)", Toast.LENGTH_SHORT).show()
                 }) {
                     Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -382,7 +382,7 @@ fun SystemServerBackupTab(
             }
             Button(
                 onClick = {
-                    repo.updateAppSettings(
+                    settingsViewModel.updateAppSettings(
                         appSettings.copy(
                             defaultEventLocation = eventLocation.ifBlank { "مقر الصندوق - قاعة الاجتماعات" },
                             strictRolePermissions = strictRoles,
@@ -405,14 +405,14 @@ fun SystemServerBackupTab(
         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("النسخ الاحتياطي الكامل واستعادة البيانات (JSON)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = FundPrimary)
             Text(
-                "إجمالي السجلات المحفوظة محلياً: ${repo.getTotalLocalRecordsCount()} سجل (تشمل الشعار والمناطق والقرى وجميع الإعدادات).",
+                "إجمالي السجلات المحفوظة محلياً: ${settingsViewModel.getTotalLocalRecordsCount()} سجل (تشمل الشعار والمناطق والقرى وجميع الإعدادات).",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(
                     onClick = {
-                        jsonBackupText = repo.exportDatabaseJson()
+                        jsonBackupText = settingsViewModel.exportDatabaseJson()
                         showBackupModal = true
                     },
                     modifier = Modifier.testTag("export_json_button")
@@ -423,7 +423,7 @@ fun SystemServerBackupTab(
                 }
                 OutlinedButton(
                     onClick = {
-                        val json = repo.exportDatabaseJson()
+                        val json = settingsViewModel.exportDatabaseJson()
                         val sendIntent = Intent(Intent.ACTION_SEND).apply {
                             type = "application/json"
                             putExtra(Intent.EXTRA_SUBJECT, "نسخة احتياطية - ${fundInfo.name}")
@@ -472,7 +472,7 @@ fun SystemServerBackupTab(
                         Spacer(Modifier.width(8.dp))
                         Button(
                             onClick = {
-                                val ok = repo.importDatabaseFromJson(jsonBackupText)
+                                val ok = settingsViewModel.importDatabaseFromJson(jsonBackupText)
                                 if (ok) {
                                     Toast.makeText(context, "تم فحص واستيراد النسخة الاحتياطية بنجاح", Toast.LENGTH_SHORT).show()
                                     showBackupModal = false
@@ -499,7 +499,7 @@ fun SystemServerBackupTab(
             confirmButton = {
                 Button(
                     onClick = {
-                        repo.resetToDefaultSeedData()
+                        settingsViewModel.resetToDefaultSeedData()
                         showResetConfirm = false
                         Toast.makeText(context, "تمت إعادة ضبط النظام بنجاح", Toast.LENGTH_SHORT).show()
                     },

@@ -1,6 +1,8 @@
 package com.example.fund.ui.screens
 
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
@@ -11,6 +13,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -22,46 +25,62 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.fund.data.FundRepository
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.fund.model.Account
 import com.example.fund.model.JournalEntry
 import com.example.fund.model.JournalLine
 import com.example.fund.model.UserRole
+import com.example.fund.ui.components.FundEmptyState
+import com.example.fund.ui.components.SensitiveActionConfirmDialog
+import com.example.fund.ui.viewmodel.AccountingViewModel
 import com.example.fund.util.OfficialPrintHelper
 import com.example.ui.theme.*
 import kotlin.math.abs
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun JournalScreen() {
+fun JournalScreen(accountingViewModel: AccountingViewModel = viewModel()) {
     val context = LocalContext.current
-    val repo = FundRepository.getInstance()
-    val journalEntries by repo.journalEntries.collectAsState()
-    val accounts by repo.accounts.collectAsState()
-    val fundInfo by repo.fundInfo.collectAsState()
-    val currentUser by repo.currentUser.collectAsState()
+    val journalEntries by accountingViewModel.journalEntries.collectAsStateWithLifecycle()
+    val accounts by accountingViewModel.accounts.collectAsStateWithLifecycle()
+    val fundInfo by accountingViewModel.fundInfo.collectAsStateWithLifecycle()
+    val currentUser by accountingViewModel.currentUser.collectAsStateWithLifecycle()
     val canAdd = currentUser.role == UserRole.ADMIN || currentUser.role == UserRole.ACCOUNTANT
 
     var searchQuery by remember { mutableStateOf("") }
     var selectedFilter by remember { mutableStateOf("الكل") }
+    var selectedAccountCode by remember { mutableStateOf("الكل") }
     var showManualDialog by remember { mutableStateOf(false) }
+    var pendingManualPost by remember { mutableStateOf<Pair<List<JournalLine>, String>?>(null) }
 
     val totalAllDebits = journalEntries.flatMap { it.lines }.sumOf { it.debit }
     val totalAllCredits = journalEntries.flatMap { it.lines }.sumOf { it.credit }
     val isLedgerBalanced = abs(totalAllDebits - totalAllCredits) < 1.0
 
-    val filteredEntries = journalEntries.filter { entry ->
-        val matchesSearch = entry.entryNo.contains(searchQuery, ignoreCase = true) ||
+    val filteredEntries = remember(journalEntries, searchQuery, selectedFilter, selectedAccountCode) {
+        journalEntries.filter { entry ->
+            val matchesSearch = entry.entryNo.contains(searchQuery, ignoreCase = true) ||
                 entry.description.contains(searchQuery, ignoreCase = true) ||
                 (entry.originalVoucherNo?.contains(searchQuery, ignoreCase = true) ?: false) ||
                 entry.lines.any { it.accountName.contains(searchQuery, ignoreCase = true) || it.accountCode.contains(searchQuery) }
 
-        val matchesFilter = when (selectedFilter) {
-            "قيود السندات" -> entry.originalVoucherNo != null && !entry.isReversed
-            "قيود يدوية وتسويات" -> entry.originalVoucherNo == null && !entry.isReversed
-            "قيود عكسية" -> entry.isReversed
-            else -> true
+            val matchesFilter = when (selectedFilter) {
+                "قيود السندات" -> entry.originalVoucherNo != null && !entry.isReversed
+                "قيود يدوية وتسويات" -> entry.originalVoucherNo == null && !entry.isReversed
+                "قيود عكسية" -> entry.isReversed
+                else -> true
+            }
+
+            val matchesAccount = selectedAccountCode == "الكل" ||
+                entry.lines.any { it.accountCode == selectedAccountCode }
+
+            matchesSearch && matchesFilter && matchesAccount
         }
-        matchesSearch && matchesFilter
+    }
+
+    val groupedByDate = remember(filteredEntries) {
+        filteredEntries.groupBy { it.date }
     }
 
     Column(
@@ -96,7 +115,8 @@ fun JournalScreen() {
                     onClick = { showManualDialog = true },
                     colors = ButtonDefaults.buttonColors(containerColor = FundPrimary),
                     shape = RoundedCornerShape(10.dp),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                    modifier = Modifier.heightIn(min = 48.dp)
                 ) {
                     Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
@@ -120,45 +140,66 @@ fun JournalScreen() {
             ) {
                 Column {
                     Text("إجمالي المدين (Debit)", color = Color.White.copy(alpha = 0.75f), fontSize = 10.sp)
-                    Text("%,d ﷼".format(totalAllDebits.toLong()), color = FundGoldLight, fontWeight = FontWeight.Black, fontSize = 14.sp)
+                    Text(
+                        "%,d ﷼".format(totalAllDebits.toLong()),
+                        color = FundGoldLight,
+                        fontWeight = FontWeight.Black,
+                        fontSize = 14.sp,
+                        style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
+                    )
                 }
                 Column {
                     Text("إجمالي الدائن (Credit)", color = Color.White.copy(alpha = 0.75f), fontSize = 10.sp)
-                    Text("%,d ﷼".format(totalAllCredits.toLong()), color = Color.White, fontWeight = FontWeight.Black, fontSize = 14.sp)
+                    Text(
+                        "%,d ﷼".format(totalAllCredits.toLong()),
+                        color = Color.White,
+                        fontWeight = FontWeight.Black,
+                        fontSize = 14.sp,
+                        style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
+                    )
                 }
                 Surface(
                     color = if (isLedgerBalanced) StatusSuccess.copy(alpha = 0.25f) else StatusDanger.copy(alpha = 0.25f),
                     shape = RoundedCornerShape(8.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, if (isLedgerBalanced) Color(0xFF81C784) else StatusDanger)
+                    border = BorderStroke(1.dp, if (isLedgerBalanced) Color(0xFF81C784) else StatusDanger)
                 ) {
                     Text(
                         text = if (isLedgerBalanced) "متوازن (${journalEntries.size} قيد) ✔" else "غير متوازن ❌",
                         color = Color.White,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
                     )
                 }
             }
         }
 
-        // Search Field
+        // Instant Search Field
         OutlinedTextField(
             value = searchQuery,
             onValueChange = { searchQuery = it },
             placeholder = { Text("ابحث برقم القيد، البيان، الحساب، أو رقم السند...") },
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+            trailingIcon = {
+                if (searchQuery.isNotEmpty()) {
+                    IconButton(onClick = { searchQuery = "" }) {
+                        Icon(Icons.Default.Close, contentDescription = "مسح")
+                    }
+                }
+            },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp)
         )
 
-        // Filter Chips
+        // Entry Type + Account Filter Chips
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
             listOf("الكل", "قيود السندات", "قيود يدوية وتسويات", "قيود عكسية").forEach { filter ->
                 FilterChip(
@@ -171,21 +212,88 @@ fun JournalScreen() {
                     )
                 )
             }
+            VerticalDivider(modifier = Modifier.height(22.dp))
+            listOf("الكل" to "كل الحسابات", "1100" to "الخزينة", "1200" to "الكريمي", "4100" to "الإيرادات", "5100" to "المساعدات").forEach { (code, title) ->
+                FilterChip(
+                    selected = selectedAccountCode == code,
+                    onClick = { selectedAccountCode = code },
+                    label = { Text(title, fontSize = 11.sp) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = FundGold.copy(alpha = 0.22f),
+                        selectedLabelColor = FundGoldDark
+                    )
+                )
+            }
         }
 
-        // Journal Entries List
-        LazyColumn(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            items(filteredEntries, key = { it.id }) { entry ->
-                JournalEntryCardItem(
-                    entry = entry,
-                    onPrint = {
-                        OfficialPrintHelper.printJournalEntryPdf(context, entry, fundInfo)
-                        Toast.makeText(context, "جاري فتح معاينة طباعة سند القيد ${entry.entryNo}...", Toast.LENGTH_SHORT).show()
+        // Empty State or Sticky-Date Grouped Journal Entries
+        if (filteredEntries.isEmpty()) {
+            FundEmptyState(
+                icon = Icons.AutoMirrored.Filled.MenuBook,
+                title = "لا توجد قيود محاسبية مطابقة",
+                subtitle = "جرب مسح البحث أو إزالة فلاتر النوع والحساب لعرض القيود اليومية.",
+                secondaryActionLabel = "إلغاء الفلاتر",
+                onSecondaryAction = {
+                    searchQuery = ""
+                    selectedFilter = "الكل"
+                    selectedAccountCode = "الكل"
+                },
+                actionLabel = if (canAdd) "قيد تسوية يدوي" else null,
+                onAction = if (canAdd) { { showManualDialog = true } } else null,
+                modifier = Modifier.weight(1f)
+            )
+        } else {
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                groupedByDate.forEach { (date, dayEntries) ->
+                    stickyHeader(key = "journal_header_$date") {
+                        Surface(
+                            color = MaterialTheme.colorScheme.background.copy(alpha = 0.96f),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Surface(
+                                    color = FundPrimary.copy(alpha = 0.12f),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Text(
+                                        text = "📅 قيود تاريخ: $date",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = FundPrimary,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                        style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
+                                    )
+                                }
+                                Text(
+                                    text = "${dayEntries.size} قيد",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
+                                )
+                            }
+                        }
                     }
-                )
+
+                    items(dayEntries, key = { it.id }) { entry ->
+                        JournalEntryCardItem(
+                            entry = entry,
+                            onPrint = {
+                                OfficialPrintHelper.printJournalEntryPdf(context, entry, fundInfo)
+                                Toast.makeText(context, "جاري فتح معاينة طباعة سند القيد ${entry.entryNo}...", Toast.LENGTH_SHORT).show()
+                            }
+                        )
+                    }
+                }
             }
         }
     }
@@ -195,14 +303,31 @@ fun JournalScreen() {
             accounts = accounts,
             onDismiss = { showManualDialog = false },
             onSubmit = { lines, desc ->
-                val success = repo.createManualJournalEntry(lines, desc)
+                pendingManualPost = lines to desc
+            }
+        )
+    }
+
+    pendingManualPost?.let { (lines, desc) ->
+        val total = lines.sumOf { it.debit }.toLong()
+        SensitiveActionConfirmDialog(
+            title = "تأكيد ترحيل قيد التسوية اليدوي",
+            message = "سيتم ترحيل قيد محاسبي مزدوج بمبلغ ${"%,d".format(total)} ﷼ ($desc) وتحديث أرصدة الحسابات مباشرة.",
+            confirmText = "اعتماد وترحيل القيد",
+            confirmColor = FundPrimary,
+            icon = Icons.Default.Verified,
+            onConfirm = {
+                val success = accountingViewModel.createManualJournalEntry(lines, desc)
                 if (success) {
                     Toast.makeText(context, "تم حفظ وترحيل القيد المحاسبي بنجاح", Toast.LENGTH_SHORT).show()
+                    pendingManualPost = null
                     showManualDialog = false
                 } else {
-                    Toast.makeText(context, "خطأ: مجموع المدين لا يساوي مجموع الدائن!", Toast.LENGTH_LONG).show()
+                    Toast.makeText(context, "خطأ: يجب أن يكون القيد متوازناً (المدين = الدائن) وبقيمة موجبة!", Toast.LENGTH_LONG).show()
+                    pendingManualPost = null
                 }
-            }
+            },
+            onDismiss = { pendingManualPost = null }
         )
     }
 }
@@ -311,14 +436,16 @@ private fun JournalEntryCardItem(
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             color = FundPrimary,
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
+                            style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
                         )
                         Text(
                             if (line.credit > 0) "%,d".format(line.credit.toLong()) else "-",
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             color = FundGoldDark,
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
+                            style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
                         )
                     }
                 }
@@ -335,7 +462,13 @@ private fun JournalEntryCardItem(
                     color = if (isBalanced) StatusSuccess else StatusDanger,
                     fontWeight = FontWeight.Bold
                 )
-                Text("إجمالي القيد: %,d ﷼".format(totalDebit.toLong()), fontSize = 11.sp, fontWeight = FontWeight.Black, color = FundPrimary)
+                Text(
+                    "إجمالي القيد: %,d ﷼".format(totalDebit.toLong()),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Black,
+                    color = FundPrimary,
+                    style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
+                )
             }
         }
     }

@@ -15,29 +15,48 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.fund.ai.GeminiFundAdvisor
-import com.example.fund.data.FundRepository
 import com.example.fund.model.*
+import com.example.fund.ui.components.FundEmptyState
+import com.example.fund.ui.components.SensitiveActionConfirmDialog
+import com.example.fund.ui.components.ThousandSeparatorTransformation
+import com.example.fund.ui.viewmodel.AidsViewModel
+import com.example.fund.util.TafqeetEngine
 import com.example.ui.theme.*
 import kotlinx.coroutines.launch
 
+private data class PendingAidAction(
+    val request: AidRequest,
+    val targetStatus: AidStatus,
+    val approvedAmountYer: Double
+)
+
 @Composable
-fun AidsScreen() {
+fun AidsScreen(
+    initialStatusFilter: String = "الكل",
+    aidsViewModel: AidsViewModel = viewModel()
+) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
-    val repo = FundRepository.getInstance()
-    val aidRequests by repo.aidRequests.collectAsState()
-    val members by repo.members.collectAsState()
-    val currentUser by repo.currentUser.collectAsState()
+    val aidRequests by aidsViewModel.aidRequests.collectAsStateWithLifecycle()
+    val members by aidsViewModel.members.collectAsStateWithLifecycle()
+    val fundInfo by aidsViewModel.fundInfo.collectAsStateWithLifecycle()
+    val currentUser by aidsViewModel.currentUser.collectAsStateWithLifecycle()
     val canManage = currentUser.role == UserRole.ADMIN || currentUser.role == UserRole.ACCOUNTANT || currentUser.role == UserRole.REVIEWER
 
-    var selectedFilter by remember { mutableStateOf("الكل") }
+    var selectedFilter by remember(initialStatusFilter) { mutableStateOf(initialStatusFilter) }
     var searchQuery by remember { mutableStateOf("") }
     var showNewAidDialog by remember { mutableStateOf(false) }
+    var pendingAidAction by remember { mutableStateOf<PendingAidAction?>(null) }
 
     var aiEvaluationText by remember { mutableStateOf<String?>(null) }
     var evaluatingRequestNo by remember { mutableStateOf<String?>(null) }
@@ -78,11 +97,33 @@ fun AidsScreen() {
                 Button(
                     onClick = { showNewAidDialog = true },
                     colors = ButtonDefaults.buttonColors(containerColor = FundPrimary),
-                    shape = RoundedCornerShape(10.dp)
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.testTag("new_aid_request_button")
                 ) {
                     Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
                     Text("طلب جديد", fontSize = 12.sp)
+                }
+            }
+        }
+
+        if (!canManage) {
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f),
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(Icons.Default.Visibility, contentDescription = null, tint = FundPrimary, modifier = Modifier.size(16.dp))
+                    Text(
+                        "وضع القراءة فقط: صلاحية (${currentUser.role.title}) تتيح المتابعة دون الاعتماد أو الصرف.",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }
@@ -146,40 +187,110 @@ fun AidsScreen() {
             }
         }
 
-        // List
-        LazyColumn(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            items(filteredAids, key = { it.id }) { req ->
-                AidRequestCardItem(
-                    req = req,
-                    canManage = canManage,
-                    onStatusChange = { newStatus, approvedAmt ->
-                        repo.updateAidStatus(req.id, newStatus, approvedAmt)
-                        Toast.makeText(context, "تم تحديث حالة الطلب إلى ${newStatus.title}", Toast.LENGTH_SHORT).show()
-                    },
-                    onConsultAi = {
-                        evaluatingRequestNo = req.requestNo
-                        isAiLoading = true
-                        coroutineScope.launch {
-                            val member = members.find { it.id == req.memberId }
-                            aiEvaluationText = GeminiFundAdvisor.evaluateAidEligibility(req, member)
-                            isAiLoading = false
-                        }
+        if (isAiLoading) {
+            LinearProgressIndicator(
+                modifier = Modifier.fillMaxWidth(),
+                color = FundGoldDark
+            )
+        }
+
+        // List or Empty State
+        if (filteredAids.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                contentAlignment = Alignment.TopCenter
+            ) {
+                FundEmptyState(
+                    icon = Icons.Default.VolunteerActivism,
+                    title = "لا توجد طلبات مساعدة مطابقة",
+                    subtitle = "جرّب تغيير فلتر الحالة أو البحث، أو قدّم طلب مساعدة جديد للأعضاء المستحقين.",
+                    actionLabel = if (canManage) "تقديم طلب جديد" else null,
+                    onAction = if (canManage) ({ showNewAidDialog = true }) else null,
+                    secondaryActionLabel = "إعادة ضبط الفلتر",
+                    onSecondaryAction = {
+                        searchQuery = ""
+                        selectedFilter = "الكل"
                     }
                 )
             }
+        } else {
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                items(filteredAids, key = { it.id }) { req ->
+                    AidRequestCardItem(
+                        req = req,
+                        canManage = canManage,
+                        onStatusChange = { newStatus, approvedAmt ->
+                            pendingAidAction = PendingAidAction(req, newStatus, approvedAmt)
+                        },
+                        onConsultAi = {
+                            evaluatingRequestNo = req.requestNo
+                            isAiLoading = true
+                            coroutineScope.launch {
+                                val member = members.find { it.id == req.memberId }
+                                aiEvaluationText = GeminiFundAdvisor.evaluateAidEligibility(req, member)
+                                isAiLoading = false
+                            }
+                        }
+                    )
+                }
+            }
         }
+    }
+
+    // Confirm sensitive Aid workflow action (Approve / Disburse / Reject)
+    pendingAidAction?.let { action ->
+        val (dialogTitle, dialogMsg, confirmLabel, confirmColor, dialogIcon) = when (action.targetStatus) {
+            AidStatus.APPROVED -> listOf(
+                "تأكيد اعتماد طلب المساعدة",
+                "هل أنت متأكد من اعتماد طلب (${action.request.requestNo}) للمستفيد ${action.request.memberName} بمبلغ ${"%,d".format(action.approvedAmountYer.toLong())} ﷼؟",
+                "اعتماد الطلب",
+                StatusInfo,
+                Icons.Default.Verified
+            )
+            AidStatus.DISBURSED -> listOf(
+                "تأكيد الصرف النقدي الفوري",
+                "سيتم صرف مبلغ ${"%,d".format(action.approvedAmountYer.toLong())} ﷼ لطلب (${action.request.requestNo}) وتوليد سند صرف وقيد محاسبي آلي. هل تود المتابعة؟",
+                "صرف فوري وإصدار السند",
+                StatusSuccess,
+                Icons.Default.Payments
+            )
+            else -> listOf(
+                "تأكيد رفض طلب المساعدة",
+                "هل أنت متأكد من رفض طلب (${action.request.requestNo}) الخاص بالعضو ${action.request.memberName}؟",
+                "تأكيد الرفض",
+                StatusDanger,
+                Icons.Default.Cancel
+            )
+        }
+        @Suppress("UNCHECKED_CAST")
+        SensitiveActionConfirmDialog(
+            title = dialogTitle as String,
+            message = dialogMsg as String,
+            confirmText = confirmLabel as String,
+            confirmColor = confirmColor as Color,
+            icon = dialogIcon as androidx.compose.ui.graphics.vector.ImageVector,
+            onConfirm = {
+                aidsViewModel.updateAidStatus(action.request.id, action.targetStatus, action.approvedAmountYer)
+                Toast.makeText(context, "تم تحديث حالة الطلب إلى ${action.targetStatus.title}", Toast.LENGTH_SHORT).show()
+                pendingAidAction = null
+            },
+            onDismiss = { pendingAidAction = null }
+        )
     }
 
     // New Aid Dialog
     if (showNewAidDialog) {
         NewAidRequestDialog(
             members = members,
+            ceiling = fundInfo.maxAidCeilingYer,
             onDismiss = { showNewAidDialog = false },
             onSubmit = { memberId, aidType, amount, notes ->
-                repo.addAidRequest(memberId, aidType, amount, notes)
+                aidsViewModel.addAidRequest(memberId, aidType, amount, notes)
                 Toast.makeText(context, "تم تقديم طلب المساعدة بنجاح", Toast.LENGTH_SHORT).show()
                 showNewAidDialog = false
             }
@@ -241,7 +352,8 @@ private fun AidRequestCardItem(
                     "المبلغ المطلوب: %,d ﷼".format(req.requestedAmountYer.toLong()),
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
-                    color = FundPrimary
+                    color = FundPrimary,
+                    style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
                 )
             }
 
@@ -250,7 +362,8 @@ private fun AidRequestCardItem(
                     "المبلغ المعتمد: %,d ﷼".format(req.approvedAmountYer.toLong()),
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
-                    color = StatusSuccess
+                    color = StatusSuccess,
+                    style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
                 )
             }
 
@@ -316,6 +429,7 @@ private fun AidRequestCardItem(
 @Composable
 private fun NewAidRequestDialog(
     members: List<Member>,
+    ceiling: Double,
     onDismiss: () -> Unit,
     onSubmit: (String, AidType, Double, String) -> Unit
 ) {
@@ -326,7 +440,6 @@ private fun NewAidRequestDialog(
     var amountStr by remember { mutableStateOf("150000") }
     var notes by remember { mutableStateOf("") }
 
-    val ceiling = FundRepository.getInstance().fundInfo.collectAsState().value.maxAidCeilingYer
     val amount = amountStr.toDoubleOrNull() ?: 0.0
     val isOverCeiling = amount > ceiling
 
@@ -388,17 +501,33 @@ private fun NewAidRequestDialog(
 
                 OutlinedTextField(
                     value = amountStr,
-                    onValueChange = { amountStr = it },
+                    onValueChange = { input ->
+                        val cleaned = input.replace(",", "").filter { it.isDigit() }
+                        amountStr = cleaned
+                    },
                     label = { Text("المبلغ المطلوب (ريال يمني)") },
+                    visualTransformation = ThousandSeparatorTransformation(),
+                    textStyle = LocalTextStyle.current.copy(fontFeatureSettings = "tnum", fontWeight = FontWeight.Bold),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
+
+                if (amount > 0) {
+                    Text(
+                        text = TafqeetEngine.convertToWords(amount, "ريال يمني", "فلس"),
+                        fontSize = 11.sp,
+                        color = FundPrimary,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
 
                 if (isOverCeiling) {
                     Text(
                         "تنبيه: المبلغ يتجاوز السقف الأعلى المسموح به (${"%,d".format(ceiling.toLong())} ﷼) ويلزم استثناء خاص من مجلس الإدارة.",
                         color = StatusDanger,
-                        fontSize = 11.sp
+                        fontSize = 11.sp,
+                        style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
                     )
                 }
 

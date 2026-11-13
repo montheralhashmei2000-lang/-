@@ -290,7 +290,8 @@ data class AppUser(
     val fullName: String,
     val role: UserRole,
     val isActive: Boolean = true,
-    val lastLogin: String = "2026-11-08"
+    val lastLogin: String = "2026-11-08",
+    val passwordHash: String = ""
 )
 
 data class FundInfo(

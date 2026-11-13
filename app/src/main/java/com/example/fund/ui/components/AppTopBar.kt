@@ -28,7 +28,7 @@ import com.example.ui.theme.*
 
 @Composable
 fun AppTopBar(
-    currentScreen: Screen,
+    screenTitle: String,
     onOpenDrawer: () -> Unit,
     onNavigate: (Screen) -> Unit,
     onOpenAiAdvisor: () -> Unit,
@@ -51,7 +51,7 @@ fun AppTopBar(
     var roleMenuExpanded by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.fillMaxWidth()) {
-        // Sleek, Compact Mobile Top Bar (48dp content height)
+        // Sleek, Compact Mobile Top Bar (48dp touch height)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -66,11 +66,11 @@ fun AppTopBar(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(42.dp),
+                    .height(48.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                // Start (Right in RTL): Drawer Icon + Single-line Title
+                // Start (Right in RTL): Drawer Icon + Title + Active User Identity
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -78,7 +78,7 @@ fun AppTopBar(
                 ) {
                     IconButton(
                         onClick = onOpenDrawer,
-                        modifier = Modifier.size(36.dp)
+                        modifier = Modifier.size(48.dp)
                     ) {
                         Icon(
                             Icons.Default.Menu,
@@ -88,14 +88,24 @@ fun AppTopBar(
                         )
                     }
 
-                    Text(
-                        text = currentScreen.title,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White,
-                        fontSize = 15.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = screenTitle,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                            fontSize = 14.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = "${currentUser.fullName} • ${currentUser.role.title}",
+                            color = FundGoldLight,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
 
                 // End (Left in RTL): Compact Server/Sync Pill + Alerts + AI + User Menu
@@ -108,7 +118,7 @@ fun AppTopBar(
                         color = if (isOnline) Color.White.copy(alpha = 0.14f) else StatusPending.copy(alpha = 0.85f),
                         shape = RoundedCornerShape(14.dp),
                         modifier = Modifier
-                            .height(28.dp)
+                            .height(32.dp)
                             .clickable { onOpenSyncCenter() }
                             .testTag("open_sync_center_btn")
                     ) {
@@ -143,7 +153,7 @@ fun AppTopBar(
                             onClick = {
                                 if (pendingAidsCount > 0) onNavigate(Screen.AIDS) else onNavigate(Screen.MESSAGES)
                             },
-                            modifier = Modifier.size(34.dp)
+                            modifier = Modifier.size(38.dp)
                         ) {
                             Icon(
                                 Icons.Default.Notifications,
@@ -174,7 +184,7 @@ fun AppTopBar(
                     // AI Advisor Icon
                     IconButton(
                         onClick = onOpenAiAdvisor,
-                        modifier = Modifier.size(34.dp)
+                        modifier = Modifier.size(38.dp)
                     ) {
                         Icon(
                             Icons.Default.AutoAwesome,
@@ -184,15 +194,16 @@ fun AppTopBar(
                         )
                     }
 
-                    // Compact Profile & Role Menu
+                    // Active Profile & Role Chip
                     Box {
                         Surface(
                             color = FundGold.copy(alpha = 0.22f),
                             shape = RoundedCornerShape(14.dp),
                             border = androidx.compose.foundation.BorderStroke(1.dp, FundGold),
                             modifier = Modifier
-                                .height(28.dp)
+                                .height(32.dp)
                                 .clickable { roleMenuExpanded = true }
+                                .testTag("topbar_user_chip")
                         ) {
                             Row(
                                 modifier = Modifier.padding(horizontal = 8.dp),

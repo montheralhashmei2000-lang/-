@@ -19,15 +19,18 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
-import com.example.fund.data.FundRepository
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.fund.data.SeedData
 import com.example.fund.model.UserRole
+import com.example.fund.ui.viewmodel.SettingsViewModel
 import com.example.ui.theme.*
 
 @Composable
-fun UsersScreen() {
-    val repo = FundRepository.getInstance()
-    val users by repo.users.collectAsState()
-    val currentUser by repo.currentUser.collectAsState()
+fun UsersScreen(settingsViewModel: SettingsViewModel = viewModel()) {
+    val users by settingsViewModel.users.collectAsStateWithLifecycle()
+    val currentUser by settingsViewModel.currentUser.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var showAddUserDialog by remember { mutableStateOf(false) }
 
@@ -167,7 +170,7 @@ fun UsersScreen() {
                                 OutlinedButton(
                                     onClick = {
                                         if (u.isActive) {
-                                            repo.switchRole(u.role)
+                                            settingsViewModel.switchRole(u.role)
                                             Toast.makeText(context, "تم التبديل إلى حساب: ${u.fullName}", Toast.LENGTH_SHORT).show()
                                         } else {
                                             Toast.makeText(context, "هذا الحساب موقوف، قم بتفعيله أولاً", Toast.LENGTH_SHORT).show()
@@ -182,7 +185,7 @@ fun UsersScreen() {
                                 }
                                 if (currentUser.role == UserRole.ADMIN) {
                                     TextButton(
-                                        onClick = { repo.toggleUserActive(u.id) },
+                                        onClick = { settingsViewModel.toggleUserActive(u.id) },
                                         modifier = Modifier.height(30.dp),
                                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
                                     ) {
@@ -204,10 +207,10 @@ fun UsersScreen() {
     if (showAddUserDialog) {
         AddUserDialog(
             onDismiss = { showAddUserDialog = false },
-            onSave = { username, fullName, role ->
-                repo.addUser(username, fullName, role)
+            onSave = { username, fullName, role, password ->
+                settingsViewModel.addUser(username, fullName, role, password)
                 showAddUserDialog = false
-                Toast.makeText(context, "تمت إضافة المستخدم بنجاح", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "تمت إضافة المستخدم وتشفير كلمة المرور بنجاح", Toast.LENGTH_SHORT).show()
             }
         )
     }
@@ -223,10 +226,11 @@ private fun rolePermissionsDescription(role: UserRole): String = when (role) {
 @Composable
 private fun AddUserDialog(
     onDismiss: () -> Unit,
-    onSave: (String, String, UserRole) -> Unit
+    onSave: (String, String, UserRole, String) -> Unit
 ) {
     var username by remember { mutableStateOf("") }
     var fullName by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf(SeedData.defaultDemoPassword) }
     var selectedRole by remember { mutableStateOf(UserRole.ACCOUNTANT) }
 
     Dialog(onDismissRequest = onDismiss) {
@@ -249,6 +253,15 @@ private fun AddUserDialog(
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = { password = it },
+                    label = { Text("كلمة المرور (تُحفظ بتجزئة PBKDF2)") },
+                    visualTransformation = PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
                 Spacer(Modifier.height(10.dp))
                 Text("الدور الوظيفي والصلاحيات:", style = MaterialTheme.typography.labelMedium)
                 Spacer(Modifier.height(6.dp))
@@ -268,8 +281,8 @@ private fun AddUserDialog(
                     Spacer(Modifier.width(8.dp))
                     Button(
                         onClick = {
-                            if (username.isNotBlank() && fullName.isNotBlank()) {
-                                onSave(username, fullName, selectedRole)
+                            if (username.isNotBlank() && fullName.isNotBlank() && password.isNotBlank()) {
+                                onSave(username, fullName, selectedRole, password)
                             }
                         }
                     ) {

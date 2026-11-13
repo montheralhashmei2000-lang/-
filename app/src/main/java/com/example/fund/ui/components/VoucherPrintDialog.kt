@@ -45,6 +45,7 @@ fun VoucherPrintDialog(
     val ps by repo.printSettings.collectAsState()
 
     var showQuickCustomize by remember { mutableStateOf(false) }
+    var isMiniPreview by remember { mutableStateOf(false) }
 
     val isReceipt = voucher.type == VoucherType.RECEIPT
     val accentColor = remember(ps.accentColorHex) {
@@ -103,13 +104,16 @@ fun VoucherPrintDialog(
                     .fillMaxSize()
                     .padding(12.dp)
             ) {
-                // 1. Top Action Toolbar
+                // 1. Top Action Toolbar (Print, Share PDF, Toggle Mini Preview, Customize)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(
+                        modifier = Modifier
+                            .weight(1f)
+                            .horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -124,33 +128,49 @@ fun VoucherPrintDialog(
                         ) {
                             Icon(Icons.Default.Print, contentDescription = "طباعة", modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(5.dp))
-                            Text("طباعة / PDF", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text("طباعة", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
 
                         OutlinedButton(
                             onClick = {
-                                val shareText = """
-                                    ${fundInfo.name}
-                                    $voucherTitle رقم: ${voucher.voucherNo}
-                                    التاريخ: ${voucher.date}
-                                    ${if (isReceipt) ps.receiptPartyLabel else ps.paymentPartyLabel} ${voucher.partyName}
-                                    المبلغ: ${"%,d".format(voucher.amountYer.toLong())} ﷼ (${voucher.amountWords})
-                                    ${ps.descriptionLabel} ${voucher.description}
-                                    القيد المحاسبي: ${voucher.linkedJournalEntryId}
-                                """.trimIndent()
-                                val intent = Intent(Intent.ACTION_SEND).apply {
-                                    type = "text/plain"
-                                    putExtra(Intent.EXTRA_TEXT, shareText)
+                                val shared = OfficialPrintHelper.generateAndShareVoucherPdf(context, voucher, fundInfo, ps)
+                                if (!shared) {
+                                    val shareText = """
+                                        ${fundInfo.name}
+                                        $voucherTitle رقم: ${voucher.voucherNo}
+                                        التاريخ: ${voucher.date}
+                                        ${if (isReceipt) ps.receiptPartyLabel else ps.paymentPartyLabel} ${voucher.partyName}
+                                        المبلغ: ${"%,d".format(voucher.amountYer.toLong())} ﷼ (${voucher.amountWords})
+                                        ${ps.descriptionLabel} ${voucher.description}
+                                        القيد المحاسبي: ${voucher.linkedJournalEntryId}
+                                    """.trimIndent()
+                                    val intent = Intent(Intent.ACTION_SEND).apply {
+                                        type = "text/plain"
+                                        putExtra(Intent.EXTRA_TEXT, shareText)
+                                    }
+                                    context.startActivity(Intent.createChooser(intent, "مشاركة بيانات السند"))
                                 }
-                                context.startActivity(Intent.createChooser(intent, "مشاركة بيانات السند"))
                             },
                             shape = RoundedCornerShape(10.dp),
                             contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
                         ) {
-                            Icon(Icons.Default.Share, contentDescription = "مشاركة", modifier = Modifier.size(16.dp))
+                            Icon(Icons.Default.PictureAsPdf, contentDescription = "مشاركة PDF", modifier = Modifier.size(16.dp), tint = StatusDanger)
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("مشاركة", fontSize = 12.sp)
+                            Text("مشاركة PDF", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
+
+                        FilterChip(
+                            selected = isMiniPreview,
+                            onClick = { isMiniPreview = !isMiniPreview },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = if (isMiniPreview) Icons.Default.Fullscreen else Icons.Default.Preview,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                            },
+                            label = { Text(if (isMiniPreview) "معاينة كاملة" else "معاينة مصغرة", fontSize = 11.sp) }
+                        )
 
                         FilledTonalIconButton(
                             onClick = { showQuickCustomize = !showQuickCustomize },
@@ -274,8 +294,9 @@ fun VoucherPrintDialog(
                         .verticalScroll(rememberScrollState()),
                     contentAlignment = Alignment.TopCenter
                 ) {
-                    val sheetWidthModifier = when (ps.paperSize) {
-                        PrintPaperSize.THERMAL_80 -> Modifier.widthIn(max = 320.dp).fillMaxWidth()
+                    val sheetWidthModifier = when {
+                        isMiniPreview -> Modifier.widthIn(max = 310.dp).fillMaxWidth()
+                        ps.paperSize == PrintPaperSize.THERMAL_80 -> Modifier.widthIn(max = 320.dp).fillMaxWidth()
                         else -> Modifier.fillMaxWidth()
                     }
 
@@ -431,13 +452,15 @@ fun VoucherPrintDialog(
                                                     text = "# %,d # ﷼".format(voucher.amountYer.toLong()),
                                                     fontWeight = FontWeight.Black,
                                                     fontSize = (ps.headerFontSizeSp).sp,
-                                                    color = Color(0xFF003300)
+                                                    color = Color(0xFF003300),
+                                                    style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
                                                 )
                                                 if (ps.showCurrencyDetails && voucher.currency != CurrencyCode.YER) {
                                                     Text(
                                                         text = "${voucher.amountOriginal} ${voucher.currency.name} @ %,.0f".format(voucher.exchangeRate),
                                                         fontSize = 9.sp,
-                                                        color = Color(0xFF44553F)
+                                                        color = Color(0xFF44553F),
+                                                        style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
                                                     )
                                                 }
                                             }

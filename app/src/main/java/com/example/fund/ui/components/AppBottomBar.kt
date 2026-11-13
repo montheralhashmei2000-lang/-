@@ -1,83 +1,108 @@
 package com.example.fund.ui.components
 
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ReceiptLong
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.fund.ui.navigation.Screen
+import com.example.fund.ui.navigation.BottomHub
 import com.example.ui.theme.*
 
 @Composable
 fun AppBottomBar(
-    currentScreen: Screen,
-    onNavigate: (Screen) -> Unit,
-    onOpenMore: () -> Unit
+    activeHub: BottomHub,
+    onSelectHub: (BottomHub) -> Unit
 ) {
     NavigationBar(
         containerColor = MaterialTheme.colorScheme.surface,
-        tonalElevation = 8.dp
+        tonalElevation = 8.dp,
+        windowInsets = WindowInsets.navigationBars
     ) {
-        NavigationBarItem(
-            selected = currentScreen == Screen.DASHBOARD,
-            onClick = { onNavigate(Screen.DASHBOARD) },
-            icon = { Icon(Icons.Default.Dashboard, contentDescription = "الرئيسية") },
-            label = { Text("الرئيسية", fontSize = 11.sp, fontWeight = if (currentScreen == Screen.DASHBOARD) FontWeight.Bold else FontWeight.Normal) },
-            colors = NavigationBarItemDefaults.colors(
-                selectedIconColor = FundPrimary,
-                selectedTextColor = FundPrimary,
-                indicatorColor = FundGold.copy(alpha = 0.25f)
+        BottomHub.entries.forEach { hub ->
+            val selected = activeHub == hub
+            NavigationBarItem(
+                selected = selected,
+                onClick = { onSelectHub(hub) },
+                icon = {
+                    Icon(
+                        imageVector = hub.icon,
+                        contentDescription = hub.title
+                    )
+                },
+                label = {
+                    Text(
+                        text = hub.title,
+                        fontSize = 10.sp,
+                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                },
+                colors = NavigationBarItemDefaults.colors(
+                    selectedIconColor = FundPrimary,
+                    selectedTextColor = FundPrimary,
+                    indicatorColor = FundGold.copy(alpha = 0.25f)
+                ),
+                modifier = Modifier.testTag("bottom_hub_${hub.name.lowercase()}")
             )
-        )
+        }
+    }
+}
 
-        NavigationBarItem(
-            selected = currentScreen == Screen.AIDS,
-            onClick = { onNavigate(Screen.AIDS) },
-            icon = { Icon(Icons.Default.VolunteerActivism, contentDescription = "المساعدات") },
-            label = { Text("المساعدات", fontSize = 11.sp, fontWeight = if (currentScreen == Screen.AIDS) FontWeight.Bold else FontWeight.Normal) },
-            colors = NavigationBarItemDefaults.colors(
-                selectedIconColor = FundPrimary,
-                selectedTextColor = FundPrimary,
-                indicatorColor = FundGold.copy(alpha = 0.25f)
+@Composable
+fun AppNavigationRail(
+    activeHub: BottomHub,
+    onSelectHub: (BottomHub) -> Unit,
+    onOpenQuickScanner: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    NavigationRail(
+        containerColor = MaterialTheme.colorScheme.surface,
+        modifier = modifier
+    ) {
+        Spacer(modifier = Modifier.weight(0.2f))
+        BottomHub.entries.forEach { hub ->
+            val selected = activeHub == hub
+            NavigationRailItem(
+                selected = selected,
+                onClick = { onSelectHub(hub) },
+                icon = { Icon(hub.icon, contentDescription = hub.title) },
+                label = {
+                    Text(
+                        text = hub.title,
+                        fontSize = 10.sp,
+                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                        maxLines = 1
+                    )
+                },
+                colors = NavigationRailItemDefaults.colors(
+                    selectedIconColor = FundPrimary,
+                    selectedTextColor = FundPrimary,
+                    indicatorColor = FundGold.copy(alpha = 0.25f)
+                ),
+                modifier = Modifier.padding(vertical = 4.dp)
             )
-        )
-
-        NavigationBarItem(
-            selected = currentScreen == Screen.MEMBERS,
-            onClick = { onNavigate(Screen.MEMBERS) },
-            icon = { Icon(Icons.Default.People, contentDescription = "الأعضاء") },
-            label = { Text("الأعضاء", fontSize = 11.sp, fontWeight = if (currentScreen == Screen.MEMBERS) FontWeight.Bold else FontWeight.Normal) },
-            colors = NavigationBarItemDefaults.colors(
-                selectedIconColor = FundPrimary,
-                selectedTextColor = FundPrimary,
-                indicatorColor = FundGold.copy(alpha = 0.25f)
+        }
+        Spacer(modifier = Modifier.weight(1f))
+        FloatingActionButton(
+            onClick = onOpenQuickScanner,
+            containerColor = FundPrimary,
+            contentColor = androidx.compose.ui.graphics.Color.White,
+            modifier = Modifier.padding(bottom = 16.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.QrCodeScanner,
+                contentDescription = "مسح QR"
             )
-        )
-
-        NavigationBarItem(
-            selected = currentScreen == Screen.VOUCHERS,
-            onClick = { onNavigate(Screen.VOUCHERS) },
-            icon = { Icon(Icons.AutoMirrored.Filled.ReceiptLong, contentDescription = "السندات") },
-            label = { Text("السندات", fontSize = 11.sp, fontWeight = if (currentScreen == Screen.VOUCHERS) FontWeight.Bold else FontWeight.Normal) },
-            colors = NavigationBarItemDefaults.colors(
-                selectedIconColor = FundPrimary,
-                selectedTextColor = FundPrimary,
-                indicatorColor = FundGold.copy(alpha = 0.25f)
-            )
-        )
-
-        NavigationBarItem(
-            selected = false,
-            onClick = onOpenMore,
-            icon = { Icon(Icons.Default.Apps, contentDescription = "المزيد") },
-            label = { Text("المزيد", fontSize = 11.sp) },
-            colors = NavigationBarItemDefaults.colors(
-                selectedIconColor = FundPrimary,
-                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        )
+        }
     }
 }

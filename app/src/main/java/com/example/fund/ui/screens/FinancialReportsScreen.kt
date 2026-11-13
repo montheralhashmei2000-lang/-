@@ -21,21 +21,24 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.fund.data.FundRepository
 import com.example.fund.model.*
+import com.example.fund.ui.viewmodel.AccountingViewModel
 import com.example.fund.util.OfficialPrintHelper
 import com.example.ui.theme.*
 
 @Composable
-fun FinancialReportsScreen() {
+fun FinancialReportsScreen(accountingViewModel: AccountingViewModel = viewModel()) {
     val context = LocalContext.current
     val repo = FundRepository.getInstance()
-    val accounts by repo.accounts.collectAsState()
-    val journalEntries by repo.journalEntries.collectAsState()
-    val currencyRates by repo.currencyRates.collectAsState()
-    val fundInfo by repo.fundInfo.collectAsState()
+    val accounts by accountingViewModel.accounts.collectAsStateWithLifecycle()
+    val journalEntries by accountingViewModel.journalEntries.collectAsStateWithLifecycle()
+    val currencyRates by repo.currencyRates.collectAsStateWithLifecycle()
+    val fundInfo by accountingViewModel.fundInfo.collectAsStateWithLifecycle()
 
-    var activeTab by remember { mutableStateOf(0) }
+    var activeTab by remember { mutableIntStateOf(0) }
     val tabTitles = listOf(
         "ميزان المراجعة",
         "قائمة الدخل",
@@ -142,11 +145,11 @@ fun FinancialReportsScreen() {
 // ----------------------------------------------------------------------------
 @Composable
 private fun TrialBalanceTab(accounts: List<Account>, entries: List<JournalEntry>) {
-    // Calculate debit and credit totals
+    var accountQuery by remember { mutableStateOf("") }
     var totalDebitBalance = 0.0
     var totalCreditBalance = 0.0
 
-    val rows = accounts.map { acc ->
+    val allRows = accounts.map { acc ->
         val lines = entries.flatMap { it.lines }.filter { it.accountCode == acc.code }
         val debits = lines.sumOf { it.debit }
         val credits = lines.sumOf { it.credit }
@@ -161,6 +164,13 @@ private fun TrialBalanceTab(accounts: List<Account>, entries: List<JournalEntry>
         Triple(acc, debitBal, creditBal)
     }
 
+    val rows = remember(allRows, accountQuery) {
+        if (accountQuery.isBlank()) allRows
+        else allRows.filter { (acc, _, _) ->
+            acc.name.contains(accountQuery, ignoreCase = true) || acc.code.contains(accountQuery)
+        }
+    }
+
     val isBalanced = Math.abs(totalDebitBalance - totalCreditBalance) < 1.0
 
     Column(
@@ -169,6 +179,16 @@ private fun TrialBalanceTab(accounts: List<Account>, entries: List<JournalEntry>
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
+        OutlinedTextField(
+            value = accountQuery,
+            onValueChange = { accountQuery = it },
+            placeholder = { Text("تصفية حسابات ميزان المراجعة بالاسم أو الكود...") },
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(10.dp)
+        )
+
         // Balance Badge
         Surface(
             color = if (isBalanced) StatusSuccess.copy(alpha = 0.12f) else StatusDanger.copy(alpha = 0.12f),
@@ -202,7 +222,8 @@ private fun TrialBalanceTab(accounts: List<Account>, entries: List<JournalEntry>
                     text = "الإجمالي: %,d ﷼".format(totalDebitBalance.toLong()),
                     fontWeight = FontWeight.Black,
                     color = FundPrimary,
-                    fontSize = 13.sp
+                    fontSize = 13.sp,
+                    style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
                 )
             }
         }
@@ -214,7 +235,6 @@ private fun TrialBalanceTab(accounts: List<Account>, entries: List<JournalEntry>
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
         ) {
             Column(modifier = Modifier.padding(10.dp)) {
-                // Table Header
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -239,26 +259,27 @@ private fun TrialBalanceTab(accounts: List<Account>, entries: List<JournalEntry>
                     ) {
                         Column(modifier = Modifier.weight(2f)) {
                             Text(acc.name, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                            Text(acc.code, fontSize = 9.sp, color = Color.Gray)
+                            Text(acc.code, fontSize = 9.sp, color = Color.Gray, style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"))
                         }
                         Text(
                             text = if (deb > 0) "%,d".format(deb.toLong()) else "-",
                             fontSize = 11.sp,
                             fontWeight = if (deb > 0) FontWeight.Bold else FontWeight.Normal,
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
+                            style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
                         )
                         Text(
                             text = if (cred > 0) "%,d".format(cred.toLong()) else "-",
                             fontSize = 11.sp,
                             fontWeight = if (cred > 0) FontWeight.Bold else FontWeight.Normal,
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
+                            style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
                         )
                     }
                 }
 
                 HorizontalDivider(color = FundPrimary, thickness = 2.dp)
 
-                // Totals Row
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -267,8 +288,22 @@ private fun TrialBalanceTab(accounts: List<Account>, entries: List<JournalEntry>
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text("الإجماليات الكلية:", fontWeight = FontWeight.Black, fontSize = 12.sp, modifier = Modifier.weight(2f))
-                    Text("%,d ﷼".format(totalDebitBalance.toLong()), fontWeight = FontWeight.Black, fontSize = 12.sp, color = StatusSuccess, modifier = Modifier.weight(1f))
-                    Text("%,d ﷼".format(totalCreditBalance.toLong()), fontWeight = FontWeight.Black, fontSize = 12.sp, color = StatusSuccess, modifier = Modifier.weight(1f))
+                    Text(
+                        "%,d ﷼".format(totalDebitBalance.toLong()),
+                        fontWeight = FontWeight.Black,
+                        fontSize = 12.sp,
+                        color = StatusSuccess,
+                        modifier = Modifier.weight(1f),
+                        style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
+                    )
+                    Text(
+                        "%,d ﷼".format(totalCreditBalance.toLong()),
+                        fontWeight = FontWeight.Black,
+                        fontSize = 12.sp,
+                        color = StatusSuccess,
+                        modifier = Modifier.weight(1f),
+                        style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
+                    )
                 }
             }
         }

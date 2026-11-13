@@ -1,5 +1,8 @@
 package com.example.fund.util
 
+import kotlin.math.abs
+import kotlin.math.roundToLong
+
 object TafqeetEngine {
 
     private val ones = arrayOf(
@@ -21,8 +24,49 @@ object TafqeetEngine {
 
     fun convertToWords(amount: Long, currencyName: String = "ريال يمني"): String {
         if (amount == 0L) return "فقط صفر $currencyName لا غير"
-        if (amount < 0L) return "سالب " + convertToWords(-amount, currencyName)
+        if (amount < 0L) {
+            val positiveWords = if (amount == Long.MIN_VALUE) {
+                convertPositiveIntegerToWords(Long.MAX_VALUE)
+            } else {
+                convertPositiveIntegerToWords(-amount)
+            }
+            return "فقط سالب $positiveWords $currencyName لا غير"
+        }
 
+        val words = convertPositiveIntegerToWords(amount)
+        return "فقط $words $currencyName لا غير"
+    }
+
+    fun convertToWords(
+        amount: Double,
+        currencyName: String = "ريال يمني",
+        subUnitName: String = "فلس"
+    ): String {
+        if (amount.isNaN() || amount.isInfinite()) return "فقط صفر $currencyName لا غير"
+        val roundedTotalSubUnits = (abs(amount) * 100.0).roundToLong()
+        if (roundedTotalSubUnits == 0L) return "فقط صفر $currencyName لا غير"
+
+        val wholePart = roundedTotalSubUnits / 100L
+        val fractionalPart = roundedTotalSubUnits % 100L
+        val prefix = if (amount < 0.0) "فقط سالب " else "فقط "
+
+        val mainPartStr = if (wholePart > 0L) {
+            "${convertPositiveIntegerToWords(wholePart)} $currencyName"
+        } else {
+            ""
+        }
+
+        val subPartStr = if (fractionalPart > 0L) {
+            "${convertPositiveIntegerToWords(fractionalPart)} $subUnitName"
+        } else {
+            ""
+        }
+
+        val combined = listOf(mainPartStr, subPartStr).filter { it.isNotBlank() }.joinToString(" و")
+        return "$prefix$combined لا غير"
+    }
+
+    private fun convertPositiveIntegerToWords(amount: Long): String {
         val parts = mutableListOf<String>()
 
         val billions = amount / 1_000_000_000L
@@ -30,33 +74,41 @@ object TafqeetEngine {
         val thousands = (amount % 1_000_000L) / 1_000L
         val remainder = amount % 1_000L
 
-        if (billions > 0) {
-            parts.add(convertChunk(billions.toInt()) + " مليار")
+        if (billions > 0L) {
+            parts.add(formatScaleGroup(billions, "مليار", "ملياران", "مليارات", "ملياراً"))
         }
-        if (millions > 0) {
-            val chunkStr = when (millions) {
-                1L -> "مليون"
-                2L -> "مليونان"
-                in 3L..10L -> convertChunk(millions.toInt()) + " ملايين"
-                else -> convertChunk(millions.toInt()) + " مليون"
-            }
-            parts.add(chunkStr)
+        if (millions > 0L) {
+            parts.add(formatScaleGroup(millions, "مليون", "مليونان", "ملايين", "مليوناً"))
         }
-        if (thousands > 0) {
-            val chunkStr = when (thousands) {
-                1L -> "ألف"
-                2L -> "ألفان"
-                in 3L..10L -> convertChunk(thousands.toInt()) + " آلاف"
-                else -> convertChunk(thousands.toInt()) + " ألف"
-            }
-            parts.add(chunkStr)
+        if (thousands > 0L) {
+            parts.add(formatScaleGroup(thousands, "ألف", "ألفان", "آلاف", "ألفاً"))
         }
-        if (remainder > 0) {
+        if (remainder > 0L) {
             parts.add(convertChunk(remainder.toInt()))
         }
 
-        val joined = if (parts.isEmpty()) "" else parts.reduce { acc, s -> "$acc و$s" }
-        return "فقط $joined $currencyName لا غير"
+        return if (parts.isEmpty()) "صفر" else parts.joinToString(" و")
+    }
+
+    private fun formatScaleGroup(
+        value: Long,
+        singular: String,
+        dual: String,
+        plural3To10: String,
+        accusative11To99: String
+    ): String {
+        val mod100 = (value % 100L).toInt()
+        return when {
+            value == 1L -> singular
+            value == 2L -> dual
+            value in 3L..10L -> "${convertChunk(value.toInt())} $plural3To10"
+            mod100 in 11..99 -> "${convertBigValue(value)} $accusative11To99"
+            else -> "${convertBigValue(value)} $singular"
+        }
+    }
+
+    private fun convertBigValue(value: Long): String {
+        return if (value < 1000L) convertChunk(value.toInt()) else convertPositiveIntegerToWords(value)
     }
 
     private fun convertChunk(number: Int): String {
@@ -82,6 +134,6 @@ object TafqeetEngine {
             }
         }
 
-        return if (parts.isEmpty()) "" else parts.reduce { acc, s -> "$acc و$s" }
+        return if (parts.isEmpty()) "" else parts.joinToString(" و")
     }
 }

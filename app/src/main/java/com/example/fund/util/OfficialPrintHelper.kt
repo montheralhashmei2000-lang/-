@@ -1,18 +1,29 @@
 package com.example.fund.util
 
 import android.content.Context
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Typeface
+import android.graphics.pdf.PdfDocument
 import android.print.PrintAttributes
 import android.print.PrintDocumentAdapter
 import android.print.PrintManager
+import android.text.Layout
+import android.text.StaticLayout
+import android.text.TextPaint
 import android.util.Base64
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.core.content.FileProvider
 import com.example.R
 import com.example.fund.data.FundRepository
 import com.example.fund.model.*
 import java.io.ByteArrayOutputStream
+import java.io.File
+import java.io.FileOutputStream
 import java.util.concurrent.ConcurrentHashMap
 
 object OfficialPrintHelper {
@@ -749,5 +760,216 @@ object OfficialPrintHelper {
             }
         }
         webView.loadDataWithBaseURL(null, htmlContent, "text/HTML", "UTF-8", null)
+    }
+
+    /**
+     * Generates a real offline PDF file inside cacheDir/pdfs/ using android.graphics.pdf.PdfDocument.
+     */
+    fun createVoucherPdfFile(
+        context: Context,
+        voucher: Voucher,
+        fundInfo: FundInfo,
+        printSettings: PrintSettings = FundRepository.getInstance().printSettings.value
+    ): File {
+        val pdfDir = File(context.cacheDir, "pdfs").apply { if (!exists()) mkdirs() }
+        val safeNo = voucher.voucherNo.replace(Regex("[^A-Za-z0-9_-]"), "_")
+        val outFile = File(pdfDir, "Voucher_$safeNo.pdf")
+
+        val pdfDocument = PdfDocument()
+        try {
+            val pageWidth = 595
+            val pageHeight = 842
+            val pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, 1).create()
+            val page = pdfDocument.startPage(pageInfo)
+            val canvas: Canvas = page.canvas
+
+            val accentInt = runCatching {
+                android.graphics.Color.parseColor(printSettings.accentColorHex)
+            }.getOrDefault(android.graphics.Color.parseColor("#1B5E20"))
+            val badgeColor = if (voucher.type == VoucherType.RECEIPT) accentInt
+            else android.graphics.Color.parseColor("#B71C1C")
+
+            val borderPaint = Paint().apply {
+                color = accentInt
+                style = Paint.Style.STROKE
+                strokeWidth = 3f
+            }
+            val innerGoldPaint = Paint().apply {
+                color = android.graphics.Color.parseColor("#F9A825")
+                style = Paint.Style.STROKE
+                strokeWidth = 1.5f
+            }
+            val fillHeaderPaint = Paint().apply {
+                color = android.graphics.Color.parseColor("#F5FAF6")
+                style = Paint.Style.FILL
+            }
+            val titlePaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = accentInt
+                textSize = 18f
+                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                textAlign = Paint.Align.RIGHT
+            }
+            val bodyPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = android.graphics.Color.parseColor("#14210F")
+                textSize = 13f
+            }
+            val boldBodyPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = android.graphics.Color.parseColor("#14210F")
+                textSize = 13f
+                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            }
+            val mutedPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = android.graphics.Color.parseColor("#556655")
+                textSize = 11f
+            }
+
+            // Frame
+            canvas.drawRect(24f, 24f, pageWidth - 24f, pageHeight - 24f, borderPaint)
+            canvas.drawRect(30f, 30f, pageWidth - 30f, pageHeight - 30f, innerGoldPaint)
+
+            // Header strip
+            canvas.drawRect(36f, 36f, pageWidth - 36f, 126f, fillHeaderPaint)
+            var y = 62f
+            if (printSettings.showCountryHeader && printSettings.countryHeaderText.isNotBlank()) {
+                canvas.drawText(printSettings.countryHeaderText, pageWidth - 48f, y, mutedPaint.apply { textAlign = Paint.Align.RIGHT })
+                y += 20f
+            }
+            canvas.drawText(fundInfo.name, pageWidth - 48f, y, titlePaint)
+            y += 18f
+            if (printSettings.showLicenseAndAddress) {
+                canvas.drawText("${fundInfo.licenseNo} • ${fundInfo.address}", pageWidth - 48f, y, mutedPaint)
+            }
+
+            // Voucher title & Amount Ribbon
+            val voucherTitle = if (voucher.type == VoucherType.RECEIPT) {
+                printSettings.receiptVoucherTitle
+            } else {
+                printSettings.paymentVoucherTitle
+            }
+            val badgePaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = badgeColor
+                textSize = 17f
+                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                textAlign = Paint.Align.RIGHT
+            }
+            canvas.drawText(voucherTitle, pageWidth - 48f, 160f, badgePaint)
+            canvas.drawText("رقم السند: ${voucher.voucherNo}   |   التاريخ: ${voucher.date}", pageWidth - 48f, 184f, bodyPaint.apply { textAlign = Paint.Align.RIGHT })
+
+            val amountBoxPaint = Paint().apply {
+                color = android.graphics.Color.parseColor("#FFF9C4")
+                style = Paint.Style.FILL
+            }
+            canvas.drawRect(48f, 142f, 235f, 192f, amountBoxPaint)
+            canvas.drawRect(48f, 142f, 235f, 192f, innerGoldPaint)
+            val amtTextPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = android.graphics.Color.parseColor("#003300")
+                textSize = 15f
+                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                textAlign = Paint.Align.CENTER
+            }
+            canvas.drawText("%,d ﷼".format(voucher.amountYer.toLong()), 141f, 172f, amtTextPaint)
+
+            // Ledger Body Rows
+            val partyLabel = if (voucher.type == VoucherType.RECEIPT) printSettings.receiptPartyLabel else printSettings.paymentPartyLabel
+            val rows = listOf(
+                partyLabel to voucher.partyName,
+                printSettings.amountWordsLabel to voucher.amountWords,
+                printSettings.paymentMethodLabel to "${voucher.paymentMethod.title} (${voucher.accountName})",
+                printSettings.descriptionLabel to voucher.description,
+                "رقم القيد المحاسبي" to voucher.linkedJournalEntryId.ifBlank { "مرحّل آلياً" }
+            )
+            var rowY = 220f
+            rows.forEach { (label, value) ->
+                canvas.drawLine(46f, rowY - 16f, pageWidth - 46f, rowY - 16f, Paint().apply {
+                    color = android.graphics.Color.parseColor("#D8E4D2")
+                    strokeWidth = 1f
+                })
+                val lineText = "$label $value"
+                val layout = StaticLayout.Builder.obtain(lineText, 0, lineText.length, boldBodyPaint.apply { textAlign = Paint.Align.LEFT }, pageWidth - 104)
+                    .setAlignment(Layout.Alignment.ALIGN_NORMAL)
+                    .build()
+                canvas.save()
+                canvas.translate(52f, rowY - 8f)
+                layout.draw(canvas)
+                canvas.restore()
+                rowY += (layout.height + 18f)
+            }
+
+            // Signatures grid
+            if (printSettings.showSignaturesSection) {
+                val sigY = maxOf(rowY + 34f, 520f)
+                val slots = listOfNotNull(
+                    if (printSettings.sig1Enabled) printSettings.sig1Title to printSettings.sig1DefaultName.ifBlank { voucher.receivedOrPaidBy.ifBlank { voucher.partyName } } else null,
+                    if (printSettings.sig2Enabled) printSettings.sig2Title to printSettings.sig2DefaultName.ifBlank { voucher.accountantName } else null,
+                    if (printSettings.sig3Enabled) printSettings.sig3Title to printSettings.sig3DefaultName.ifBlank { voucher.auditorName } else null,
+                    if (printSettings.sig4Enabled) printSettings.sig4Title to printSettings.sig4DefaultName.ifBlank { voucher.managerName } else null
+                )
+                if (slots.isNotEmpty()) {
+                    val colW = (pageWidth - 96f) / slots.size.coerceAtLeast(1)
+                    slots.forEachIndexed { index, (sTitle, sName) ->
+                        val xStart = 48f + (index * colW)
+                        val cx = xStart + (colW / 2f)
+                        canvas.drawRect(xStart + 4f, sigY, xStart + colW - 4f, sigY + 84f, Paint().apply {
+                            color = android.graphics.Color.parseColor("#D2DFCD")
+                            style = Paint.Style.STROKE
+                            strokeWidth = 1f
+                        })
+                        canvas.drawText(sTitle, cx, sigY + 20f, boldBodyPaint.apply {
+                            textAlign = Paint.Align.CENTER
+                            textSize = 11f
+                        })
+                        canvas.drawText(sName, cx, sigY + 72f, mutedPaint.apply {
+                            textAlign = Paint.Align.CENTER
+                            textSize = 10f
+                        })
+                    }
+                }
+            }
+
+            // Footer
+            if (printSettings.footerNote.isNotBlank()) {
+                canvas.drawText(printSettings.footerNote, pageWidth - 48f, pageHeight - 66f, mutedPaint.apply { textAlign = Paint.Align.RIGHT })
+            }
+            if (printSettings.showFundContactInFooter) {
+                canvas.drawText("${fundInfo.name} | هاتف: ${fundInfo.phone}", pageWidth - 48f, pageHeight - 48f, mutedPaint.apply { textAlign = Paint.Align.RIGHT })
+            }
+
+            pdfDocument.finishPage(page)
+            FileOutputStream(outFile).use { fos ->
+                pdfDocument.writeTo(fos)
+            }
+            return outFile
+        } finally {
+            runCatching { pdfDocument.close() }
+        }
+    }
+
+    /**
+     * Generates a real PDF via PdfDocument and shares it immediately via FileProvider (application/pdf).
+     */
+    fun generateAndShareVoucherPdf(
+        context: Context,
+        voucher: Voucher,
+        fundInfo: FundInfo,
+        printSettings: PrintSettings = FundRepository.getInstance().printSettings.value
+    ): Boolean {
+        return runCatching {
+            val pdfFile = createVoucherPdfFile(context, voucher, fundInfo, printSettings)
+            val uri = FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                pdfFile
+            )
+            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                type = "application/pdf"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                putExtra(Intent.EXTRA_SUBJECT, "سند مالي رقم ${voucher.voucherNo} - ${fundInfo.name}")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            val chooser = Intent.createChooser(shareIntent, "مشاركة السند بصيغة PDF")
+            chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(chooser)
+            true
+        }.getOrElse { false }
     }
 }

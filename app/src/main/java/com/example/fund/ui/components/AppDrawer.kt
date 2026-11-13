@@ -1,13 +1,12 @@
 package com.example.fund.ui.components
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.Print
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -16,20 +15,29 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.R
 import com.example.fund.data.FundRepository
 import com.example.fund.model.UserRole
+import com.example.fund.ui.navigation.AppRoute
 import com.example.fund.ui.navigation.Screen
+import com.example.fund.ui.navigation.toRoute
 import com.example.ui.theme.*
+
+private data class DrawerNavEntry(
+    val title: String,
+    val icon: ImageVector,
+    val screen: Screen,
+    val route: AppRoute = screen.toRoute(),
+    val adminOnly: Boolean = false
+)
 
 @Composable
 fun AppDrawer(
     currentScreen: Screen,
-    onNavigate: (Screen) -> Unit,
+    onNavigateRoute: (AppRoute) -> Unit,
     onCloseDrawer: () -> Unit
 ) {
     val repo = FundRepository.getInstance()
@@ -39,14 +47,14 @@ fun AppDrawer(
 
     ModalDrawerSheet(
         drawerContainerColor = MaterialTheme.colorScheme.surface,
-        modifier = Modifier.width(300.dp)
+        modifier = Modifier.width(304.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
         ) {
-            // Drawer Header with Shield Crest
+            // Drawer Header with Shield Crest & Live User Info
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -55,7 +63,8 @@ fun AppDrawer(
                             colors = listOf(FundDeepHeader, FundPrimaryMedium)
                         )
                     )
-                    .padding(20.dp)
+                    .statusBarsPadding()
+                    .padding(18.dp)
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(
@@ -100,75 +109,63 @@ fun AppDrawer(
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
-            // Navigation Sections
-            val sections = listOf(
-                "الرئيسية" to listOf(
-                    Screen.DASHBOARD
+            val drawerGroups = listOf(
+                "التواصل والجدولة والإدارة" to listOf(
+                    DrawerNavEntry("المواعيد والجدول", Screen.SCHEDULER.icon, Screen.SCHEDULER),
+                    DrawerNavEntry("الرسائل الداخلية", Screen.MESSAGES.icon, Screen.MESSAGES),
+                    DrawerNavEntry("بيانات الصندوق والشعار", Screen.FUND_INFO.icon, Screen.FUND_INFO),
+                    DrawerNavEntry("التقارير والإحصائيات", Screen.REPORTS.icon, Screen.REPORTS)
                 ),
-                "الأعضاء والاشتراكات" to listOf(
-                    Screen.MEMBERS,
-                    Screen.SUBSCRIPTIONS
+                "الحوكمة والرقابة والمستخدمين" to listOf(
+                    DrawerNavEntry("سجل العمليات الرقابي", Screen.AUDIT.icon, Screen.AUDIT),
+                    DrawerNavEntry("إدارة المستخدمين والصلاحيات", Screen.USERS.icon, Screen.USERS, adminOnly = true)
                 ),
-                "المساعدات والضمان" to listOf(
-                    Screen.AIDS,
-                    Screen.BENEFICIARIES,
-                    Screen.PERIODIC_AIDS,
-                    Screen.IN_KIND
+                "الطباعة والإعدادات والجلسة" to listOf(
+                    DrawerNavEntry(
+                        title = "إعدادات الطباعة والسندات",
+                        icon = Icons.Default.Print,
+                        screen = Screen.SETTINGS,
+                        route = AppRoute.SettingsRoute(initialTab = 4)
+                    ),
+                    DrawerNavEntry("مركز الإعدادات الشامل", Screen.SETTINGS.icon, Screen.SETTINGS, route = AppRoute.SettingsRoute(initialTab = 0)),
+                    DrawerNavEntry("تسجيل الخروج / تبديل الحساب", Screen.LOGIN.icon, Screen.LOGIN)
                 ),
-                "المالية والمحاسبة المزدوجة" to listOf(
-                    Screen.VOUCHERS,
-                    Screen.TREASURY,
-                    Screen.FINANCIAL_REPORTS,
-                    Screen.JOURNAL,
-                    Screen.ACCOUNTS,
-                    Screen.BUDGETS
-                ),
-                "التبرعات والمشاريع" to listOf(
-                    Screen.CAMPAIGNS,
-                    Screen.DONORS
-                ),
-                "الإدارة والتقارير" to listOf(
-                    Screen.REPORTS,
-                    Screen.SCHEDULER,
-                    Screen.MESSAGES,
-                    Screen.FUND_INFO
-                ),
-                "إدارة النظام والرقابة" to listOf(
-                    Screen.SETTINGS,
-                    Screen.USERS,
-                    Screen.AUDIT,
-                    Screen.LOGIN
+                "اختصارات المراكز التشغيلية" to listOf(
+                    DrawerNavEntry("لوحة المعلومات الرئيسية", Screen.DASHBOARD.icon, Screen.DASHBOARD),
+                    DrawerNavEntry("سندات القبض والصرف", Screen.VOUCHERS.icon, Screen.VOUCHERS),
+                    DrawerNavEntry("إدارة الأعضاء والقرى", Screen.MEMBERS.icon, Screen.MEMBERS),
+                    DrawerNavEntry("طلبات المساعدة", Screen.AIDS.icon, Screen.AIDS)
                 )
             )
 
-            sections.forEach { (sectionTitle, screens) ->
+            drawerGroups.forEach { (groupTitle, items) ->
                 Text(
-                    text = sectionTitle,
+                    text = groupTitle,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     color = FundPrimary,
                     modifier = Modifier.padding(horizontal = 18.dp, vertical = 8.dp)
                 )
 
-                screens.forEach { screen ->
-                    // Permissions check: viewer cannot access users screen
-                    val isRestricted = isViewer && (screen == Screen.USERS)
+                items.forEach { entry ->
+                    val isRestricted = isViewer && entry.adminOnly
+                    val isSelected = currentScreen == entry.screen && entry.title != "إعدادات الطباعة والسندات"
 
                     NavigationDrawerItem(
-                        icon = { Icon(screen.icon, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                        icon = { Icon(entry.icon, contentDescription = null, modifier = Modifier.size(20.dp)) },
                         label = {
                             Text(
-                                text = screen.title,
+                                text = entry.title,
                                 fontSize = 13.sp,
-                                fontWeight = if (currentScreen == screen) FontWeight.Bold else FontWeight.Normal
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
                             )
                         },
-                        selected = currentScreen == screen,
+                        selected = isSelected,
                         onClick = {
                             if (!isRestricted) {
-                                onNavigate(screen)
+                                onNavigateRoute(entry.route)
                                 onCloseDrawer()
                             }
                         },
@@ -188,7 +185,7 @@ fun AppDrawer(
                     )
                 }
 
-                HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp), color = Color(0xFFE8EFE8))
+                HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
             }
 
             Spacer(modifier = Modifier.height(20.dp))

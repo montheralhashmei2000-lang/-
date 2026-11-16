@@ -135,25 +135,27 @@ fun SettingsScreen(
                     membersCountByRegion = { rName -> members.count { it.region == rName } },
                     beneficiariesCountByRegion = { rName -> beneficiaries.count { it.region == rName } },
                     onAddRegion = { name ->
-                        if (settingsViewModel.addRegion(name)) {
-                            Toast.makeText(context, "تمت إضافة المنطقة: $name", Toast.LENGTH_SHORT).show()
-                        } else {
-                            Toast.makeText(context, "اسم المنطقة موجود مسبقاً أو فارغ", Toast.LENGTH_SHORT).show()
-                        }
+                        runCatching { settingsViewModel.addRegion(name) }
+                            .onSuccess { ok ->
+                                Toast.makeText(context, if (ok) "تمت إضافة المنطقة: $name" else "اسم المنطقة موجود مسبقاً أو فارغ", Toast.LENGTH_SHORT).show()
+                            }
+                            .onFailure { err -> Toast.makeText(context, err.message ?: "غير مصرح", Toast.LENGTH_SHORT).show() }
                     },
                     onDeleteRegion = { reg ->
-                        settingsViewModel.deleteRegion(reg.id)
-                        Toast.makeText(context, "تم حذف المنطقة ${reg.name}", Toast.LENGTH_SHORT).show()
+                        runCatching { settingsViewModel.deleteRegion(reg.id) }
+                            .onSuccess { Toast.makeText(context, "تم حذف المنطقة ${reg.name}", Toast.LENGTH_SHORT).show() }
+                            .onFailure { err -> Toast.makeText(context, err.message ?: "غير مصرح", Toast.LENGTH_SHORT).show() }
                     },
                     onAddVillage = { regId, vName ->
-                        if (settingsViewModel.addVillageToRegion(regId, vName)) {
-                            Toast.makeText(context, "تمت إضافة القرية ($vName)", Toast.LENGTH_SHORT).show()
-                        } else {
-                            Toast.makeText(context, "القرية موجودة مسبقاً أو فارغة", Toast.LENGTH_SHORT).show()
-                        }
+                        runCatching { settingsViewModel.addVillageToRegion(regId, vName) }
+                            .onSuccess { ok ->
+                                Toast.makeText(context, if (ok) "تمت إضافة القرية ($vName)" else "القرية موجودة مسبقاً أو فارغة", Toast.LENGTH_SHORT).show()
+                            }
+                            .onFailure { err -> Toast.makeText(context, err.message ?: "غير مصرح", Toast.LENGTH_SHORT).show() }
                     },
                     onRemoveVillage = { regId, vName ->
-                        settingsViewModel.removeVillageFromRegion(regId, vName)
+                        runCatching { settingsViewModel.removeVillageFromRegion(regId, vName) }
+                            .onFailure { err -> Toast.makeText(context, err.message ?: "غير مصرح", Toast.LENGTH_SHORT).show() }
                     }
                 )
 
@@ -161,9 +163,14 @@ fun SettingsScreen(
                     appSettings = appSettings,
                     maxAidCeilingYer = fundInfo.maxAidCeilingYer,
                     onSave = { newSettings, newCeiling ->
-                        settingsViewModel.updateAppSettings(newSettings)
-                        settingsViewModel.updateFundInfo(fundInfo.copy(maxAidCeilingYer = newCeiling))
-                        Toast.makeText(context, "تم حفظ إعدادات الأعضاء والمساعدات والمستودع", Toast.LENGTH_SHORT).show()
+                        runCatching {
+                            settingsViewModel.updateAppSettings(newSettings)
+                            settingsViewModel.updateFundInfo(fundInfo.copy(maxAidCeilingYer = newCeiling))
+                        }.onSuccess {
+                            Toast.makeText(context, "تم حفظ إعدادات الأعضاء والمساعدات والمستودع", Toast.LENGTH_SHORT).show()
+                        }.onFailure { err ->
+                            Toast.makeText(context, err.message ?: "غير مصرح بتعديل الإعدادات", Toast.LENGTH_LONG).show()
+                        }
                     }
                 )
 
@@ -171,13 +178,23 @@ fun SettingsScreen(
                     rates = rates,
                     appSettings = appSettings,
                     onSaveRates = { usd, sar ->
-                        settingsViewModel.updateCurrencyRate(com.example.fund.model.CurrencyCode.USD, usd)
-                        settingsViewModel.updateCurrencyRate(com.example.fund.model.CurrencyCode.SAR, sar)
-                        Toast.makeText(context, "تم تحديث وحفظ أسعار الصرف", Toast.LENGTH_SHORT).show()
+                        runCatching {
+                            settingsViewModel.updateCurrencyRate(com.example.fund.model.CurrencyCode.USD, usd)
+                            settingsViewModel.updateCurrencyRate(com.example.fund.model.CurrencyCode.SAR, sar)
+                        }.onSuccess {
+                            Toast.makeText(context, "تم تحديث وحفظ أسعار الصرف", Toast.LENGTH_SHORT).show()
+                        }.onFailure { err ->
+                            Toast.makeText(context, err.message ?: "تعذر حفظ أسعار الصرف", Toast.LENGTH_LONG).show()
+                        }
                     },
                     onSaveSettings = { newSettings ->
-                        settingsViewModel.updateAppSettings(newSettings)
-                        Toast.makeText(context, "تم حفظ الإعدادات المالية والموازنات", Toast.LENGTH_SHORT).show()
+                        runCatching {
+                            settingsViewModel.updateAppSettings(newSettings)
+                        }.onSuccess {
+                            Toast.makeText(context, "تم حفظ الإعدادات المالية والموازنات", Toast.LENGTH_SHORT).show()
+                        }.onFailure { err ->
+                            Toast.makeText(context, err.message ?: "غير مصرح بتعديل الإعدادات المالية", Toast.LENGTH_LONG).show()
+                        }
                     }
                 )
 
@@ -186,12 +203,22 @@ fun SettingsScreen(
                     printSettings = printSettings,
                     sampleVoucher = vouchers.firstOrNull(),
                     onSave = { updated ->
-                        settingsViewModel.updatePrintSettings(updated)
-                        Toast.makeText(context, "تم حفظ إعدادات الطباعة والسندات والأرقام بنجاح", Toast.LENGTH_SHORT).show()
+                        runCatching {
+                            settingsViewModel.updatePrintSettings(updated)
+                        }.onSuccess {
+                            Toast.makeText(context, "تم حفظ إعدادات الطباعة والسندات والأرقام بنجاح", Toast.LENGTH_SHORT).show()
+                        }.onFailure { err ->
+                            Toast.makeText(context, err.message ?: "غير مصرح بتعديل إعدادات الطباعة", Toast.LENGTH_LONG).show()
+                        }
                     },
                     onResetDefault = {
-                        settingsViewModel.resetPrintSettingsToDefault()
-                        Toast.makeText(context, "تمت استعادة القالب الافتراضي للطباعة والأرقام", Toast.LENGTH_SHORT).show()
+                        runCatching {
+                            settingsViewModel.resetPrintSettingsToDefault()
+                        }.onSuccess {
+                            Toast.makeText(context, "تمت استعادة القالب الافتراضي للطباعة والأرقام", Toast.LENGTH_SHORT).show()
+                        }.onFailure { err ->
+                            Toast.makeText(context, err.message ?: "غير مصرح باستعادة الإعدادات", Toast.LENGTH_LONG).show()
+                        }
                     }
                 )
 

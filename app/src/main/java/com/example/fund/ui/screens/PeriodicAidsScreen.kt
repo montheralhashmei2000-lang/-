@@ -6,6 +6,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.Payments
@@ -29,6 +31,20 @@ import com.example.fund.ui.components.SensitiveActionConfirmDialog
 import com.example.fund.util.FormatUtils
 import com.example.fund.util.LocalScreenFormat
 import com.example.ui.theme.*
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
+
+private fun shiftMonthYear(current: String, deltaMonths: Int): String {
+    val parts = current.split("-")
+    val cal = Calendar.getInstance()
+    val y = parts.getOrNull(0)?.toIntOrNull() ?: cal.get(Calendar.YEAR)
+    val m = (parts.getOrNull(1)?.toIntOrNull() ?: (cal.get(Calendar.MONTH) + 1)) - 1
+    cal.set(y, m, 1)
+    cal.add(Calendar.MONTH, deltaMonths)
+    return SimpleDateFormat("yyyy-MM", Locale.US).format(cal.time)
+}
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -38,13 +54,17 @@ fun PeriodicAidsScreen() {
     val repo = FundRepository.getInstance()
     val periodicAids by repo.periodicAids.collectAsStateWithLifecycle()
     val beneficiaries by repo.beneficiaries.collectAsStateWithLifecycle()
+    val appSettings by repo.appSettings.collectAsStateWithLifecycle()
     val currentUser by repo.currentUser.collectAsStateWithLifecycle()
     val canManage = currentUser.role != UserRole.VIEWER
 
     val totalMonthly = periodicAids.filter { it.status == "نشطة" }.sumOf { it.monthlyAmountYer }
-    var currentDisbursingMonth by remember { mutableStateOf("2026-11") }
+    var currentDisbursingMonth by remember {
+        mutableStateOf(SimpleDateFormat("yyyy-MM", Locale.US).format(Date()))
+    }
     var showAddDialog by remember { mutableStateOf(false) }
     var showBatchConfirmDialog by remember { mutableStateOf(false) }
+    val pendingForMonth = periodicAids.filter { it.status == "نشطة" && it.lastDisbursedMonth != currentDisbursingMonth }
 
     LazyColumn(
         modifier = Modifier
@@ -110,7 +130,7 @@ fun PeriodicAidsScreen() {
                                 style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
                             )
                             Text(
-                                text = "لعدد ${FormatUtils.formatCodeOrNumber(periodicAids.size.toString(), screenFormat)} أسرة ويتيم",
+                                text = "لعدد ${FormatUtils.formatCodeOrNumber(periodicAids.size.toString(), screenFormat)} أسرة ويتيم • يوم الصرف: ${appSettings.periodicAidDisburseDay} شهرياً",
                                 color = FundGoldLight,
                                 fontSize = 11.sp,
                                 style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
@@ -120,7 +140,7 @@ fun PeriodicAidsScreen() {
                         if (canManage) {
                             Button(
                                 onClick = { showBatchConfirmDialog = true },
-                                enabled = periodicAids.any { it.status == "نشطة" },
+                                enabled = pendingForMonth.isNotEmpty(),
                                 colors = ButtonDefaults.buttonColors(containerColor = FundGold),
                                 shape = RoundedCornerShape(10.dp),
                                 modifier = Modifier
@@ -130,13 +150,53 @@ fun PeriodicAidsScreen() {
                                 Icon(Icons.Default.DoneAll, contentDescription = null, tint = Color.Black, modifier = Modifier.size(17.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = "صرف دفعة الشهر",
+                                    text = if (pendingForMonth.isEmpty()) "تم الصرف للشهر" else "صرف دفعة الشهر (${pendingForMonth.size})",
                                     color = Color.Black,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 12.sp,
                                     maxLines = 1,
                                     softWrap = false
                                 )
+                            }
+                        }
+                    }
+
+                    // Month Selector Row
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "شهر الاستحقاق المستهدف:",
+                            color = Color.White.copy(alpha = 0.85f),
+                            fontSize = 11.sp
+                        )
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            IconButton(
+                                onClick = { currentDisbursingMonth = shiftMonthYear(currentDisbursingMonth, -1) },
+                                modifier = Modifier.size(34.dp)
+                            ) {
+                                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "الشهر السابق", tint = FundGoldLight)
+                            }
+                            Surface(
+                                color = Color.White.copy(alpha = 0.16f),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text(
+                                    text = FormatUtils.formatCodeOrNumber(currentDisbursingMonth, screenFormat),
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                    style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
+                                )
+                            }
+                            IconButton(
+                                onClick = { currentDisbursingMonth = shiftMonthYear(currentDisbursingMonth, 1) },
+                                modifier = Modifier.size(34.dp)
+                            ) {
+                                Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "الشهر التالي", tint = FundGoldLight)
                             }
                         }
                     }
@@ -223,8 +283,13 @@ fun PeriodicAidsScreen() {
                             ) {
                                 OutlinedButton(
                                     onClick = {
-                                        repo.disburseSinglePeriodicAid(pa.id, currentDisbursingMonth)
-                                        Toast.makeText(context, "تم صرف الكفالة الفردية وإصدار سند الصرف", Toast.LENGTH_SHORT).show()
+                                        runCatching {
+                                            repo.disburseSinglePeriodicAid(pa.id, currentDisbursingMonth)
+                                        }.onSuccess {
+                                            Toast.makeText(context, "تم صرف الكفالة الفردية وإصدار سند الصرف", Toast.LENGTH_SHORT).show()
+                                        }.onFailure { err ->
+                                            Toast.makeText(context, err.message ?: "تعذر صرف الكفالة الفردية", Toast.LENGTH_LONG).show()
+                                        }
                                     },
                                     shape = RoundedCornerShape(8.dp),
                                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
@@ -243,18 +308,24 @@ fun PeriodicAidsScreen() {
     }
 
     if (showBatchConfirmDialog) {
-        val activeList = periodicAids.filter { it.status == "نشطة" }
+        val activeList = pendingForMonth
         val batchAmount = activeList.sumOf { it.monthlyAmountYer }
         SensitiveActionConfirmDialog(
             title = "تأكيد صرف دفعة الشهر ($currentDisbursingMonth)",
-            message = "سيتم صرف ${activeList.size} كفالة نشطة بإجمالي ${FormatUtils.formatAmount(batchAmount, screenFormat)} وتوليد سندات الصرف والقيود المحاسبية تلقائياً.",
+            message = "سيتم صرف ${activeList.size} كفالة مستحقة لشهر $currentDisbursingMonth بإجمالي ${FormatUtils.formatAmount(batchAmount, screenFormat)} وتوليد سند الصرف والقيد المحاسبي تلقائياً.",
             confirmText = "اعتماد وصرف الدفعة",
             confirmColor = FundPrimary,
             icon = Icons.Default.DoneAll,
             onConfirm = {
-                repo.disbursePeriodicAidsBatch(currentDisbursingMonth, activeList.map { it.id })
-                Toast.makeText(context, "تم صرف الكفالات لشهر $currentDisbursingMonth وتوليد سند الصرف والقيد بنجاح", Toast.LENGTH_SHORT).show()
-                showBatchConfirmDialog = false
+                runCatching {
+                    repo.disbursePeriodicAidsBatch(currentDisbursingMonth, activeList.map { it.id })
+                }.onSuccess {
+                    Toast.makeText(context, "تم صرف الكفالات لشهر $currentDisbursingMonth وتوليد سند الصرف والقيد بنجاح", Toast.LENGTH_SHORT).show()
+                    showBatchConfirmDialog = false
+                }.onFailure { err ->
+                    Toast.makeText(context, err.message ?: "تعذر صرف دفعة الكفالات", Toast.LENGTH_LONG).show()
+                    showBatchConfirmDialog = false
+                }
             },
             onDismiss = { showBatchConfirmDialog = false }
         )
@@ -265,9 +336,14 @@ fun PeriodicAidsScreen() {
             beneficiaries = beneficiaries,
             onDismiss = { showAddDialog = false },
             onAdd = { benId, benName, amount, type ->
-                repo.addPeriodicAid(benId, benName, amount, type)
-                Toast.makeText(context, "تمت جدولة الكفالة الدورية بنجاح", Toast.LENGTH_SHORT).show()
-                showAddDialog = false
+                runCatching {
+                    repo.addPeriodicAid(benId, benName, amount, type)
+                }.onSuccess {
+                    Toast.makeText(context, "تمت جدولة الكفالة الدورية بنجاح", Toast.LENGTH_SHORT).show()
+                    showAddDialog = false
+                }.onFailure { err ->
+                    Toast.makeText(context, err.message ?: "تعذر إضافة الكفالة", Toast.LENGTH_LONG).show()
+                }
             }
         )
     }

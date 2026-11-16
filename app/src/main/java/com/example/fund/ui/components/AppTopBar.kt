@@ -9,6 +9,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.MenuOpen
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -20,13 +21,18 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import android.widget.Toast
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.fund.data.FundRepository
+import com.example.fund.data.repository.AuthResult
 import com.example.fund.model.AidStatus
-import com.example.fund.model.UserRole
+import com.example.fund.model.AppUser
 import com.example.ui.theme.*
+import kotlinx.coroutines.launch
 
 @Composable
 fun AppTopBar(
@@ -52,8 +58,11 @@ fun AppTopBar(
     val pendingAidsCount = aidRequests.count { it.status == AidStatus.IN_REVIEW }
     val totalAlerts = unreadCount + pendingAidsCount
 
+    val context = LocalContext.current
+    val users by repo.users.collectAsStateWithLifecycle()
     var roleMenuExpanded by remember { mutableStateOf(false) }
     var showAlertsDialog by remember { mutableStateOf(false) }
+    var showSwitchAccountDialog by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.fillMaxWidth()) {
         // Sleek, Compact Mobile Top Bar with contextual Up/Back or Drawer Menu + Quick Search
@@ -270,29 +279,29 @@ fun AppTopBar(
                                 onClick = { roleMenuExpanded = false }
                             )
                             HorizontalDivider()
-                            UserRole.entries.forEach { role ->
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            text = "تبديل إلى: ${role.title}",
-                                            fontWeight = if (currentUser.role == role) FontWeight.Bold else FontWeight.Normal,
-                                            color = if (currentUser.role == role) FundPrimary else Color.Unspecified,
-                                            fontSize = 12.sp
-                                        )
-                                    },
-                                    onClick = {
-                                        repo.switchRole(role)
-                                        roleMenuExpanded = false
-                                    }
-                                )
-                            }
-                            HorizontalDivider()
+                            DropdownMenuItem(
+                                leadingIcon = { Icon(Icons.Default.SwapHoriz, contentDescription = null, tint = FundPrimary) },
+                                text = { Text("تبديل الحساب (يتطلب كلمة المرور)", fontWeight = FontWeight.Bold, fontSize = 12.sp) },
+                                onClick = {
+                                    roleMenuExpanded = false
+                                    showSwitchAccountDialog = true
+                                }
+                            )
                             DropdownMenuItem(
                                 leadingIcon = { Icon(Icons.Default.Dns, contentDescription = null, tint = FundPrimary) },
                                 text = { Text("مركز الخادم المحلي والمزامنة", fontWeight = FontWeight.Bold, fontSize = 12.sp) },
                                 onClick = {
                                     roleMenuExpanded = false
                                     onOpenSyncCenter()
+                                }
+                            )
+                            HorizontalDivider()
+                            DropdownMenuItem(
+                                leadingIcon = { Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null, tint = StatusDanger) },
+                                text = { Text("تسجيل الخروج الآمن", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = StatusDanger) },
+                                onClick = {
+                                    roleMenuExpanded = false
+                                    repo.logout()
                                 }
                             )
                         }
@@ -363,15 +372,27 @@ fun AppTopBar(
                         )
                     }
 
+                    val topBarScope = rememberCoroutineScope()
+                    val isSyncingNow by repo.isSyncing.collectAsStateWithLifecycle()
                     TextButton(
+                        enabled = !isSyncingNow,
                         onClick = {
-                            if (!isOnline) repo.toggleOnline() else repo.syncNow()
+                            topBarScope.launch {
+                                repo.syncRepository.connectAndSyncSmartSuspending()
+                                Toast.makeText(
+                                    context,
+                                    repo.syncStageMessage.value,
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
                         },
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                        modifier = Modifier.height(24.dp)
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                        modifier = Modifier
+                            .minimumInteractiveComponentSize()
+                            .defaultMinSize(minHeight = 36.dp)
                     ) {
                         Text(
-                            text = if (!isOnline) "اتصال ومزامنة" else "مزامنة الآن",
+                            text = if (isSyncingNow) "جارٍ..." else if (!isOnline) "اتصال ومزامنة" else "مزامنة الآن",
                             color = FundGoldLight,
                             fontSize = 10.sp,
                             fontWeight = FontWeight.ExtraBold
@@ -398,4 +419,84 @@ fun AppTopBar(
             }
         )
     }
+
+    if (showSwitchAccountDialog) {
+        TopBarSwitchAccountDialog(
+            users = users.filter { it.isActive && it.id != currentUser.id },
+            onDismiss = { showSwitchAccountDialog = false },
+            onSwitch = { username, pw -> repo.switchAccountWithPassword(username, pw) },
+            onSuccess = { switched ->
+                showSwitchAccountDialog = false
+                Toast.makeText(context, "تم التحقق والتبديل إلى: ${switched.fullName}", Toast.LENGTH_SHORT).show()
+            }
+        )
+    }
+}
+
+@Composable
+private fun TopBarSwitchAccountDialog(
+    users: List<AppUser>,
+    onDismiss: () -> Unit,
+    onSwitch: (String, String) -> AuthResult,
+    onSuccess: (AppUser) -> Unit
+) {
+    var selectedUsername by remember(users) { mutableStateOf(users.firstOrNull()?.username.orEmpty()) }
+    var password by remember { mutableStateOf("") }
+    var errorMsg by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("تبديل الحساب الموثق", fontWeight = FontWeight.Bold, color = FundPrimary) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("أدخل اسم المستخدم وكلمة المرور للتحقق قبل تبديل الصلاحيات:", fontSize = 12.sp)
+                if (users.isNotEmpty()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        users.take(3).forEach { candidate ->
+                            FilterChip(
+                                selected = selectedUsername.equals(candidate.username, ignoreCase = true),
+                                onClick = { selectedUsername = candidate.username; errorMsg = null },
+                                label = { Text(candidate.role.title.substringBefore(" "), fontSize = 10.sp) }
+                            )
+                        }
+                    }
+                }
+                OutlinedTextField(
+                    value = selectedUsername,
+                    onValueChange = { selectedUsername = it; errorMsg = null },
+                    label = { Text("اسم المستخدم") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = { password = it; errorMsg = null },
+                    label = { Text("كلمة المرور") },
+                    visualTransformation = PasswordVisualTransformation(),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                errorMsg?.let { Text(it, color = StatusDanger, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    when (val res = onSwitch(selectedUsername, password)) {
+                        is AuthResult.Success -> onSuccess(res.user)
+                        is AuthResult.Error -> errorMsg = res.message
+                    }
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = FundPrimary)
+            ) {
+                Text("تحقق وتبديل")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("إلغاء") }
+        }
+    )
 }

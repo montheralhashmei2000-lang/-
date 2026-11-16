@@ -33,12 +33,16 @@ import com.example.fund.data.FundRepository
 import com.example.fund.model.AidStatus
 import com.example.fund.model.CurrencyCode
 import com.example.fund.model.Voucher
+import com.example.fund.model.VoucherStatus
 import com.example.fund.model.VoucherType
 import com.example.fund.ui.components.*
 import com.example.fund.ui.viewmodel.DashboardViewModel
 import com.example.fund.util.FormatUtils
 import com.example.fund.util.LocalScreenFormat
 import com.example.ui.theme.*
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Locale
 
 @Composable
 fun DashboardScreen(
@@ -100,14 +104,55 @@ fun DashboardScreen(
         isAiSummaryLoading = false
     }
 
-    val revenueTrendData = listOf(
-        "يونيو" to 1_420_000.0,
-        "يوليو" to 1_750_000.0,
-        "أغسطس" to 1_600_000.0,
-        "سبتمبر" to 1_950_000.0,
-        "أكتوبر" to 2_250_000.0,
-        "نوفمبر" to maxOf(2_800_000.0, totalRevenue * 0.28)
-    )
+    val postedReceipts = remember(vouchers) {
+        vouchers.filter { it.status == VoucherStatus.POSTED && it.type == VoucherType.RECEIPT }
+    }
+
+    val revenueTrendData = remember(postedReceipts) {
+        val monthNames = arrayOf(
+            "يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو",
+            "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"
+        )
+        val ymFormat = SimpleDateFormat("yyyy-MM", Locale.US)
+        val baseCal = Calendar.getInstance()
+        (5 downTo 0).map { offset ->
+            val cal = (baseCal.clone() as Calendar).apply { add(Calendar.MONTH, -offset) }
+            val ym = ymFormat.format(cal.time)
+            val label = monthNames[cal.get(Calendar.MONTH)]
+            val sum = postedReceipts.filter { it.date.startsWith(ym) }.sumOf { it.amountYer }
+            label to sum
+        }
+    }
+
+    val weeklyTrendData = remember(postedReceipts) {
+        val dayFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val dayNames = mapOf(
+            Calendar.SATURDAY to "السبت",
+            Calendar.SUNDAY to "الأحد",
+            Calendar.MONDAY to "الاثنين",
+            Calendar.TUESDAY to "الثلاثاء",
+            Calendar.WEDNESDAY to "الأربعاء",
+            Calendar.THURSDAY to "الخميس",
+            Calendar.FRIDAY to "الجمعة"
+        )
+        val baseCal = Calendar.getInstance()
+        (5 downTo 0).map { offset ->
+            val cal = (baseCal.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, -offset) }
+            val dateStr = dayFormat.format(cal.time)
+            val label = dayNames[cal.get(Calendar.DAY_OF_WEEK)] ?: dateStr.takeLast(2)
+            val sum = postedReceipts.filter { it.date == dateStr }.sumOf { it.amountYer }
+            label to sum
+        }
+    }
+
+    val yearlyTrendData = remember(postedReceipts) {
+        val currentYear = Calendar.getInstance().get(Calendar.YEAR)
+        (currentYear - 4..currentYear).map { yr ->
+            val yrStr = yr.toString()
+            val sum = postedReceipts.filter { it.date.startsWith(yrStr) }.sumOf { it.amountYer }
+            yrStr to sum
+        }
+    }
 
     val aidDistributionData = remember(accounts) {
         val cashAid = accounts.find { it.code == "5100" }?.balance ?: 0.0
@@ -128,27 +173,18 @@ fun DashboardScreen(
         Triple("قيد المراجعة", pendingAids, StatusPending)
     )
 
-    // Live Regional Revenue vs Expense Comparison derived from members & aids by region
-    val regionalComparisonData = remember(regions, members, aidRequests, totalRevenue, totalExpense) {
+    // Live Regional Revenue vs Expense Comparison derived from members & aids by region (zero-accurate)
+    val regionalComparisonData = remember(regions, members, aidRequests) {
         val memberRegionById = members.associate { it.id to it.region }
         val activeRegions = regions.map { it.name }.ifEmpty {
-            members.map { it.region }.distinct()
+            members.map { it.region }.filter { it.isNotBlank() }.distinct()
         }.take(4)
 
-        if (activeRegions.isEmpty()) {
-            listOf(
-                Triple("المنطقة الأولى", totalRevenue * 0.55, totalExpense * 0.45),
-                Triple("المنطقة الثانية", totalRevenue * 0.45, totalExpense * 0.35)
-            )
-        } else {
-            activeRegions.map { regionName ->
-                val regRev = members.filter { it.region == regionName }.sumOf { it.totalPaidYer }
-                    .coerceAtLeast(150_000.0)
-                val regExp = aidRequests.filter { req -> memberRegionById[req.memberId] == regionName }
-                    .sumOf { if (it.approvedAmountYer > 0) it.approvedAmountYer else it.requestedAmountYer }
-                    .coerceAtLeast(80_000.0)
-                Triple(regionName, regRev, regExp)
-            }
+        activeRegions.map { regionName ->
+            val regRev = members.filter { it.region == regionName }.sumOf { it.totalPaidYer }
+            val regExp = aidRequests.filter { req -> memberRegionById[req.memberId] == regionName }
+                .sumOf { if (it.approvedAmountYer > 0) it.approvedAmountYer else it.requestedAmountYer }
+            Triple(regionName, regRev, regExp)
         }
     }
 
@@ -620,7 +656,11 @@ fun DashboardScreen(
         }
 
         // 5. Interactive Visual Analytics Section (Timeframes + Touch Tooltips + Regional Bar Chart)
-        TrendLineChart(dataPoints = revenueTrendData)
+        TrendLineChart(
+            dataPoints = revenueTrendData,
+            weeklyDataPoints = weeklyTrendData,
+            yearlyDataPoints = yearlyTrendData
+        )
 
         RegionalComparisonBarChart(regionsData = regionalComparisonData)
 

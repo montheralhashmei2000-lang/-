@@ -1,18 +1,33 @@
 package com.example.fund.security
 
+import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyProperties
+import androidx.biometric.BiometricPrompt
+import java.security.KeyStore
 import java.security.MessageDigest
 import java.security.SecureRandom
+import javax.crypto.Cipher
+import javax.crypto.KeyGenerator
 import javax.crypto.Mac
+import javax.crypto.SecretKey
 import javax.crypto.SecretKeyFactory
+import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.PBEKeySpec
 import javax.crypto.spec.SecretKeySpec
 
 object SecurityUtils {
 
     private const val PBKDF2_ALGORITHM = "PBKDF2WithHmacSHA256"
-    private const val DEFAULT_ITERATIONS = 10_000
+    const val HASH_ALGORITHM_VERSION = "pbkdf2_sha256_v2"
+    const val DEFAULT_ITERATIONS = 120_000
+    private const val LEGACY_DEFAULT_ITERATIONS = 10_000
     private const val KEY_LENGTH_BITS = 256
     private const val SALT_BYTES = 16
+
+    private const val AES_GCM_TRANSFORM = "AES/GCM/NoPadding"
+    private const val AES_GCM_PREFIX = "AES256GCM_V1:"
+    private const val GCM_IV_BYTES = 12
+    private const val GCM_TAG_BITS = 128
 
     private val secureRandom = SecureRandom()
 
@@ -22,9 +37,15 @@ object SecurityUtils {
         return encodeBase64(salt)
     }
 
+    fun generateRandomKeyBytes(lengthBytes: Int = 32): ByteArray {
+        val key = ByteArray(lengthBytes)
+        secureRandom.nextBytes(key)
+        return key
+    }
+
     /**
-     * Hashes [password] with PBKDF2WithHmacSHA256 and a random per-user salt.
-     * Format: "<iterations>:<base64Salt>:<base64Hash>"
+     * Hashes [password] with PBKDF2WithHmacSHA256 using 120,000 iterations and a random per-user salt.
+     * Format: "pbkdf2_sha256_v2$<iterations>:<base64Salt>:<base64Hash>"
      */
     fun hashPassword(
         password: String,
@@ -33,33 +54,47 @@ object SecurityUtils {
     ): String {
         val salt = decodeBase64(saltBase64)
         val derived = deriveKey(password, salt, iterations)
-        return "$iterations:$saltBase64:${encodeBase64(derived)}"
+        return "$HASH_ALGORITHM_VERSION$$iterations:$saltBase64:${encodeBase64(derived)}"
     }
 
     /**
      * Constant-time verification of [password] against [storedHash].
-     * Supports "<iterations>:<salt>:<hash>" and legacy "<salt>:<hash>".
+     * Supports:
+     *  - "pbkdf2_sha256_v2$<iterations>:<salt>:<hash>"
+     *  - "pbkdf2_sha256_v2$<iterations>$<salt>$<hash>"
+     *  - Legacy "<iterations>:<salt>:<hash>"
+     *  - Legacy "<salt>:<hash>"
      */
     fun verifyPassword(password: String, storedHash: String): Boolean {
         if (password.isEmpty() || storedHash.isBlank()) return false
         return try {
-            val parts = storedHash.split(":")
             val iterations: Int
             val saltBase64: String
             val expectedHashBase64: String
 
-            when (parts.size) {
-                3 -> {
-                    iterations = parts[0].toIntOrNull()?.takeIf { it > 0 } ?: return false
-                    saltBase64 = parts[1]
-                    expectedHashBase64 = parts[2]
+            val colonParts = storedHash.split(":")
+            if (colonParts.size == 3) {
+                val iterToken = colonParts[0]
+                iterations = if (iterToken.startsWith("$HASH_ALGORITHM_VERSION$")) {
+                    iterToken.substringAfter("$HASH_ALGORITHM_VERSION$").toIntOrNull()?.takeIf { it > 0 } ?: return false
+                } else {
+                    iterToken.toIntOrNull()?.takeIf { it > 0 } ?: return false
                 }
-                2 -> {
-                    iterations = DEFAULT_ITERATIONS
-                    saltBase64 = parts[0]
-                    expectedHashBase64 = parts[1]
+                saltBase64 = colonParts[1]
+                expectedHashBase64 = colonParts[2]
+            } else if (colonParts.size == 2) {
+                iterations = LEGACY_DEFAULT_ITERATIONS
+                saltBase64 = colonParts[0]
+                expectedHashBase64 = colonParts[1]
+            } else {
+                val dollarParts = storedHash.split("$")
+                if (dollarParts.size == 4 && dollarParts[0] == HASH_ALGORITHM_VERSION) {
+                    iterations = dollarParts[1].toIntOrNull()?.takeIf { it > 0 } ?: return false
+                    saltBase64 = dollarParts[2]
+                    expectedHashBase64 = dollarParts[3]
+                } else {
+                    return false
                 }
-                else -> return false
             }
 
             val salt = decodeBase64(saltBase64)
@@ -79,6 +114,39 @@ object SecurityUtils {
             SecretKeyFactory.getInstance(PBKDF2_ALGORITHM).generateSecret(spec).encoded
         } finally {
             spec.clearPassword()
+        }
+    }
+
+    fun deriveAesKeyFromSecret(secret: String): ByteArray {
+        return MessageDigest.getInstance("SHA-256").digest(secret.toByteArray(Charsets.UTF_8))
+    }
+
+    fun encryptAesGcm(plaintext: String, keyBytes: ByteArray): String {
+        val iv = ByteArray(GCM_IV_BYTES)
+        secureRandom.nextBytes(iv)
+        val cipher = Cipher.getInstance(AES_GCM_TRANSFORM)
+        val keySpec = SecretKeySpec(keyBytes, "AES")
+        cipher.init(Cipher.ENCRYPT_MODE, keySpec, GCMParameterSpec(GCM_TAG_BITS, iv))
+        val cipherBytes = cipher.doFinal(plaintext.toByteArray(Charsets.UTF_8))
+        val combined = ByteArray(iv.size + cipherBytes.size)
+        System.arraycopy(iv, 0, combined, 0, iv.size)
+        System.arraycopy(cipherBytes, 0, combined, iv.size, cipherBytes.size)
+        return AES_GCM_PREFIX + encodeBase64(combined)
+    }
+
+    fun decryptAesGcm(envelope: String, keyBytes: ByteArray): String? {
+        if (!envelope.startsWith(AES_GCM_PREFIX)) return null
+        return try {
+            val raw = decodeBase64(envelope.removePrefix(AES_GCM_PREFIX))
+            if (raw.size <= GCM_IV_BYTES) return null
+            val iv = raw.copyOfRange(0, GCM_IV_BYTES)
+            val cipherBytes = raw.copyOfRange(GCM_IV_BYTES, raw.size)
+            val cipher = Cipher.getInstance(AES_GCM_TRANSFORM)
+            val keySpec = SecretKeySpec(keyBytes, "AES")
+            cipher.init(Cipher.DECRYPT_MODE, keySpec, GCMParameterSpec(GCM_TAG_BITS, iv))
+            String(cipher.doFinal(cipherBytes), Charsets.UTF_8)
+        } catch (_: Exception) {
+            null
         }
     }
 
@@ -160,5 +228,54 @@ object SecurityUtils {
             i += 4
         }
         return out
+    }
+}
+
+/**
+ * Hardware-backed AndroidKeyStore AES-256-GCM CryptoObject manager bound to a specific [userId].
+ */
+object BiometricKeyStoreHelper {
+    private const val ANDROID_KEYSTORE = "AndroidKeyStore"
+    private const val KEY_ALIAS_PREFIX = "social_fund_bio_key_"
+    private const val TRANSFORMATION = "AES/GCM/NoPadding"
+
+    private fun keyAliasFor(userId: String): String = "$KEY_ALIAS_PREFIX${userId.trim()}"
+
+    fun getOrCreateBiometricCipher(userId: String): BiometricPrompt.CryptoObject? {
+        if (userId.isBlank()) return null
+        return try {
+            val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
+            val alias = keyAliasFor(userId)
+            if (!keyStore.containsAlias(alias)) {
+                val keyGenerator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEYSTORE)
+                val spec = KeyGenParameterSpec.Builder(
+                    alias,
+                    KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
+                )
+                    .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                    .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                    .setUserAuthenticationRequired(true)
+                    .setInvalidatedByBiometricEnrollment(true)
+                    .build()
+                keyGenerator.init(spec)
+                keyGenerator.generateKey()
+            }
+            val secretKey = keyStore.getKey(alias, null) as? SecretKey ?: return null
+            val cipher = Cipher.getInstance(TRANSFORMATION)
+            cipher.init(Cipher.ENCRYPT_MODE, secretKey)
+            BiometricPrompt.CryptoObject(cipher)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    fun verifyUnlockedCrypto(result: BiometricPrompt.AuthenticationResult, userId: String): Boolean {
+        val cipher = result.cryptoObject?.cipher ?: return false
+        return try {
+            val sealed = cipher.doFinal("AUTH:$userId:${System.currentTimeMillis()}".toByteArray(Charsets.UTF_8))
+            sealed.isNotEmpty()
+        } catch (_: Exception) {
+            false
+        }
     }
 }

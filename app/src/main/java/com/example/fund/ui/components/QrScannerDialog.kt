@@ -12,9 +12,16 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraControl
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.FocusMeteringAction
+import androidx.camera.core.ImageAnalysis
+import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import com.google.zxing.BinaryBitmap
+import com.google.zxing.DecodeHintType
+import com.google.zxing.PlanarYUVLuminanceSource
+import com.google.zxing.common.HybridBinarizer
+import com.google.zxing.qrcode.QRCodeReader
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -53,7 +60,9 @@ import com.example.fund.model.Member
 import com.example.fund.model.Voucher
 import com.example.fund.util.FormatUtils
 import com.example.ui.theme.*
+import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicLong
 
 @Composable
 fun QrScannerDialog(
@@ -206,7 +215,16 @@ fun QrScannerDialog(
 
                     hasCameraPermission && showCameraPreview -> {
                         CameraXViewfinderCard(
-                            onHideCamera = { showCameraPreview = false }
+                            onHideCamera = { showCameraPreview = false },
+                            onQrDecoded = { decoded ->
+                                if (decoded.isNotBlank() && decoded != searchQuery) {
+                                    searchQuery = decoded
+                                    performLookup(decoded)
+                                    Toast.makeText(context, "تم مسح رمز QR بنجاح ✔", Toast.LENGTH_SHORT).show()
+                                } else if (decoded.isNotBlank()) {
+                                    performLookup(decoded)
+                                }
+                            }
                         )
                     }
 
@@ -499,16 +517,21 @@ fun QrScannerDialog(
 
 @Composable
 private fun CameraXViewfinderCard(
-    onHideCamera: () -> Unit
+    onHideCamera: () -> Unit,
+    onQrDecoded: (String) -> Unit
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
     var torchEnabled by remember { mutableStateOf(false) }
     var hasFlashUnit by remember { mutableStateOf(false) }
-    var focusHint by remember { mutableStateOf("وجّه الإطار نحو رمز QR أو المس الشاشة للتركيز") }
+    var focusHint by remember { mutableStateOf("وجّه الإطار نحو رمز QR للمسح التلقائي الفوري") }
     var cameraControl by remember { mutableStateOf<CameraControl?>(null) }
     var cameraError by remember { mutableStateOf<String?>(null) }
+
+    val latestOnQrDecoded by rememberUpdatedState(onQrDecoded)
+    val lastDecodedTimestamp = remember { AtomicLong(0L) }
+    var lastDecodedText by remember { mutableStateOf("") }
 
     val previewView = remember {
         PreviewView(context).apply {
@@ -519,20 +542,53 @@ private fun CameraXViewfinderCard(
 
     DisposableEffect(lifecycleOwner, previewView) {
         val providerFuture = ProcessCameraProvider.getInstance(context)
-        val executor = ContextCompat.getMainExecutor(context)
+        val mainExecutor = ContextCompat.getMainExecutor(context)
+        val analysisExecutor = Executors.newSingleThreadExecutor()
+        val qrReader = QRCodeReader()
+        val decodeHints = mapOf(
+            DecodeHintType.CHARACTER_SET to "UTF-8",
+            DecodeHintType.TRY_HARDER to true
+        )
+
         val listener = Runnable {
             runCatching {
                 val cameraProvider = providerFuture.get()
                 val preview = Preview.Builder().build().also {
                     it.surfaceProvider = previewView.surfaceProvider
                 }
+                val imageAnalysis = ImageAnalysis.Builder()
+                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                    .build()
+                    .also { analysis ->
+                        analysis.setAnalyzer(analysisExecutor) { imageProxy ->
+                            try {
+                                val decoded = decodeQrFromImageProxy(imageProxy, qrReader, decodeHints)
+                                if (!decoded.isNullOrBlank()) {
+                                    val now = System.currentTimeMillis()
+                                    val prev = lastDecodedTimestamp.get()
+                                    if ((decoded != lastDecodedText || now - prev >= 1500L) &&
+                                        lastDecodedTimestamp.compareAndSet(prev, now)
+                                    ) {
+                                        mainExecutor.execute {
+                                            lastDecodedText = decoded
+                                            focusHint = "تم التقاط الرمز: ${decoded.take(28)} ✔"
+                                            latestOnQrDecoded(decoded)
+                                        }
+                                    }
+                                }
+                            } finally {
+                                imageProxy.close()
+                            }
+                        }
+                    }
+
                 val selector = CameraSelector.DEFAULT_BACK_CAMERA
                 if (!cameraProvider.hasCamera(selector)) {
                     cameraError = "لا توجد كاميرا خلفية متصلة"
                     return@runCatching
                 }
                 cameraProvider.unbindAll()
-                val camera = cameraProvider.bindToLifecycle(lifecycleOwner, selector, preview)
+                val camera = cameraProvider.bindToLifecycle(lifecycleOwner, selector, preview, imageAnalysis)
                 cameraControl = camera.cameraControl
                 hasFlashUnit = camera.cameraInfo.hasFlashUnit()
 
@@ -548,7 +604,7 @@ private fun CameraXViewfinderCard(
                 cameraError = err.localizedMessage ?: "الكاميرا غير متوفرة حالياً"
             }
         }
-        providerFuture.addListener(listener, executor)
+        providerFuture.addListener(listener, mainExecutor)
 
         onDispose {
             runCatching {
@@ -556,6 +612,7 @@ private fun CameraXViewfinderCard(
                     providerFuture.get().unbindAll()
                 }
             }
+            runCatching { analysisExecutor.shutdown() }
         }
     }
 
@@ -704,5 +761,60 @@ private fun CameraXViewfinderCard(
                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
             )
         }
+    }
+}
+
+private fun decodeQrFromImageProxy(
+    imageProxy: ImageProxy,
+    reader: QRCodeReader,
+    hints: Map<DecodeHintType, Any>
+): String? {
+    val plane = imageProxy.planes.firstOrNull() ?: return null
+    val width = imageProxy.width
+    val height = imageProxy.height
+    if (width <= 0 || height <= 0) return null
+
+    val buffer = plane.buffer
+    val rowStride = plane.rowStride
+    val pixelStride = plane.pixelStride
+    val yData = ByteArray(width * height)
+
+    if (pixelStride == 1 && rowStride == width && buffer.remaining() >= width * height) {
+        buffer.get(yData, 0, width * height)
+    } else {
+        val rowBuffer = ByteArray(rowStride)
+        for (row in 0 until height) {
+            val remaining = buffer.remaining()
+            if (remaining <= 0) break
+            val bytesToRead = minOf(rowStride, remaining)
+            buffer.get(rowBuffer, 0, bytesToRead)
+            val destOffset = row * width
+            if (pixelStride == 1) {
+                System.arraycopy(rowBuffer, 0, yData, destOffset, minOf(width, bytesToRead))
+            } else {
+                var col = 0
+                while (col < width && col * pixelStride < bytesToRead) {
+                    yData[destOffset + col] = rowBuffer[col * pixelStride]
+                    col++
+                }
+            }
+        }
+    }
+
+    return runCatching {
+        val source = PlanarYUVLuminanceSource(
+            yData,
+            width,
+            height,
+            0,
+            0,
+            width,
+            height,
+            false
+        )
+        val bitmap = BinaryBitmap(HybridBinarizer(source))
+        reader.decode(bitmap, hints).text
+    }.getOrNull().also {
+        runCatching { reader.reset() }
     }
 }

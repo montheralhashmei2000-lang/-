@@ -20,7 +20,7 @@ data class RegionGroupEntity(
 
 @Entity(
     tableName = "members",
-    indices = [Index(value = ["memberNo"]), Index(value = ["region"])]
+    indices = [Index(value = ["memberNo"], unique = true), Index(value = ["region"])]
 )
 data class MemberEntity(
     @PrimaryKey val id: String,
@@ -52,7 +52,7 @@ data class MemberEntity(
 
 @Entity(
     tableName = "subscriptions",
-    indices = [Index(value = ["memberId"]), Index(value = ["receiptNo"])],
+    indices = [Index(value = ["memberId"]), Index(value = ["receiptNo"], unique = true)],
     foreignKeys = [
         ForeignKey(
             entity = MemberEntity::class,
@@ -92,7 +92,19 @@ data class SubscriptionEntity(
 
 @Entity(
     tableName = "aid_requests",
-    indices = [Index(value = ["memberId"]), Index(value = ["status"])]
+    indices = [
+        Index(value = ["memberId"]),
+        Index(value = ["requestNo"], unique = true),
+        Index(value = ["status"])
+    ],
+    foreignKeys = [
+        ForeignKey(
+            entity = MemberEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["memberId"],
+            onDelete = ForeignKey.RESTRICT
+        )
+    ]
 )
 data class AidRequestEntity(
     @PrimaryKey val id: String,
@@ -123,7 +135,26 @@ data class AidRequestEntity(
 
 @Entity(
     tableName = "vouchers",
-    indices = [Index(value = ["voucherNo"]), Index(value = ["linkedJournalEntryId"])]
+    indices = [
+        Index(value = ["voucherNo"], unique = true),
+        Index(value = ["linkedJournalEntryId"]),
+        Index(value = ["accountCode"]),
+        Index(value = ["counterpartAccountCode"])
+    ],
+    foreignKeys = [
+        ForeignKey(
+            entity = AccountEntity::class,
+            parentColumns = ["code"],
+            childColumns = ["accountCode"],
+            onDelete = ForeignKey.RESTRICT
+        ),
+        ForeignKey(
+            entity = AccountEntity::class,
+            parentColumns = ["code"],
+            childColumns = ["counterpartAccountCode"],
+            onDelete = ForeignKey.RESTRICT
+        )
+    ]
 )
 data class VoucherEntity(
     @PrimaryKey val id: String,
@@ -169,7 +200,7 @@ data class VoucherEntity(
 
 @Entity(
     tableName = "journal_entries",
-    indices = [Index(value = ["entryNo"]), Index(value = ["originalVoucherNo"])]
+    indices = [Index(value = ["entryNo"], unique = true), Index(value = ["originalVoucherNo"])]
 )
 data class JournalEntryEntity(
     @PrimaryKey val id: String,
@@ -205,7 +236,18 @@ data class AccountEntity(
     }
 }
 
-@Entity(tableName = "budgets", indices = [Index(value = ["accountCode"])])
+@Entity(
+    tableName = "budgets",
+    indices = [Index(value = ["accountCode"])],
+    foreignKeys = [
+        ForeignKey(
+            entity = AccountEntity::class,
+            parentColumns = ["code"],
+            childColumns = ["accountCode"],
+            onDelete = ForeignKey.RESTRICT
+        )
+    ]
+)
 data class BudgetEntity(
     @PrimaryKey val id: String,
     val category: String,
@@ -301,7 +343,7 @@ data class PeriodicAidEntity(
     }
 }
 
-@Entity(tableName = "in_kind_items", indices = [Index(value = ["code"])])
+@Entity(tableName = "in_kind_items", indices = [Index(value = ["code"], unique = true)])
 data class InKindItemEntity(
     @PrimaryKey val id: String,
     val code: String,
@@ -321,7 +363,7 @@ data class InKindItemEntity(
 
 @Entity(
     tableName = "in_kind_movements",
-    indices = [Index(value = ["itemId"])],
+    indices = [Index(value = ["itemId"]), Index(value = ["movementNo"], unique = true)],
     foreignKeys = [
         ForeignKey(
             entity = InKindItemEntity::class,
@@ -409,11 +451,16 @@ data class AppUserEntity(
     val role: UserRole,
     val isActive: Boolean,
     val lastLogin: String,
-    val passwordHash: String
+    val passwordHash: String,
+    val quickPinHash: String = "",
+    val mustChangePassword: Boolean = false
 ) {
-    fun toDomain() = AppUser(id, username, fullName, role, isActive, lastLogin, passwordHash)
+    fun toDomain() = AppUser(id, username, fullName, role, isActive, lastLogin, passwordHash, quickPinHash, mustChangePassword)
     companion object {
-        fun fromDomain(d: AppUser) = AppUserEntity(d.id, d.username, d.fullName, d.role, d.isActive, d.lastLogin, d.passwordHash)
+        fun fromDomain(d: AppUser) = AppUserEntity(
+            d.id, d.username, d.fullName, d.role, d.isActive, d.lastLogin,
+            d.passwordHash, d.quickPinHash, d.mustChangePassword
+        )
     }
 }
 

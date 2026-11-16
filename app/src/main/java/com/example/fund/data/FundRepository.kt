@@ -12,8 +12,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -42,8 +42,8 @@ class FundRepository private constructor() {
     val settingsRepository = SettingsRepository(repoScope, dbDispatcher, userRepository)
     val syncRepository = SyncRepository(repoScope, dbDispatcher, userRepository)
     val accountingRepository = AccountingRepository(repoScope, dbDispatcher, settingsRepository, userRepository)
-    val memberRepository = MemberRepository(repoScope, dbDispatcher, accountingRepository, userRepository)
-    val aidRepository = AidRepository(repoScope, dbDispatcher, accountingRepository, memberRepository, userRepository)
+    val memberRepository = MemberRepository(repoScope, dbDispatcher, accountingRepository, settingsRepository, userRepository)
+    val aidRepository = AidRepository(repoScope, dbDispatcher, accountingRepository, memberRepository, settingsRepository, userRepository)
 
     private var database: FundDatabase? = null
     private var sessionManager: EncryptedSessionManager? = null
@@ -57,12 +57,17 @@ class FundRepository private constructor() {
             isOnlineProvider = { syncRepository.isOnline.value },
             onOfflineAuditHook = { action, desc -> syncRepository.enqueueOfflineOperation(action, desc) }
         )
+        memberRepository.setExtraRegionUsageCounter { regionName ->
+            aidRepository.beneficiaries.value.count { it.region == regionName }
+        }
         syncRepository.setBackupJsonProvider { exportDatabaseJson() }
+        syncRepository.setRestoreBackupHandler { json -> importDatabaseFromJson(json) }
     }
 
     // StateFlow projections delegated directly to specialized repositories
     val currentUser: StateFlow<AppUser> get() = userRepository.currentUser
     val isLoggedIn: StateFlow<Boolean> get() = userRepository.isLoggedIn
+    val requiresPasswordChange: StateFlow<Boolean> get() = userRepository.requiresPasswordChange
     val users: StateFlow<List<AppUser>> get() = userRepository.users
     val auditLogs: StateFlow<List<AuditLog>> get() = userRepository.auditLogs
 
@@ -78,7 +83,9 @@ class FundRepository private constructor() {
     val printFormat: StateFlow<DisplayFormatConfig> get() = settingsRepository.printFormat
 
     val isOnline: StateFlow<Boolean> get() = syncRepository.isOnline
+    val isTransportAvailable: StateFlow<Boolean> get() = syncRepository.isTransportAvailable
     val serverConfig: StateFlow<LocalServerConfig> get() = syncRepository.serverConfig
+    val serverProfiles: StateFlow<List<ServerProfile>> get() = syncRepository.serverProfiles
     val autoSyncOnConnect: StateFlow<Boolean> get() = syncRepository.autoSyncOnConnect
     val isSyncing: StateFlow<Boolean> get() = syncRepository.isSyncing
     val syncProgress: StateFlow<Float> get() = syncRepository.syncProgress
@@ -86,6 +93,8 @@ class FundRepository private constructor() {
     val lastSyncTimestamp: StateFlow<String> get() = syncRepository.lastSyncTimestamp
     val syncHistory: StateFlow<List<SyncBatchRecord>> get() = syncRepository.syncHistory
     val syncQueue: StateFlow<List<SyncQueueItem>> get() = syncRepository.syncQueue
+    val localVaultBatchCount: StateFlow<Int> get() = syncRepository.localVaultBatchCount
+    val localVaultSizeBytes: StateFlow<Long> get() = syncRepository.localVaultSizeBytes
 
     val accounts: StateFlow<List<Account>> get() = accountingRepository.accounts
     val vouchers: StateFlow<List<Voucher>> get() = accountingRepository.vouchers
@@ -111,6 +120,15 @@ class FundRepository private constructor() {
     // ------------------------------------------------------------------------
     // Room SQLite + EncryptedSessionManager Initialization & One-Time Migration
     // ------------------------------------------------------------------------
+    fun isStorageInitialized(): Boolean = storageInitialized
+
+    suspend fun initStorageAsync(context: Context) {
+        if (storageInitialized) return
+        withContext(Dispatchers.IO) {
+            initStorage(context)
+        }
+    }
+
     fun initStorage(context: Context) {
         if (storageInitialized) return
         synchronized(this) {
@@ -120,6 +138,7 @@ class FundRepository private constructor() {
             val session = EncryptedSessionManager(appCtx)
             database = db
             sessionManager = session
+            syncRepository.setApplicationContext(appCtx)
 
             runBlocking(Dispatchers.IO) {
                 LegacyMigrationHelper.migrateAndSeedIfNeeded(appCtx, db, session)
@@ -141,8 +160,8 @@ class FundRepository private constructor() {
     fun setFontScalePreference(scale: Float) = settingsRepository.setFontScalePreference(scale)
     fun setAppFontPreference(fontOption: AppFontOption) = settingsRepository.setAppFontPreference(fontOption)
     fun setAutoSyncOnConnect(enabled: Boolean) = syncRepository.setAutoSyncOnConnect(enabled)
-    fun updateServerNode(name: String, host: String, latencyMs: Int = 8) =
-        syncRepository.updateServerNode(name, host, latencyMs)
+    fun updateServerNode(name: String, host: String, latencyMs: Int = 0, authToken: String? = null) =
+        syncRepository.updateServerNode(name, host, latencyMs, authToken)
 
     fun getTotalLocalRecordsCount(): Int {
         return members.value.size +
@@ -166,31 +185,33 @@ class FundRepository private constructor() {
         aidRepository.resetToSeed()
         accountingRepository.resetToSeed()
         userRepository.resetToSeed()
-        syncRepository.resetToSeed()
         userRepository.logAudit("إعادة ضبط المصنع", "تمت استعادة البيانات الأولية الافتراضية للصندوق بنجاح")
+        syncRepository.resetToSeed()
 
         val db = database
         val session = sessionManager
         if (db != null && session != null) {
-            repoScope.launch(dbDispatcher) {
+            runBlocking(dbDispatcher) {
                 LegacyMigrationHelper.seedDefaultDatabase(db, session)
             }
         }
     }
 
-    // Authentication & Audit
+    // Authentication & Audit (passwordless bypass & free switchRole removed)
     fun authenticateWithPassword(usernameInput: String, passwordInput: String): AuthResult =
         userRepository.authenticateWithPassword(usernameInput, passwordInput)
 
-    fun authenticateUser(usernameInput: String): AppUser =
-        userRepository.authenticateUser(usernameInput)
+    fun switchAccountWithPassword(targetUsername: String, passwordInput: String): AuthResult =
+        userRepository.switchAccountWithPassword(targetUsername, passwordInput)
+
+    fun changePassword(currentPassword: String, newPassword: String): AuthResult =
+        userRepository.changePassword(currentPassword, newPassword)
 
     fun logout() = userRepository.logout()
     fun logAudit(action: String, description: String) = userRepository.logAudit(action, description)
     fun simulateOfflineFieldOperations() = syncRepository.simulateOfflineFieldOperations()
     fun syncNow() = syncRepository.syncNow()
     fun toggleOnline() = syncRepository.toggleOnline()
-    fun switchRole(role: UserRole) = userRepository.switchRole(role)
 
     // Currency
     fun convertToYer(amountOriginal: Double, currency: CurrencyCode): Double =
@@ -220,7 +241,41 @@ class FundRepository private constructor() {
         notes: String
     ): Boolean = accountingRepository.transferBetweenTreasuryAccounts(fromAccountCode, toAccountCode, amountYer, notes)
 
-    fun voidVoucher(voucherId: String) = accountingRepository.voidVoucher(voucherId)
+    fun voidVoucher(voucherId: String) {
+        var rolledBackSub: Pair<Subscription, Member>? = null
+        var rolledBackAid = AidRepository.AidVoidRollbackState()
+        val dbRef = database
+        if (dbRef == null) {
+            // Pure unit-test path without SQLite
+            accountingRepository.voidVoucher(
+                voucherId = voucherId,
+                onMemoryRollback = { v ->
+                    val sub = memberRepository.findSubscriptionForVoucher(v)
+                    if (sub != null) {
+                        memberRepository.commitSubscriptionVoidInMemory(sub, null)
+                    }
+                    val aidState = runBlocking(dbDispatcher) {
+                        aidRepository.rollbackAidEntitiesInTransaction(null, v)
+                    }
+                    aidRepository.commitAidVoidInMemory(aidState)
+                }
+            )
+            return
+        }
+        accountingRepository.voidVoucher(
+            voucherId = voucherId,
+            onTransactionRollback = { txDb, v ->
+                rolledBackSub = memberRepository.rollbackSubscriptionInTransaction(txDb, v)
+                rolledBackAid = aidRepository.rollbackAidEntitiesInTransaction(txDb, v)
+            },
+            onMemoryRollback = { _ ->
+                rolledBackSub?.let { (sub, restoredMember) ->
+                    memberRepository.commitSubscriptionVoidInMemory(sub, restoredMember)
+                }
+                aidRepository.commitAidVoidInMemory(rolledBackAid)
+            }
+        )
+    }
 
     fun addSubAccount(
         code: String,
@@ -243,6 +298,10 @@ class FundRepository private constructor() {
     fun addMember(member: Member) = memberRepository.addMember(member)
     fun updateMember(member: Member) = memberRepository.updateMember(member)
     fun toggleMemberStatus(memberId: String) = memberRepository.toggleMemberStatus(memberId)
+    fun autoSuspendOverdueMembers(): Int = memberRepository.autoSuspendOverdueMembers(
+        thresholdMonths = appSettings.value.autoSuspendMonths,
+        monthlyFeeYer = appSettings.value.monthlySubscriptionFeeYer
+    )
     fun addSubscription(
         memberId: String,
         amountOriginal: Double,
@@ -362,17 +421,31 @@ class FundRepository private constructor() {
             schedulerEvents = schedulerEvents.value,
             internalMessages = internalMessages.value,
             currencyRates = currencyRates.value,
-            syncQueue = syncQueue.value
+            syncQueue = syncQueue.value,
+            users = users.value,
+            auditLogs = auditLogs.value,
+            syncBatches = syncHistory.value,
+            serverConfig = serverConfig.value
         )
     }
 
     fun importDatabaseFromJson(json: String, isSilentLoad: Boolean = false): Boolean {
+        userRepository.requirePermission(UserRole.ADMIN, actionDescription = "استيراد نسخة احتياطية كاملة")
         val parsed = FundBackupCodec.parseFromJson(
             json = json,
             fallbackFundInfo = fundInfo.value,
             fallbackAppSettings = appSettings.value,
             fallbackPrintSettings = printSettings.value
         ) ?: return false
+
+        database?.let { db ->
+            val ok = runCatching {
+                runBlocking(dbDispatcher) {
+                    LegacyMigrationHelper.writeSnapshotToDatabase(db, parsed, clearFirst = true)
+                }
+            }.isSuccess
+            if (!ok) return false
+        }
 
         settingsRepository.applySnapshot(
             parsed.fundInfo,
@@ -398,16 +471,11 @@ class FundRepository private constructor() {
             parsed.budgets,
             parsed.currencyRates
         )
-        syncRepository.applySyncQueueSnapshot(parsed.syncQueue)
-
-        database?.let { db ->
-            repoScope.launch(dbDispatcher) {
-                LegacyMigrationHelper.writeSnapshotToDatabase(db, parsed, clearFirst = true)
-            }
-        }
+        userRepository.applyUsersAndAuditSnapshot(parsed.users, parsed.auditLogs)
+        syncRepository.applySyncSnapshot(parsed.syncQueue, parsed.syncBatches, parsed.serverConfig)
 
         if (!isSilentLoad) {
-            logAudit("استيراد بيانات", "تم استيراد نسخة احتياطية بنجاح بتاريخ ${parsed.exportDate}")
+            logAudit("استيراد بيانات", "تم استيراد نسخة احتياطية كاملة بنجاح بتاريخ ${parsed.exportDate}")
         }
         return true
     }

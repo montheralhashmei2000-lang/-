@@ -209,20 +209,25 @@ fun InKindScreen() {
                 } else {
                     val movNo = "MOV-%03d".format(movements.size + 1)
                     val today = SimpleDateFormat("yyyy-MM-dd", Locale.ENGLISH).format(Date())
-                    repo.addInKindMovement(
-                        InKindMovement(
-                            movementNo = movNo,
-                            type = typeStr,
-                            itemId = selected.id,
-                            itemName = selected.name,
-                            quantity = qty,
-                            partyName = party,
-                            date = today,
-                            notes = notes
+                    runCatching {
+                        repo.addInKindMovement(
+                            InKindMovement(
+                                movementNo = movNo,
+                                type = typeStr,
+                                itemId = selected.id,
+                                itemName = selected.name,
+                                quantity = qty,
+                                partyName = party,
+                                date = today,
+                                notes = notes
+                            )
                         )
-                    )
-                    Toast.makeText(context, "تم تسجيل حركة المستودع وتحديث الرصيد بنجاح", Toast.LENGTH_SHORT).show()
-                    showMoveDialog = null
+                    }.onSuccess {
+                        Toast.makeText(context, "تم تسجيل حركة المستودع وتحديث الرصيد بنجاح", Toast.LENGTH_SHORT).show()
+                        showMoveDialog = null
+                    }.onFailure { err ->
+                        Toast.makeText(context, err.message ?: "تعذر تنفيذ حركة المستودع", Toast.LENGTH_LONG).show()
+                    }
                 }
             }
         )
@@ -233,9 +238,14 @@ fun InKindScreen() {
             nextIndex = items.size + 1,
             onDismiss = { showAddItemDialog = false },
             onSave = { newItem ->
-                repo.addInKindItem(newItem)
-                showAddItemDialog = false
-                Toast.makeText(context, "تمت إضافة الصنف العيني الجديد إلى المستودع", Toast.LENGTH_SHORT).show()
+                runCatching {
+                    repo.addInKindItem(newItem)
+                }.onSuccess {
+                    showAddItemDialog = false
+                    Toast.makeText(context, "تمت إضافة الصنف العيني الجديد إلى المستودع", Toast.LENGTH_SHORT).show()
+                }.onFailure { err ->
+                    Toast.makeText(context, err.message ?: "تعذر إضافة الصنف العيني", Toast.LENGTH_LONG).show()
+                }
             }
         )
     }

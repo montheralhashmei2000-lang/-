@@ -18,6 +18,7 @@ class AccountingViewModel : ViewModel() {
     val budgets: StateFlow<List<Budget>> = accountingRepo.budgets
     val currencyRates: StateFlow<Map<CurrencyCode, Double>> = accountingRepo.currencyRates
     val fundInfo: StateFlow<FundInfo> = settingsRepo.fundInfo
+    val appSettings: StateFlow<AppSettings> = settingsRepo.appSettings
     val currentUser: StateFlow<AppUser> = userRepo.currentUser
     val screenFormat: StateFlow<DisplayFormatConfig> = settingsRepo.screenFormat
     val printFormat: StateFlow<DisplayFormatConfig> = settingsRepo.printFormat

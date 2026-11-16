@@ -138,8 +138,38 @@ class ExampleRobolectricTest {
     fun `one-time migration moves legacy shared preferences json into Room and removes legacy key`() = runBlocking {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val legacyPrefs = context.getSharedPreferences(LegacyMigrationHelper.LEGACY_PREFS_NAME, Context.MODE_PRIVATE)
-        val seedJson = FundRepository.getInstance().exportDatabaseJson()
-            .replace("الصندوق الاجتماعي التنموي", "صندوق اختبار الترحيل")
+        val seedJson = com.example.fund.data.local.FundBackupCodec.exportToJson(
+            exportDate = "2026-11-13 10:00",
+            fundInfo = com.example.fund.model.FundInfo(name = "صندوق اختبار الترحيل"),
+            regions = SeedData.regions,
+            appSettings = com.example.fund.model.AppSettings(),
+            printSettings = com.example.fund.model.PrintSettings(),
+            members = SeedData.members,
+            beneficiaries = SeedData.beneficiaries,
+            accounts = SeedData.accounts,
+            vouchers = SeedData.vouchers,
+            journalEntries = SeedData.journalEntries,
+            subscriptions = SeedData.subscriptions,
+            aidRequests = SeedData.aidRequests,
+            budgets = SeedData.budgets,
+            donors = SeedData.donors,
+            campaigns = SeedData.campaigns,
+            periodicAids = SeedData.periodicAids,
+            inKindItems = SeedData.inKindItems,
+            inKindMovements = SeedData.inKindMovements,
+            schedulerEvents = SeedData.schedulerEvents,
+            internalMessages = SeedData.internalMessages,
+            currencyRates = mapOf(
+                com.example.fund.model.CurrencyCode.YER to 1.0,
+                com.example.fund.model.CurrencyCode.SAR to 665.0,
+                com.example.fund.model.CurrencyCode.USD to 2530.0
+            ),
+            syncQueue = emptyList(),
+            users = SeedData.users,
+            auditLogs = SeedData.auditLogs,
+            syncBatches = emptyList(),
+            serverConfig = com.example.fund.model.LocalServerConfig()
+        )
 
         legacyPrefs.edit(commit = true) {
             putString(LegacyMigrationHelper.LEGACY_JSON_KEY, seedJson)

@@ -24,12 +24,14 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.fund.data.FundRepository
+import com.example.fund.data.repository.AccountingValidator
 import com.example.fund.model.*
 import com.example.fund.ui.components.FundEmptyState
 import com.example.fund.ui.viewmodel.AccountingViewModel
 import com.example.fund.util.FormatUtils
 import com.example.fund.util.OfficialPrintHelper
 import com.example.ui.theme.*
+import java.util.Locale
 import kotlin.math.abs
 
 @Composable
@@ -43,6 +45,7 @@ fun FinancialReportsScreen(accountingViewModel: AccountingViewModel = viewModel(
     val screenFormat by accountingViewModel.screenFormat.collectAsStateWithLifecycle()
 
     var activeTab by remember { mutableIntStateOf(0) }
+    var selectedLedgerCode by remember { mutableStateOf("1100") }
     val tabTitles = listOf(
         "ميزان المراجعة",
         "قائمة الدخل",
@@ -80,10 +83,14 @@ fun FinancialReportsScreen(accountingViewModel: AccountingViewModel = viewModel(
 
             Button(
                 onClick = {
-                    OfficialPrintHelper.printFinancialStatementPdf(
+                    OfficialPrintHelper.printFinancialTabStatementPdf(
                         context = context,
+                        tabIndex = activeTab,
                         statementTitle = "القائمة المالية المعتمدة: ${tabTitles[activeTab]}",
                         accounts = accounts,
+                        journalEntries = journalEntries,
+                        selectedLedgerCode = selectedLedgerCode,
+                        currencyRates = currencyRates,
                         fundInfo = fundInfo
                     )
                     Toast.makeText(context, "جاري فتح نافذة الطباعة الرسمية وحفظ PDF...", Toast.LENGTH_SHORT).show()
@@ -119,7 +126,13 @@ fun FinancialReportsScreen(accountingViewModel: AccountingViewModel = viewModel(
             0 -> TrialBalanceTab(accounts, journalEntries, screenFormat)
             1 -> IncomeStatementTab(accounts, screenFormat)
             2 -> BalanceSheetTab(accounts, screenFormat)
-            3 -> AccountLedgerTab(accounts, journalEntries, screenFormat)
+            3 -> AccountLedgerTab(
+                accounts = accounts,
+                entries = journalEntries,
+                screenFormat = screenFormat,
+                selectedCode = selectedLedgerCode,
+                onSelectCode = { selectedLedgerCode = it }
+            )
             4 -> ReconciliationTab(accounts, screenFormat, onAdjustEntry = { code, name, diff ->
                 val lines = if (diff > 0) {
                     listOf(
@@ -133,8 +146,17 @@ fun FinancialReportsScreen(accountingViewModel: AccountingViewModel = viewModel(
                         JournalLine(code, name, 0.0, absDiff, "دائن - تسوية عجز الجرد")
                     )
                 }
-                repo.createManualJournalEntry(lines, "قيد تسوية مطابق لحساب $name بفارق ${FormatUtils.formatAmount(diff, screenFormat)}")
-                Toast.makeText(context, "تم توليد قيد التسوية وترحيله بنجاح", Toast.LENGTH_SHORT).show()
+                val posted = runCatching {
+                    repo.createManualJournalEntry(
+                        lines,
+                        "قيد تسوية مطابق لحساب $name بفارق ${FormatUtils.formatAmount(diff, screenFormat)}"
+                    )
+                }.getOrDefault(false)
+                if (posted) {
+                    Toast.makeText(context, "تم توليد قيد التسوية وترحيله بنجاح", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(context, "تعذر ترحيل قيد التسوية: تحقق من صلاحيات الحساب أو توازن القيد", Toast.LENGTH_LONG).show()
+                }
             })
             5 -> CurrenciesTab(currencyRates, screenFormat, onUpdateRate = { curr, newRate ->
                 repo.updateCurrencyRate(curr, newRate)
@@ -175,7 +197,7 @@ private fun TrialBalanceTab(accounts: List<Account>, entries: List<JournalEntry>
         }
     }
 
-    val isBalanced = Math.abs(totalDebitBalance - totalCreditBalance) < 1.0
+    val isBalanced = abs(totalDebitBalance - totalCreditBalance) < AccountingValidator.BALANCE_TOLERANCE
 
     Column(
         modifier = Modifier
@@ -503,9 +525,10 @@ private fun BalanceSheetTab(accounts: List<Account>, screenFormat: DisplayFormat
 private fun AccountLedgerTab(
     accounts: List<Account>,
     entries: List<JournalEntry>,
-    screenFormat: DisplayFormatConfig
+    screenFormat: DisplayFormatConfig,
+    selectedCode: String,
+    onSelectCode: (String) -> Unit
 ) {
-    var selectedCode by remember { mutableStateOf("1100") }
     var dropdownOpen by remember { mutableStateOf(false) }
 
     val activeAccount = accounts.find { it.code == selectedCode } ?: accounts.first()
@@ -543,7 +566,7 @@ private fun AccountLedgerTab(
                     DropdownMenuItem(
                         text = { Text("${acc.name} (${FormatUtils.formatCodeOrNumber(acc.code, screenFormat)})") },
                         onClick = {
-                            selectedCode = acc.code
+                            onSelectCode(acc.code)
                             dropdownOpen = false
                         }
                     )
@@ -629,11 +652,24 @@ private fun ReconciliationTab(
     screenFormat: DisplayFormatConfig,
     onAdjustEntry: (String, String, Double) -> Unit
 ) {
-    var selectedCode by remember { mutableStateOf("1100") }
-    val activeAcc = accounts.find { it.code == selectedCode } ?: accounts.first()
+    val cashAndBankAccounts = remember(accounts) {
+        accounts.filter { acc ->
+            acc.code.startsWith("1") && accounts.none { child -> child.parentCode == acc.code }
+        }
+    }
+    var selectedCode by remember(cashAndBankAccounts) {
+        mutableStateOf(cashAndBankAccounts.firstOrNull { it.code == "1100" }?.code ?: cashAndBankAccounts.firstOrNull()?.code ?: "1100")
+    }
+    val activeAcc = cashAndBankAccounts.find { it.code == selectedCode } ?: accounts.first()
     val bookBalance = activeAcc.balance
     var actualCountStr by remember(selectedCode, bookBalance) {
-        mutableStateOf(bookBalance.toLong().toString())
+        val rounded = AccountingValidator.roundMoney(bookBalance)
+        val formatted = if (rounded % 1.0 == 0.0) {
+            rounded.toLong().toString()
+        } else {
+            String.format(Locale.US, "%.2f", rounded)
+        }
+        mutableStateOf(formatted)
     }
 
     val actualBalance = actualCountStr.toDoubleOrNull() ?: 0.0
@@ -653,16 +689,16 @@ private fun ReconciliationTab(
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("مطابقة وتسوية أرصدة الخزينة والبنوك", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = FundPrimary)
 
-                // Select Cash / Bank
+                // Select Cash / Bank (all leaf 1xxx accounts including newly added sub-accounts)
                 Row(
                     modifier = Modifier.horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    listOf("1100" to "الخزينة النقدية", "1200" to "بنك الكريمي", "1300" to "المحافظ").forEach { (code, name) ->
+                    cashAndBankAccounts.forEach { acc ->
                         FilterChip(
-                            selected = selectedCode == code,
-                            onClick = { selectedCode = code },
-                            label = { Text(name, fontSize = 11.sp) }
+                            selected = selectedCode == acc.code,
+                            onClick = { selectedCode = acc.code },
+                            label = { Text("${acc.name} (${FormatUtils.formatCodeOrNumber(acc.code, screenFormat)})", fontSize = 11.sp) }
                         )
                     }
                 }
@@ -708,7 +744,7 @@ private fun ReconciliationTab(
                     )
                 }
 
-                if (abs(difference) >= 1.0) {
+                if (abs(difference) >= AccountingValidator.BALANCE_TOLERANCE) {
                     Button(
                         onClick = { onAdjustEntry(activeAcc.code, activeAcc.name, difference) },
                         colors = ButtonDefaults.buttonColors(containerColor = FundGoldDark),

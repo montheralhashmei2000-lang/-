@@ -80,28 +80,58 @@ class ExampleUnitTest {
     @Test
     fun testLocalServerAndAutoSyncOnNetworkConnect() {
         val repo = FundRepository.getInstance()
+        repo.resetToDefaultSeedData()
         repo.setAutoSyncOnConnect(true)
 
-        // Simulate 3 offline field operations
-        repo.simulateOfflineFieldOperations()
-        assertFalse(repo.isOnline.value)
-        assertTrue(repo.syncQueue.value.size >= 3)
+        var lastEncryptedEnvelope = ""
+        repo.syncRepository.syncApiOverride = object : com.example.fund.data.repository.SyncApiService {
+            override suspend fun checkHealth(): retrofit2.Response<com.example.fund.data.repository.SyncHealthResponse> =
+                retrofit2.Response.success(com.example.fund.data.repository.SyncHealthResponse(status = "ok"))
 
-        val historyCountBefore = repo.syncHistory.value.size
+            override suspend fun pushSyncBatch(
+                payload: com.example.fund.data.repository.SyncBatchPayload
+            ): retrofit2.Response<com.example.fund.data.repository.SyncBatchAck> {
+                lastEncryptedEnvelope = payload.encryptedBackupEnvelope
+                return retrofit2.Response.success(
+                    com.example.fund.data.repository.SyncBatchAck(
+                        accepted = true,
+                        batchNo = payload.batchNo,
+                        verifiedChecksum = payload.sha256Checksum
+                    )
+                )
+            }
+        }
 
-        // Reconnect to network -> should auto-sync all queued operations and record a SyncBatchRecord
-        repo.toggleOnline()
-        assertTrue(repo.isOnline.value)
-        assertEquals(0, repo.syncQueue.value.size)
-        assertEquals(historyCountBefore + 1, repo.syncHistory.value.size)
+        repo.syncRepository.setBackupJsonProvider { """{"version":"9.0","unitTestSync":true}""" }
+        try {
+            // Simulate 3 offline field operations
+            repo.simulateOfflineFieldOperations()
+            assertFalse(repo.isOnline.value)
+            assertTrue(repo.syncQueue.value.size >= 3)
 
-        // Test internal treasury transfer
-        val cashBefore = repo.accounts.value.first { it.code == "1100" }.balance
-        val bankBefore = repo.accounts.value.first { it.code == "1200" }.balance
-        val transferOk = repo.transferBetweenTreasuryAccounts("1100", "1200", 100000.0, "تحويل اختباري")
-        assertTrue(transferOk)
-        assertEquals(cashBefore - 100000.0, repo.accounts.value.first { it.code == "1100" }.balance, 0.001)
-        assertEquals(bankBefore + 100000.0, repo.accounts.value.first { it.code == "1200" }.balance, 0.001)
+            val historyCountBefore = repo.syncHistory.value.size
+
+            // Reconnect with verified server health check -> auto-syncs AES-256-GCM encrypted payload
+            val connected = kotlinx.coroutines.runBlocking {
+                repo.syncRepository.connectAndVerifyHealthBlocking()
+            }
+            assertTrue(connected)
+            assertTrue(repo.isOnline.value)
+            assertEquals(0, repo.syncQueue.value.size)
+            assertEquals(historyCountBefore + 1, repo.syncHistory.value.size)
+            assertTrue(lastEncryptedEnvelope.startsWith("AES256GCM_V1:"))
+
+            // Test internal treasury transfer
+            val cashBefore = repo.accounts.value.first { it.code == "1100" }.balance
+            val bankBefore = repo.accounts.value.first { it.code == "1200" }.balance
+            val transferOk = repo.transferBetweenTreasuryAccounts("1100", "1200", 100000.0, "تحويل اختباري")
+            assertTrue(transferOk)
+            assertEquals(cashBefore - 100000.0, repo.accounts.value.first { it.code == "1100" }.balance, 0.001)
+            assertEquals(bankBefore + 100000.0, repo.accounts.value.first { it.code == "1200" }.balance, 0.001)
+        } finally {
+            repo.syncRepository.syncApiOverride = null
+            repo.syncRepository.setBackupJsonProvider { repo.exportDatabaseJson() }
+        }
     }
 
     @Test

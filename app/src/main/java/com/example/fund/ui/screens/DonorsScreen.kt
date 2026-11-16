@@ -220,9 +220,14 @@ fun DonorsScreen() {
             donor = donor,
             onDismiss = { donorForPayment = null },
             onPay = { amount, curr, method ->
-                repo.recordDonorPledgePayment(donor.id, amount, curr, method)
-                Toast.makeText(context, "تم تحصيل دفعة التعهد وإصدار سند القبض والقيد المحاسبي", Toast.LENGTH_SHORT).show()
-                donorForPayment = null
+                runCatching {
+                    repo.recordDonorPledgePayment(donor.id, amount, curr, method)
+                }.onSuccess {
+                    Toast.makeText(context, "تم تحصيل دفعة التعهد وإصدار سند القبض والقيد المحاسبي", Toast.LENGTH_SHORT).show()
+                    donorForPayment = null
+                }.onFailure { err ->
+                    Toast.makeText(context, err.message ?: "تعذر تحصيل دفعة التعهد", Toast.LENGTH_LONG).show()
+                }
             }
         )
     }
@@ -231,9 +236,14 @@ fun DonorsScreen() {
         AddDonorDialog(
             onDismiss = { showAddDialog = false },
             onAdd = { newD ->
-                repo.addDonor(newD)
-                Toast.makeText(context, "تم حفظ بيانات الداعم", Toast.LENGTH_SHORT).show()
-                showAddDialog = false
+                runCatching {
+                    repo.addDonor(newD)
+                }.onSuccess {
+                    Toast.makeText(context, "تم حفظ بيانات الداعم", Toast.LENGTH_SHORT).show()
+                    showAddDialog = false
+                }.onFailure { err ->
+                    Toast.makeText(context, err.message ?: "تعذر إضافة الداعم", Toast.LENGTH_LONG).show()
+                }
             }
         )
     }

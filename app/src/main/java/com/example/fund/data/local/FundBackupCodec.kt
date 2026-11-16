@@ -28,6 +28,10 @@ data class ParsedDatabaseSnapshot(
     val internalMessages: List<InternalMessage>? = null,
     val currencyRates: Map<CurrencyCode, Double>? = null,
     val syncQueue: List<SyncQueueItem>? = null,
+    val users: List<AppUser>? = null,
+    val auditLogs: List<AuditLog>? = null,
+    val syncBatches: List<SyncBatchRecord>? = null,
+    val serverConfig: LocalServerConfig? = null,
     val exportDate: String = ""
 )
 
@@ -55,7 +59,11 @@ object FundBackupCodec {
         schedulerEvents: List<SchedulerEvent>,
         internalMessages: List<InternalMessage>,
         currencyRates: Map<CurrencyCode, Double>,
-        syncQueue: List<SyncQueueItem>
+        syncQueue: List<SyncQueueItem>,
+        users: List<AppUser> = emptyList(),
+        auditLogs: List<AuditLog> = emptyList(),
+        syncBatches: List<SyncBatchRecord> = emptyList(),
+        serverConfig: LocalServerConfig? = null
     ): String {
         val root = JSONObject()
         root.put("version", "9.0")
@@ -461,6 +469,64 @@ object FundBackupCodec {
             }
         })
 
+        // Users (custom & updated credentials/PIN hashes)
+        root.put("users", JSONArray().apply {
+            users.forEach { u ->
+                put(JSONObject().apply {
+                    put("id", u.id)
+                    put("username", u.username)
+                    put("fullName", u.fullName)
+                    put("role", u.role.name)
+                    put("isActive", u.isActive)
+                    put("lastLogin", u.lastLogin)
+                    put("passwordHash", u.passwordHash)
+                    put("quickPinHash", u.quickPinHash)
+                    put("mustChangePassword", u.mustChangePassword)
+                })
+            }
+        })
+
+        // AuditLogs
+        root.put("auditLogs", JSONArray().apply {
+            auditLogs.forEach { log ->
+                put(JSONObject().apply {
+                    put("id", log.id)
+                    put("timestamp", log.timestamp)
+                    put("userName", log.userName)
+                    put("userRole", log.userRole)
+                    put("actionType", log.actionType)
+                    put("description", log.description)
+                    put("ipOrDevice", log.ipOrDevice)
+                })
+            }
+        })
+
+        // SyncBatches
+        root.put("syncBatches", JSONArray().apply {
+            syncBatches.forEach { b ->
+                put(JSONObject().apply {
+                    put("id", b.id)
+                    put("batchNo", b.batchNo)
+                    put("timestamp", b.timestamp)
+                    put("operationsCount", b.operationsCount)
+                    put("serverNode", b.serverNode)
+                    put("durationMs", b.durationMs)
+                    put("status", b.status)
+                })
+            }
+        })
+
+        // LocalServerConfig
+        serverConfig?.let { sc ->
+            root.put("serverConfig", JSONObject().apply {
+                put("serverName", sc.serverName)
+                put("serverHost", sc.serverHost)
+                put("protocol", sc.protocol)
+                put("latencyMs", sc.latencyMs)
+                put("lastBackupTime", sc.lastBackupTime)
+            })
+        }
+
         val coreJson = root.toString()
         root.put("integritySha256", SecurityUtils.sha256Hex(coreJson))
         return root.toString(2)
@@ -474,6 +540,12 @@ object FundBackupCodec {
     ): ParsedDatabaseSnapshot? {
         return try {
             val root = JSONObject(json)
+            val expectedChecksum = root.optString("integritySha256", "")
+            if (expectedChecksum.isBlank()) return null
+            root.remove("integritySha256")
+            if (!SecurityUtils.verifyPayloadIntegrity(root.toString(), expectedChecksum)) {
+                return null
+            }
 
             val fundInfo = root.optJSONObject("fundInfo")?.let { fi ->
                 FundInfo(
@@ -499,7 +571,7 @@ object FundBackupCodec {
                         List(vArr.length()) { j -> vArr.optString(j) }.filter { it.isNotBlank() }
                     } else emptyList()
                     RegionGroup(id = o.optString("id"), name = o.optString("name"), villages = villages)
-                }.takeIf { it.isNotEmpty() }
+                }
             }
 
             val appSettings = root.optJSONObject("appSettings")?.let { st ->
@@ -614,7 +686,7 @@ object FundBackupCodec {
                         village = villageVal,
                         notes = o.optString("notes")
                     )
-                }.takeIf { it.isNotEmpty() }
+                }
             }
 
             val beneficiaries = root.optJSONArray("beneficiaries")?.let { arr ->
@@ -633,7 +705,7 @@ object FundBackupCodec {
                         address = o.optString("address"),
                         aidHistoryCount = o.optInt("aidHistoryCount", 0)
                     )
-                }.takeIf { it.isNotEmpty() }
+                }
             }
 
             val accounts = root.optJSONArray("accounts")?.let { arr ->
@@ -648,7 +720,7 @@ object FundBackupCodec {
                         balance = o.optDouble("balance", 0.0),
                         parentCode = if (pCode.isNullOrEmpty()) null else pCode
                     )
-                }.takeIf { it.isNotEmpty() }
+                }
             }
 
             val vouchers = root.optJSONArray("vouchers")?.let { arr ->
@@ -678,7 +750,7 @@ object FundBackupCodec {
                         auditorName = o.optString("auditorName", "المراجع المالي"),
                         managerName = o.optString("managerName", "رئيس مجلس الإدارة")
                     )
-                }.takeIf { it.isNotEmpty() }
+                }
             }
 
             val journalEntries = root.optJSONArray("journalEntries")?.let { arr ->
@@ -708,7 +780,7 @@ object FundBackupCodec {
                         isReversed = o.optBoolean("isReversed", false),
                         originalVoucherNo = if (ov.isNullOrBlank()) null else ov
                     )
-                }.takeIf { it.isNotEmpty() }
+                }
             }
 
             val subscriptions = root.optJSONArray("subscriptions")?.let { arr ->
@@ -729,7 +801,7 @@ object FundBackupCodec {
                         date = o.optString("date"),
                         notes = o.optString("notes")
                     )
-                }.takeIf { it.isNotEmpty() }
+                }
             }
 
             val aidRequests = root.optJSONArray("aidRequests")?.let { arr ->
@@ -750,7 +822,7 @@ object FundBackupCodec {
                         notes = o.optString("notes"),
                         voucherId = if (vId.isNullOrBlank()) null else vId
                     )
-                }.takeIf { it.isNotEmpty() }
+                }
             }
 
             val budgets = root.optJSONArray("budgets")?.let { arr ->
@@ -764,7 +836,7 @@ object FundBackupCodec {
                         actualSpent = o.optDouble("actualSpent", 0.0),
                         month = o.optString("month")
                     )
-                }.takeIf { it.isNotEmpty() }
+                }
             }
 
             val donors = root.optJSONArray("donors")?.let { arr ->
@@ -780,7 +852,7 @@ object FundBackupCodec {
                         pledgeFulfilledYer = o.optDouble("pledgeFulfilledYer", 0.0),
                         lastDonationDate = o.optString("lastDonationDate")
                     )
-                }.takeIf { it.isNotEmpty() }
+                }
             }
 
             val campaigns = root.optJSONArray("campaigns")?.let { arr ->
@@ -796,7 +868,7 @@ object FundBackupCodec {
                         description = o.optString("description"),
                         targetCategory = o.optString("targetCategory")
                     )
-                }.takeIf { it.isNotEmpty() }
+                }
             }
 
             val periodicAids = root.optJSONArray("periodicAids")?.let { arr ->
@@ -811,7 +883,7 @@ object FundBackupCodec {
                         status = o.optString("status"),
                         lastDisbursedMonth = o.optString("lastDisbursedMonth")
                     )
-                }.takeIf { it.isNotEmpty() }
+                }
             }
 
             val inKindItems = root.optJSONArray("inKindItems")?.let { arr ->
@@ -828,7 +900,7 @@ object FundBackupCodec {
                         unitCostYer = o.optDouble("unitCostYer", 0.0),
                         location = o.optString("location")
                     )
-                }.takeIf { it.isNotEmpty() }
+                }
             }
 
             val inKindMovements = root.optJSONArray("inKindMovements")?.let { arr ->
@@ -845,7 +917,7 @@ object FundBackupCodec {
                         date = o.optString("date"),
                         notes = o.optString("notes")
                     )
-                }.takeIf { it.isNotEmpty() }
+                }
             }
 
             val schedulerEvents = root.optJSONArray("schedulerEvents")?.let { arr ->
@@ -861,7 +933,7 @@ object FundBackupCodec {
                         colorHex = o.optString("colorHex", "#2E7D32"),
                         notes = o.optString("notes")
                     )
-                }.takeIf { it.isNotEmpty() }
+                }
             }
 
             val internalMessages = root.optJSONArray("internalMessages")?.let { arr ->
@@ -877,7 +949,7 @@ object FundBackupCodec {
                         timestamp = o.optString("timestamp"),
                         isRead = o.optBoolean("isRead", false)
                     )
-                }.takeIf { it.isNotEmpty() }
+                }
             }
 
             val currencyRates = root.optJSONObject("currencyRates")?.let { crObj ->
@@ -905,6 +977,63 @@ object FundBackupCodec {
                 }
             }
 
+            val users = root.optJSONArray("users")?.let { arr ->
+                List(arr.length()) { i ->
+                    val o = arr.getJSONObject(i)
+                    AppUser(
+                        id = o.optString("id"),
+                        username = o.optString("username"),
+                        fullName = o.optString("fullName"),
+                        role = runCatching { UserRole.valueOf(o.optString("role")) }.getOrDefault(UserRole.VIEWER),
+                        isActive = o.optBoolean("isActive", true),
+                        lastLogin = o.optString("lastLogin"),
+                        passwordHash = o.optString("passwordHash"),
+                        quickPinHash = o.optString("quickPinHash"),
+                        mustChangePassword = o.optBoolean("mustChangePassword", false)
+                    )
+                }
+            }
+
+            val auditLogs = root.optJSONArray("auditLogs")?.let { arr ->
+                List(arr.length()) { i ->
+                    val o = arr.getJSONObject(i)
+                    AuditLog(
+                        id = o.optString("id"),
+                        timestamp = o.optString("timestamp"),
+                        userName = o.optString("userName"),
+                        userRole = o.optString("userRole"),
+                        actionType = o.optString("actionType"),
+                        description = o.optString("description"),
+                        ipOrDevice = o.optString("ipOrDevice", "نظام محلي آمن")
+                    )
+                }
+            }
+
+            val syncBatches = root.optJSONArray("syncBatches")?.let { arr ->
+                List(arr.length()) { i ->
+                    val o = arr.getJSONObject(i)
+                    SyncBatchRecord(
+                        id = o.optString("id"),
+                        batchNo = o.optString("batchNo"),
+                        timestamp = o.optString("timestamp"),
+                        operationsCount = o.optInt("operationsCount", 0),
+                        serverNode = o.optString("serverNode"),
+                        durationMs = o.optLong("durationMs", 420L),
+                        status = o.optString("status")
+                    )
+                }
+            }
+
+            val serverConfig = root.optJSONObject("serverConfig")?.let { sc ->
+                LocalServerConfig(
+                    serverName = sc.optString("serverName", LocalServerConfig().serverName),
+                    serverHost = sc.optString("serverHost", LocalServerConfig().serverHost),
+                    protocol = sc.optString("protocol", LocalServerConfig().protocol),
+                    latencyMs = sc.optInt("latencyMs", 8),
+                    lastBackupTime = sc.optString("lastBackupTime", "")
+                )
+            }
+
             ParsedDatabaseSnapshot(
                 fundInfo = fundInfo,
                 regions = regions,
@@ -927,6 +1056,10 @@ object FundBackupCodec {
                 internalMessages = internalMessages,
                 currencyRates = currencyRates,
                 syncQueue = syncQueue,
+                users = users,
+                auditLogs = auditLogs,
+                syncBatches = syncBatches,
+                serverConfig = serverConfig,
                 exportDate = root.optString("exportDate")
             )
         } catch (_: Exception) {

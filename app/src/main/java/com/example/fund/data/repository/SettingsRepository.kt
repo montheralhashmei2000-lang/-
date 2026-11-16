@@ -65,7 +65,7 @@ class SettingsRepository(
         _appFontFamily.value = runCatching { AppFontOption.valueOf(session.appFontFamily) }
             .getOrDefault(AppFontOption.TAJAWAL)
 
-        database.settingsDao().getFundInfo()?.toDomain()?.let { _fundInfo.value = it }
+        val dbFund = database.settingsDao().getFundInfo()?.toDomain()?.also { _fundInfo.value = it }
         val loadedApp = database.settingsDao().getAppSettings()?.toDomain()?.also {
             _appSettings.value = it
         }
@@ -83,11 +83,13 @@ class SettingsRepository(
             _screenFormat.value = it.screenFormat
         }
 
+        val isDbInitialized = dbFund != null || loadedApp != null || database.accountingDao().getAllAccounts().isNotEmpty()
         val dbEvents = database.settingsDao().observeSchedulerEvents().first().map { it.toDomain() }
-        if (dbEvents.isNotEmpty()) _schedulerEvents.value = dbEvents
-
         val dbMessages = database.settingsDao().observeMessages().first().map { it.toDomain() }
-        if (dbMessages.isNotEmpty()) _internalMessages.value = dbMessages
+        if (isDbInitialized) {
+            _schedulerEvents.value = dbEvents
+            _internalMessages.value = dbMessages
+        }
     }
 
     fun setDarkModePreference(enabled: Boolean) {
@@ -107,6 +109,10 @@ class SettingsRepository(
     }
 
     fun updateFundInfo(info: FundInfo) {
+        userRepository.requirePermission(UserRole.ADMIN, actionDescription = "تحديث بيانات الصندوق الرسمية")
+        require(info.maxAidCeilingYer.isFinite() && info.maxAidCeilingYer >= 0.0) {
+            "سقف المساعدة يجب أن يكون قيمة مالية صالحة."
+        }
         _fundInfo.value = info
         db?.let { database ->
             dbScope.launch(dbDispatcher) {
@@ -117,6 +123,7 @@ class SettingsRepository(
     }
 
     fun updateFundLogo(logoBase64: String) {
+        userRepository.requirePermission(UserRole.ADMIN, actionDescription = "تحديث شعار الصندوق")
         val updated = _fundInfo.value.copy(customLogoBase64 = logoBase64)
         _fundInfo.value = updated
         db?.let { database ->
@@ -131,6 +138,10 @@ class SettingsRepository(
     }
 
     fun updateAppSettings(settings: AppSettings) {
+        userRepository.requirePermission(UserRole.ADMIN, actionDescription = "تعديل إعدادات النظام")
+        require(settings.monthlySubscriptionFeeYer.isFinite() && settings.monthlySubscriptionFeeYer >= 0.0) {
+            "قيمة الاشتراك الشهري يجب أن تكون رقماً مالياً صالحاً."
+        }
         val synced = settings.copy(screenFormat = _screenFormat.value)
         _appSettings.value = synced
         db?.let { database ->
@@ -146,6 +157,7 @@ class SettingsRepository(
     }
 
     fun updatePrintSettings(settings: PrintSettings) {
+        userRepository.requirePermission(UserRole.ADMIN, actionDescription = "تعديل إعدادات الطباعة والتنسيق")
         _printSettings.value = settings
         _screenFormat.value = settings.screenFormat
         _printFormat.value = settings.printFormat
@@ -165,6 +177,7 @@ class SettingsRepository(
     }
 
     fun resetPrintSettingsToDefault() {
+        userRepository.requirePermission(UserRole.ADMIN, actionDescription = "استعادة إعدادات الطباعة الافتراضية")
         val defaultPs = PrintSettings()
         _printSettings.value = defaultPs
         _screenFormat.value = defaultPs.screenFormat
@@ -181,6 +194,7 @@ class SettingsRepository(
     }
 
     fun addSchedulerEvent(event: SchedulerEvent) {
+        userRepository.requirePermission(UserRole.ADMIN, UserRole.ACCOUNTANT, UserRole.REVIEWER, actionDescription = "إضافة فعالية مجدولة")
         _schedulerEvents.value = listOf(event) + _schedulerEvents.value
         db?.let { database ->
             dbScope.launch(dbDispatcher) {
@@ -191,6 +205,7 @@ class SettingsRepository(
     }
 
     fun sendMessage(subject: String, body: String, recipientRole: String) {
+        userRepository.requirePermission(UserRole.ADMIN, UserRole.ACCOUNTANT, UserRole.REVIEWER, actionDescription = "إرسال رسالة داخلية")
         val user = userRepository.currentUser.value
         val msg = InternalMessage(
             senderName = user.fullName,

@@ -24,6 +24,7 @@ class AuthViewModel : ViewModel() {
     val isLoggedIn: StateFlow<Boolean> = userRepo.isLoggedIn
     val hasCompletedInitialLogin: StateFlow<Boolean> = userRepo.hasCompletedInitialLogin
     val hasQuickPin: StateFlow<Boolean> = userRepo.hasQuickPin
+    val requiresPasswordChange: StateFlow<Boolean> = userRepo.requiresPasswordChange
     val serverConfig: StateFlow<LocalServerConfig> = syncRepo.serverConfig
     val isOnline: StateFlow<Boolean> = syncRepo.isOnline
     val syncQueue: StateFlow<List<SyncQueueItem>> = syncRepo.syncQueue
@@ -35,21 +36,20 @@ class AuthViewModel : ViewModel() {
         _authError.value = null
     }
 
+    fun getBoundQuickAuthUsername(): String? = userRepo.getBoundQuickAuthUser()?.username
+
+    fun getBoundQuickAuthUserId(): String? = userRepo.getBoundQuickAuthUser()?.id
+
     fun loginWithPassword(username: String, password: String): AuthResult {
         val result = userRepo.authenticateWithPassword(username, password)
         _authError.value = if (result is AuthResult.Error) result.message else null
         return result
     }
 
-    fun loginWithOtp(username: String, otpDigits: String): AuthResult {
-        if (otpDigits.length != 6 || !otpDigits.all { it.isDigit() }) {
-            val err = "يرجى إدخال رمز تحقق مكون من 6 أرقام صحيحة."
-            _authError.value = err
-            return AuthResult.Error(err)
-        }
-        val user = userRepo.authenticateUser(username, "تحقق ثنائي OTP")
-        _authError.value = null
-        return AuthResult.Success(user)
+    fun changePassword(currentPassword: String, newPassword: String): AuthResult {
+        val result = userRepo.changePassword(currentPassword, newPassword)
+        _authError.value = if (result is AuthResult.Error) result.message else null
+        return result
     }
 
     fun setQuickPin(pin: String): Boolean {
@@ -68,15 +68,10 @@ class AuthViewModel : ViewModel() {
         return res
     }
 
-    fun loginWithBiometrics(username: String): AuthResult {
-        if (!hasCompletedInitialLogin.value) {
-            val err = "يرجى تسجيل الدخول بكلمة المرور لمرة واحدة أولاً لتفعيل الدخول بالبصمة."
-            _authError.value = err
-            return AuthResult.Error(err)
-        }
-        _authError.value = null
-        val user = userRepo.authenticateUser(username, "مصادقة حيوية (BiometricPrompt)")
-        return AuthResult.Success(user)
+    fun loginWithBiometrics(userId: String, cryptoVerified: Boolean): AuthResult {
+        val res = userRepo.authenticateWithBiometrics(userId, cryptoVerified)
+        _authError.value = if (res is AuthResult.Error) res.message else null
+        return res
     }
 
     fun logout() {

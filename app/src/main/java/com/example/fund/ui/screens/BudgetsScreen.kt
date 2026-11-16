@@ -19,11 +19,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.fund.data.FundRepository
+import com.example.fund.model.AccountType
 import com.example.fund.model.Budget
 import com.example.fund.model.UserRole
 import com.example.fund.util.FormatUtils
 import com.example.fund.util.LocalScreenFormat
 import com.example.ui.theme.*
+import java.util.Calendar
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -32,9 +34,17 @@ fun BudgetsScreen() {
     val screenFormat = LocalScreenFormat.current
     val repo = FundRepository.getInstance()
     val budgets by repo.budgets.collectAsStateWithLifecycle()
+    val accounts by repo.accounts.collectAsStateWithLifecycle()
+    val fundInfo by repo.fundInfo.collectAsStateWithLifecycle()
     val settings by repo.appSettings.collectAsStateWithLifecycle()
     val currentUser by repo.currentUser.collectAsStateWithLifecycle()
     val canManage = currentUser.role == UserRole.ADMIN || currentUser.role == UserRole.ACCOUNTANT
+    val activeFiscalYear = fundInfo.fiscalYear.ifBlank { Calendar.getInstance().get(Calendar.YEAR).toString() }
+    val expenseLeafAccounts = remember(accounts) {
+        accounts.filter { acc ->
+            acc.type == AccountType.EXPENSE && accounts.none { it.parentCode == acc.code }
+        }
+    }
 
     var showAddDialog by remember { mutableStateOf(false) }
     var budgetToEdit by remember { mutableStateOf<Budget?>(null) }
@@ -62,7 +72,7 @@ fun BudgetsScreen() {
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            "الموازنة التقديرية العامة لعام ${FormatUtils.formatCodeOrNumber("2026", screenFormat)}",
+                            "الموازنة التقديرية العامة لعام ${FormatUtils.formatCodeOrNumber(activeFiscalYear, screenFormat)}",
                             color = Color.White.copy(alpha = 0.9f),
                             fontSize = 12.sp,
                             modifier = Modifier.weight(1f)
@@ -202,9 +212,14 @@ fun BudgetsScreen() {
                     onClick = {
                         val amt = newAmtStr.toDoubleOrNull() ?: 0.0
                         if (amt > 0) {
-                            repo.updateBudgetAmount(b.id, amt)
-                            Toast.makeText(context, "تم تحديث السقف التقديري للموازنة", Toast.LENGTH_SHORT).show()
-                            budgetToEdit = null
+                            runCatching { repo.updateBudgetAmount(b.id, amt) }
+                                .onSuccess {
+                                    Toast.makeText(context, "تم تحديث السقف التقديري للموازنة", Toast.LENGTH_SHORT).show()
+                                    budgetToEdit = null
+                                }
+                                .onFailure { err ->
+                                    Toast.makeText(context, err.message ?: "تعذر تحديث الموازنة", Toast.LENGTH_LONG).show()
+                                }
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = FundPrimary)
@@ -220,7 +235,10 @@ fun BudgetsScreen() {
 
     if (showAddDialog) {
         var category by remember { mutableStateOf("") }
-        var accCode by remember { mutableStateOf("5500") }
+        var selectedAcc by remember(expenseLeafAccounts) {
+            mutableStateOf(expenseLeafAccounts.firstOrNull())
+        }
+        var accDropdownOpen by remember { mutableStateOf(false) }
         var amountStr by remember { mutableStateOf("1000000") }
 
         AlertDialog(
@@ -228,19 +246,60 @@ fun BudgetsScreen() {
             title = { Text("إضافة بند موازنة تقديرية جديد", fontWeight = FontWeight.Bold, fontSize = 16.sp) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedTextField(value = category, onValueChange = { category = it }, label = { Text("اسم بند الصرف / النشاط") }, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(value = accCode, onValueChange = { accCode = it }, label = { Text("رمز الحساب المحاسبي المرتبط") }, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(value = amountStr, onValueChange = { amountStr = it }, label = { Text("السقف التقديري المعتمد (${screenFormat.resolvedCurrencySymbol()})") }, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(
+                        value = category,
+                        onValueChange = { category = it },
+                        label = { Text("اسم بند الصرف / النشاط") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Text("الحساب المحاسبي للمصروف:", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Box {
+                        OutlinedButton(
+                            onClick = { accDropdownOpen = true },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                selectedAcc?.let { "${it.code} - ${it.name}" } ?: "لا توجد حسابات مصروفات فرعية",
+                                fontSize = 12.sp
+                            )
+                        }
+                        DropdownMenu(expanded = accDropdownOpen, onDismissRequest = { accDropdownOpen = false }) {
+                            expenseLeafAccounts.forEach { acc ->
+                                DropdownMenuItem(
+                                    text = { Text("${acc.code} - ${acc.name}") },
+                                    onClick = {
+                                        selectedAcc = acc
+                                        if (category.isBlank()) category = acc.name
+                                        accDropdownOpen = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                    OutlinedTextField(
+                        value = amountStr,
+                        onValueChange = { amountStr = it },
+                        label = { Text("السقف التقديري المعتمد (${screenFormat.resolvedCurrencySymbol()})") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             },
             confirmButton = {
                 Button(
                     onClick = {
                         val amt = amountStr.toDoubleOrNull() ?: 0.0
-                        if (category.isNotBlank() && amt > 0) {
-                            repo.addBudget(category, accCode, amt, "2026")
-                            Toast.makeText(context, "تمت إضافة بند الموازنة", Toast.LENGTH_SHORT).show()
-                            showAddDialog = false
+                        val code = selectedAcc?.code.orEmpty()
+                        if (category.isNotBlank() && code.isNotBlank() && amt > 0) {
+                            runCatching { repo.addBudget(category.trim(), code, amt, activeFiscalYear) }
+                                .onSuccess {
+                                    Toast.makeText(context, "تمت إضافة بند الموازنة", Toast.LENGTH_SHORT).show()
+                                    showAddDialog = false
+                                }
+                                .onFailure { err ->
+                                    Toast.makeText(context, err.message ?: "تعذر حفظ بند الموازنة", Toast.LENGTH_LONG).show()
+                                }
+                        } else {
+                            Toast.makeText(context, "يرجى إدخال اسم البند واختيار حساب صحيح ومبلغ أكبر من صفر", Toast.LENGTH_SHORT).show()
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = FundPrimary)

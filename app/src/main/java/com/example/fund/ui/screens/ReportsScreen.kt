@@ -1,6 +1,5 @@
 package com.example.fund.ui.screens
 
-import android.content.Intent
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -24,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.fund.data.FundRepository
+import com.example.fund.data.repository.AccountingValidator
 import com.example.fund.model.AidStatus
 import com.example.fund.model.AidType
 import com.example.fund.model.VoucherStatus
@@ -33,10 +33,17 @@ import com.example.fund.util.FormatUtils
 import com.example.fund.util.LocalScreenFormat
 import com.example.fund.util.OfficialPrintHelper
 import com.example.ui.theme.*
+import java.util.Locale
+import kotlin.math.roundToLong
 
 private fun csvEscape(value: String): String {
     val clean = value.replace("\"", "\"\"")
     return if (clean.contains(',') || clean.contains('"') || clean.contains('\n')) "\"$clean\"" else clean
+}
+
+private fun csvAmount(amount: Double): String {
+    val rounded = AccountingValidator.roundMoney(amount)
+    return if (rounded % 1.0 == 0.0) rounded.toLong().toString() else String.format(Locale.US, "%.2f", rounded)
 }
 
 @Composable
@@ -56,8 +63,8 @@ fun ReportsScreen() {
 
     val postedReceipts = vouchers.filter { it.type == VoucherType.RECEIPT && it.status == VoucherStatus.POSTED }
     val postedPayments = vouchers.filter { it.type == VoucherType.PAYMENT && it.status == VoucherStatus.POSTED }
-    val totalRev = postedReceipts.sumOf { it.amountYer }.toLong()
-    val totalExp = postedPayments.sumOf { it.amountYer }.toLong()
+    val totalRev = AccountingValidator.roundMoney(postedReceipts.sumOf { it.amountYer })
+    val totalExp = AccountingValidator.roundMoney(postedPayments.sumOf { it.amountYer })
 
     Column(
         modifier = Modifier
@@ -94,18 +101,18 @@ fun ReportsScreen() {
                         when (selectedTab) {
                             0 -> {
                                 csvBuilder.append("البند,القيمة\n")
-                                csvBuilder.append("إجمالي المقبوضات المعتمدة,$totalRev\n")
-                                csvBuilder.append("إجمالي المصروفات المعتمدة,$totalExp\n")
-                                csvBuilder.append("صافي الفائض,${totalRev - totalExp}\n")
+                                csvBuilder.append("إجمالي المقبوضات المعتمدة,${csvAmount(totalRev)}\n")
+                                csvBuilder.append("إجمالي المصروفات المعتمدة,${csvAmount(totalExp)}\n")
+                                csvBuilder.append("صافي الفائض,${csvAmount(totalRev - totalExp)}\n")
                                 csvBuilder.append("إجمالي الأعضاء,${members.size}\n")
                                 csvBuilder.append("طلبات المساعدة,${aids.size}\n")
                             }
                             1 -> {
                                 csvBuilder.append("الكود,اسم العضو,المنطقة,القرية,إجمالي المسدد (ريال)\n")
                                 members.forEach { m ->
-                                    val totalPaid = subscriptions.filter { it.memberId == m.id }.sumOf { it.amountYer }.toLong()
+                                    val totalPaid = subscriptions.filter { it.memberId == m.id }.sumOf { it.amountYer }
                                     csvBuilder.append(
-                                        "${csvEscape(m.memberNo)},${csvEscape(m.fullName)},${csvEscape(m.region)},${csvEscape(m.village)},$totalPaid\n"
+                                        "${csvEscape(m.memberNo)},${csvEscape(m.fullName)},${csvEscape(m.region)},${csvEscape(m.village)},${csvAmount(totalPaid)}\n"
                                     )
                                 }
                             }
@@ -113,7 +120,7 @@ fun ReportsScreen() {
                                 csvBuilder.append("رقم الطلب,المستفيد,النوع,الحالة,المبلغ المعتمد\n")
                                 aids.forEach { a ->
                                     csvBuilder.append(
-                                        "${csvEscape(a.requestNo)},${csvEscape(a.memberName)},${csvEscape(a.aidType.title)},${csvEscape(a.status.title)},${a.approvedAmountYer.toLong()}\n"
+                                        "${csvEscape(a.requestNo)},${csvEscape(a.memberName)},${csvEscape(a.aidType.title)},${csvEscape(a.status.title)},${csvAmount(a.approvedAmountYer)}\n"
                                     )
                                 }
                             }
@@ -121,20 +128,19 @@ fun ReportsScreen() {
                                 csvBuilder.append("رقم السند,النوع,الطرف,التاريخ,المبلغ بالريال\n")
                                 vouchers.forEach { v ->
                                     csvBuilder.append(
-                                        "${csvEscape(v.voucherNo)},${csvEscape(v.type.title)},${csvEscape(v.partyName)},${csvEscape(v.date)},${v.amountYer.toLong()}\n"
+                                        "${csvEscape(v.voucherNo)},${csvEscape(v.type.title)},${csvEscape(v.partyName)},${csvEscape(v.date)},${csvAmount(v.amountYer)}\n"
                                     )
                                 }
                             }
                         }
-                        val sendIntent = Intent(Intent.ACTION_SEND).apply {
-                            type = "text/csv"
-                            putExtra(Intent.EXTRA_SUBJECT, "تقرير ${fundInfo.name}")
-                            putExtra(Intent.EXTRA_TEXT, csvBuilder.toString())
-                        }
-                        val launched = runCatching {
-                            context.startActivity(Intent.createChooser(sendIntent, "تصدير ومشاركة التقرير (CSV)"))
-                        }.isSuccess
-                        if (!launched) {
+                        val shared = OfficialPrintHelper.shareExportFile(
+                            context = context,
+                            fileName = "FundReport_${System.currentTimeMillis()}.csv",
+                            content = csvBuilder.toString(),
+                            mimeType = "text/csv",
+                            chooserTitle = "تصدير ومشاركة التقرير (CSV)"
+                        )
+                        if (!shared) {
                             Toast.makeText(context, "لا يوجد تطبيق متاح لمشاركة ملفات CSV", Toast.LENGTH_SHORT).show()
                         }
                     },
@@ -152,8 +158,8 @@ fun ReportsScreen() {
                         OfficialPrintHelper.printAnalyticalReportPdf(
                             context = context,
                             fundInfo = fundInfo,
-                            totalRev = totalRev,
-                            totalExp = totalExp,
+                            totalRev = totalRev.roundToLong(),
+                            totalExp = totalExp.roundToLong(),
                             membersCount = members.size,
                             disbursedAidsCount = aids.count { it.status == AidStatus.DISBURSED }
                         )
@@ -199,9 +205,9 @@ fun ReportsScreen() {
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            ReportKpiCard("إجمالي المقبوضات", FormatUtils.formatAmount(totalRev.toDouble(), screenFormat), StatusSuccess, Modifier.weight(1f))
-            ReportKpiCard("إجمالي المصروفات", FormatUtils.formatAmount(totalExp.toDouble(), screenFormat), StatusDanger, Modifier.weight(1f))
-            ReportKpiCard("صافي الفائض", FormatUtils.formatAmount((totalRev - totalExp).toDouble(), screenFormat), FundPrimary, Modifier.weight(1f))
+            ReportKpiCard("مقبوضات السندات", FormatUtils.formatAmount(totalRev, screenFormat), StatusSuccess, Modifier.weight(1f))
+            ReportKpiCard("مصروفات السندات", FormatUtils.formatAmount(totalExp, screenFormat), StatusDanger, Modifier.weight(1f))
+            ReportKpiCard("صافي تدفق السندات", FormatUtils.formatAmount(totalRev - totalExp, screenFormat), FundPrimary, Modifier.weight(1f))
         }
 
         Spacer(Modifier.height(10.dp))
@@ -229,7 +235,8 @@ fun ReportsScreen() {
                                 } else {
                                     regions.forEach { region ->
                                         val regMembers = members.filter { it.region == region.name }
-                                        val regPaid = regMembers.sumOf { it.totalPaidYer }.toLong()
+                                        val regMemberIds = regMembers.map { it.id }.toSet()
+                                        val regPaid = subscriptions.filter { it.memberId in regMemberIds }.sumOf { it.amountYer }
                                         Row(
                                             modifier = Modifier
                                                 .fillMaxWidth()
@@ -243,7 +250,7 @@ fun ReportsScreen() {
                                                 Text("${region.villages.size} قرية • ${regMembers.size} عضو", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                             }
                                             Text(
-                                                FormatUtils.formatAmount(regPaid.toDouble(), screenFormat, inTable = true),
+                                                FormatUtils.formatAmount(regPaid, screenFormat, inTable = true),
                                                 fontWeight = FontWeight.Bold,
                                                 fontSize = 12.sp,
                                                 color = StatusSuccess,
@@ -269,7 +276,7 @@ fun ReportsScreen() {
                                     val matching = aids.filter { it.aidType == aidType }
                                     val totalAmt = matching.sumOf {
                                         if (it.approvedAmountYer > 0) it.approvedAmountYer else it.requestedAmountYer
-                                    }.toLong()
+                                    }
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -277,7 +284,7 @@ fun ReportsScreen() {
                                     ) {
                                         Text("${aidType.title} (${matching.size} طلب)", fontSize = 12.sp, fontWeight = FontWeight.Medium)
                                         Text(
-                                            FormatUtils.formatAmount(totalAmt.toDouble(), screenFormat, inTable = true),
+                                            FormatUtils.formatAmount(totalAmt, screenFormat, inTable = true),
                                             fontSize = 12.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = FundGoldDark,
@@ -293,7 +300,7 @@ fun ReportsScreen() {
 
             1 -> {
                 val memberStats = members.map { m ->
-                    val totalPaid = subscriptions.filter { it.memberId == m.id }.sumOf { it.amountYer }.toLong()
+                    val totalPaid = subscriptions.filter { it.memberId == m.id }.sumOf { it.amountYer }
                     Triple(m, totalPaid, subscriptions.count { it.memberId == m.id })
                 }.let { list ->
                     if (sortAsc) list.sortedBy { it.second } else list.sortedByDescending { it.second }
@@ -350,7 +357,7 @@ fun ReportsScreen() {
                                         }
                                         Text("$count دفعة", modifier = Modifier.weight(0.7f), style = MaterialTheme.typography.bodySmall)
                                         Text(
-                                            FormatUtils.formatAmount(totalPaid.toDouble(), screenFormat, inTable = true),
+                                            FormatUtils.formatAmount(totalPaid, screenFormat, inTable = true),
                                             modifier = Modifier.weight(1f),
                                             style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = "tnum"),
                                             fontWeight = FontWeight.Bold,

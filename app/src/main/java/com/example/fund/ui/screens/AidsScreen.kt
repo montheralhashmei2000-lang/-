@@ -289,8 +289,13 @@ fun AidsScreen(
             confirmColor = confirmColor as Color,
             icon = dialogIcon as androidx.compose.ui.graphics.vector.ImageVector,
             onConfirm = {
-                aidsViewModel.updateAidStatus(action.request.id, action.targetStatus, action.approvedAmountYer)
-                Toast.makeText(context, "تم تحديث حالة الطلب إلى ${action.targetStatus.title}", Toast.LENGTH_SHORT).show()
+                runCatching {
+                    aidsViewModel.updateAidStatus(action.request.id, action.targetStatus, action.approvedAmountYer)
+                }.onSuccess {
+                    Toast.makeText(context, "تم تحديث حالة الطلب إلى ${action.targetStatus.title}", Toast.LENGTH_SHORT).show()
+                }.onFailure { err ->
+                    Toast.makeText(context, err.message ?: "تعذر تحديث حالة طلب المساعدة", Toast.LENGTH_LONG).show()
+                }
                 pendingAidAction = null
             },
             onDismiss = { pendingAidAction = null }
@@ -304,9 +309,14 @@ fun AidsScreen(
             ceiling = fundInfo.maxAidCeilingYer,
             onDismiss = { showNewAidDialog = false },
             onSubmit = { memberId, aidType, amount, notes ->
-                aidsViewModel.addAidRequest(memberId, aidType, amount, notes)
-                Toast.makeText(context, "تم تقديم طلب المساعدة بنجاح", Toast.LENGTH_SHORT).show()
-                showNewAidDialog = false
+                runCatching {
+                    aidsViewModel.addAidRequest(memberId, aidType, amount, notes)
+                }.onSuccess {
+                    Toast.makeText(context, "تم تقديم طلب المساعدة بنجاح", Toast.LENGTH_SHORT).show()
+                    showNewAidDialog = false
+                }.onFailure { err ->
+                    Toast.makeText(context, err.message ?: "تعذر تقديم طلب المساعدة", Toast.LENGTH_LONG).show()
+                }
             }
         )
     }

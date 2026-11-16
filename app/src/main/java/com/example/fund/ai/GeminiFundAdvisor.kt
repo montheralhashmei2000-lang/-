@@ -75,7 +75,7 @@ object GeminiFundAdvisor {
         val journalEntries = repo.journalEntries.value
         val inKindItems = repo.inKindItems.value
         val budgets = repo.budgets.value
-        val isOnline = repo.isOnline.value
+        val isOnline = repo.syncRepository.isNetworkTransportConnected()
 
         val totalAssets = accounts.filter { it.code.startsWith("1") && it.parentCode != null }.sumOf { it.balance }
             .takeIf { it > 0 } ?: accounts.filter { it.code.startsWith("1") }.sumOf { it.balance }
@@ -148,7 +148,7 @@ object GeminiFundAdvisor {
         val approved = if (request.requestedAmountYer > ceiling) ceiling else request.requestedAmountYer
         val memberPaid = member?.totalPaidYer?.toLong() ?: 0L
         val memberDue = member?.dueBalanceYer?.toLong() ?: 0L
-        val isOnline = repo.isOnline.value
+        val isOnline = repo.syncRepository.isNetworkTransportConnected()
         val apiKey = resolveApiKey()
 
         if (isOnline && hasUsableApiKey(apiKey)) {

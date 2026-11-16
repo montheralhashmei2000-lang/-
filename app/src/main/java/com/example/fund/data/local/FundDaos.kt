@@ -32,6 +32,9 @@ interface AccountingDao {
     @Query("SELECT * FROM vouchers")
     suspend fun getAllVouchers(): List<VoucherEntity>
 
+    @Query("SELECT COUNT(*) FROM vouchers WHERE voucherNo = :voucherNo")
+    suspend fun countVouchersByNo(voucherNo: String): Int
+
     @Upsert
     suspend fun upsertVoucher(voucher: VoucherEntity)
 
@@ -47,6 +50,9 @@ interface AccountingDao {
     @Query("SELECT * FROM journal_entries")
     suspend fun getAllJournalEntries(): List<JournalEntryEntity>
 
+    @Query("SELECT COUNT(*) FROM journal_entries WHERE entryNo = :entryNo")
+    suspend fun countJournalEntriesByNo(entryNo: String): Int
+
     @Upsert
     suspend fun upsertJournalEntry(entry: JournalEntryEntity)
 
@@ -58,6 +64,9 @@ interface AccountingDao {
 
     @Query("SELECT * FROM budgets ORDER BY accountCode ASC")
     fun observeBudgets(): Flow<List<BudgetEntity>>
+
+    @Query("SELECT * FROM budgets ORDER BY accountCode ASC")
+    suspend fun getAllBudgets(): List<BudgetEntity>
 
     @Upsert
     suspend fun upsertBudget(budget: BudgetEntity)
@@ -101,6 +110,9 @@ interface MemberDao {
     @Query("SELECT * FROM members ORDER BY sortOrder ASC, memberNo ASC")
     fun observeMembers(): Flow<List<MemberEntity>>
 
+    @Query("SELECT * FROM members WHERE id = :memberId LIMIT 1")
+    suspend fun getMemberById(memberId: String): MemberEntity?
+
     @Upsert
     suspend fun upsertMember(member: MemberEntity)
 
@@ -113,11 +125,20 @@ interface MemberDao {
     @Query("SELECT * FROM subscriptions ORDER BY sortOrder ASC, date DESC")
     fun observeSubscriptions(): Flow<List<SubscriptionEntity>>
 
+    @Query("SELECT COUNT(*) FROM subscriptions WHERE receiptNo = :receiptNo")
+    suspend fun countSubscriptionsByReceiptNo(receiptNo: String): Int
+
     @Upsert
     suspend fun upsertSubscription(subscription: SubscriptionEntity)
 
     @Upsert
     suspend fun upsertSubscriptions(subscriptions: List<SubscriptionEntity>)
+
+    @Query("DELETE FROM subscriptions WHERE id = :subscriptionId")
+    suspend fun deleteSubscriptionById(subscriptionId: String)
+
+    @Query("DELETE FROM subscriptions WHERE receiptNo = :receiptNo")
+    suspend fun deleteSubscriptionByReceiptNo(receiptNo: String)
 
     @Query("DELETE FROM subscriptions")
     suspend fun clearSubscriptions()
@@ -139,6 +160,9 @@ interface AidDao {
 
     @Query("SELECT * FROM aid_requests ORDER BY sortOrder ASC, requestDate DESC")
     fun observeAidRequests(): Flow<List<AidRequestEntity>>
+
+    @Query("SELECT * FROM aid_requests WHERE id = :requestId LIMIT 1")
+    suspend fun getAidRequestById(requestId: String): AidRequestEntity?
 
     @Upsert
     suspend fun upsertAidRequest(request: AidRequestEntity)
@@ -188,6 +212,9 @@ interface AidDao {
     @Query("SELECT * FROM in_kind_items")
     fun observeInKindItems(): Flow<List<InKindItemEntity>>
 
+    @Query("SELECT * FROM in_kind_items WHERE id = :itemId LIMIT 1")
+    suspend fun getInKindItemById(itemId: String): InKindItemEntity?
+
     @Upsert
     suspend fun upsertInKindItem(item: InKindItemEntity)
 
@@ -230,14 +257,11 @@ interface UserDao {
     @Query("SELECT * FROM audit_logs ORDER BY sortOrder DESC")
     fun observeAuditLogs(): Flow<List<AuditLogEntity>>
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertAuditLog(log: AuditLogEntity)
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertAuditLogs(logs: List<AuditLogEntity>)
-
-    @Query("DELETE FROM audit_logs")
-    suspend fun clearAuditLogs()
 }
 
 @Dao

@@ -28,8 +28,10 @@ import com.example.fund.model.CurrencyCode
 import com.example.fund.model.Member
 import com.example.fund.model.PaymentMethod
 import com.example.fund.model.UserRole
+import com.example.fund.model.Voucher
 import com.example.fund.ui.components.FundEmptyState
 import com.example.fund.ui.components.MoneyInput
+import com.example.fund.ui.components.VoucherPrintDialog
 import com.example.fund.util.FormatUtils
 import com.example.fund.util.LocalScreenFormat
 import com.example.ui.theme.*
@@ -45,9 +47,11 @@ fun SubscriptionsScreen(
     val subscriptions by repo.subscriptions.collectAsStateWithLifecycle()
     val members by repo.members.collectAsStateWithLifecycle()
     val currentUser by repo.currentUser.collectAsStateWithLifecycle()
+    val appSettings by repo.appSettings.collectAsStateWithLifecycle()
     val canCollect = currentUser.role != UserRole.VIEWER
 
     var showCollectDialog by remember { mutableStateOf(false) }
+    var voucherToPrint by remember { mutableStateOf<Voucher?>(null) }
     var searchQuery by remember(initialSearch) { mutableStateOf(initialSearch) }
     var handledPreselect by remember { mutableStateOf("") }
 
@@ -231,13 +235,25 @@ fun SubscriptionsScreen(
                         referenceNo = ref,
                         notes = notes
                     )
-                }.onSuccess {
+                }.onSuccess { sub ->
                     Toast.makeText(context, "تم تحصيل الاشتراك وإصدار السند والقيد المحاسبي بنجاح", Toast.LENGTH_SHORT).show()
                     showCollectDialog = false
+                    if (appSettings.autoPrintVoucher) {
+                        voucherToPrint = repo.vouchers.value.firstOrNull {
+                            it.description.contains(sub.receiptNo) || it.partyName == sub.memberName
+                        }
+                    }
                 }.onFailure { err ->
                     Toast.makeText(context, err.message ?: "تعذر تسجيل تحصيل الاشتراك", Toast.LENGTH_SHORT).show()
                 }
             }
+        )
+    }
+
+    voucherToPrint?.let { voucher ->
+        VoucherPrintDialog(
+            voucher = voucher,
+            onDismiss = { voucherToPrint = null }
         )
     }
 }
@@ -259,7 +275,9 @@ private fun CollectSubscriptionDialog(
     val defaultFee = FundRepository.getInstance().appSettings.collectAsStateWithLifecycle().value.monthlySubscriptionFeeYer.toLong().toString()
     var amountStr by remember(defaultFee) { mutableStateOf(defaultFee) }
     var selectedCurrency by remember { mutableStateOf(CurrencyCode.YER) }
-    var monthYear by remember { mutableStateOf("2026-11") }
+    var monthYear by remember {
+        mutableStateOf(java.text.SimpleDateFormat("yyyy-MM", java.util.Locale.US).format(java.util.Date()))
+    }
     var selectedMethod by remember { mutableStateOf(PaymentMethod.CASH) }
     var refNo by remember { mutableStateOf("") }
     var notes by remember { mutableStateOf("") }

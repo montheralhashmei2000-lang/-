@@ -36,9 +36,9 @@ import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.fund.data.SeedData
 import com.example.fund.data.repository.AuthResult
 import com.example.fund.model.UserRole
+import com.example.fund.security.BiometricKeyStoreHelper
 import com.example.fund.ui.components.FundLogoImage
 import com.example.fund.ui.viewmodel.AuthViewModel
 import com.example.ui.theme.*
@@ -46,7 +46,6 @@ import com.example.ui.theme.*
 enum class LoginMode(val title: String) {
     PASSWORD("كلمة المرور"),
     QUICK_PIN("PIN السريع"),
-    OTP("التحقق الثنائي"),
     BIOMETRICS("البصمة"),
     SERVER_CONFIG("الخادم المحلي")
 }
@@ -70,13 +69,14 @@ fun LoginScreen(
 
     var activeMode by remember { mutableStateOf(LoginMode.PASSWORD) }
     var username by remember(currentUser.username) { mutableStateOf(currentUser.username) }
-    var password by remember { mutableStateOf(SeedData.defaultDemoPassword) }
+    var password by remember { mutableStateOf("") }
     var showPassword by remember { mutableStateOf(false) }
-    var otpDigits by remember { mutableStateOf("849201") }
     var pinDigits by remember { mutableStateOf("") }
     var setupPinDigits by remember { mutableStateOf("") }
     var confirmPinDigits by remember { mutableStateOf("") }
     var customHost by remember(serverConfig) { mutableStateOf(serverConfig.serverHost) }
+    val boundUsername = authViewModel.getBoundQuickAuthUsername() ?: currentUser.username
+    val boundUserId = authViewModel.getBoundQuickAuthUserId() ?: currentUser.id
 
     val biometricStatus = remember(context) {
         runCatching {
@@ -125,6 +125,17 @@ fun LoginScreen(
             return
         }
 
+        val cryptoObject = BiometricKeyStoreHelper.getOrCreateBiometricCipher(boundUserId)
+        if (cryptoObject == null) {
+            Toast.makeText(
+                context,
+                "تعذر تهيئة مفتاح البصمة المشفر (AndroidKeyStore) على هذا الجهاز؛ استخدم كلمة المرور أو رمز PIN.",
+                Toast.LENGTH_LONG
+            ).show()
+            activeMode = LoginMode.PASSWORD
+            return
+        }
+
         val executor = ContextCompat.getMainExecutor(context)
         val prompt = BiometricPrompt(
             activity,
@@ -132,11 +143,12 @@ fun LoginScreen(
             object : BiometricPrompt.AuthenticationCallback() {
                 override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
                     super.onAuthenticationSucceeded(result)
-                    when (val res = authViewModel.loginWithBiometrics(username)) {
+                    val verified = BiometricKeyStoreHelper.verifyUnlockedCrypto(result, boundUserId)
+                    when (val res = authViewModel.loginWithBiometrics(boundUserId, verified)) {
                         is AuthResult.Success -> {
                             Toast.makeText(
                                 context,
-                                "تم التحقق الحيوي بنجاح: ${res.user.fullName} ✔",
+                                "تم التحقق الحيوي المشفر بنجاح: ${res.user.fullName} ✔",
                                 Toast.LENGTH_SHORT
                             ).show()
                             onLoginSuccess()
@@ -171,12 +183,12 @@ fun LoginScreen(
 
         val promptInfo = BiometricPrompt.PromptInfo.Builder()
             .setTitle("المصادقة الحيوية للصندوق")
-            .setSubtitle("فتح جلسة الموظف (@$username)")
+            .setSubtitle("فتح جلسة الموظف (@$boundUsername)")
             .setNegativeButtonText("استخدام كلمة المرور")
             .build()
 
         runCatching {
-            prompt.authenticate(promptInfo)
+            prompt.authenticate(promptInfo, cryptoObject)
         }.onFailure { err ->
             Toast.makeText(
                 context,
@@ -423,12 +435,6 @@ fun LoginScreen(
                                     authViewModel.clearError()
                                 },
                                 label = { Text("كلمة المرور المشفرة (PBKDF2)") },
-                                supportingText = {
-                                    Text(
-                                        "كلمة المرور الافتراضية للحسابات التجريبية: ${SeedData.defaultDemoPassword}",
-                                        fontSize = 10.sp
-                                    )
-                                },
                                 leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
                                 trailingIcon = {
                                     IconButton(onClick = { showPassword = !showPassword }) {
@@ -556,7 +562,7 @@ fun LoginScreen(
 
                                 !hasQuickPin -> {
                                     Text(
-                                        "تعيين رمز PIN السريع للحساب (@$username)",
+                                        "تعيين رمز PIN السريع للحساب المقيد (@$boundUsername)",
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 13.sp,
                                         color = FundPrimary
@@ -620,7 +626,7 @@ fun LoginScreen(
 
                                 else -> {
                                     Text(
-                                        "أدخل رمز PIN السريع للحساب (@$username):",
+                                        "أدخل رمز PIN السريع للحساب المقيد (@$boundUsername):",
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Bold
                                     )
@@ -681,7 +687,7 @@ fun LoginScreen(
 
                                     Button(
                                         onClick = {
-                                            when (val res = authViewModel.loginWithQuickPin(username, pinDigits)) {
+                                            when (val res = authViewModel.loginWithQuickPin(boundUsername, pinDigits)) {
                                                 is AuthResult.Success -> {
                                                     Toast.makeText(
                                                         context,
@@ -706,87 +712,6 @@ fun LoginScreen(
                                         Spacer(Modifier.width(8.dp))
                                         Text("دخول سريع برمز PIN", fontWeight = FontWeight.Bold)
                                     }
-                                }
-                            }
-                        }
-                    }
-
-                    LoginMode.OTP -> {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(14.dp)
-                        ) {
-                            Text(
-                                "أدخل رمز التحقق الرقمي المكون من 6 خانات المرسل إلى رقم الهاتف المعتمد أو مولد الرموز المحلي (TOTP):",
-                                fontSize = 12.sp,
-                                textAlign = TextAlign.Center
-                            )
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceEvenly
-                            ) {
-                                val padded = otpDigits.padEnd(6, '•').take(6)
-                                padded.forEach { ch ->
-                                    Box(
-                                        modifier = Modifier
-                                            .size(44.dp)
-                                            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(10.dp))
-                                            .border(1.5.dp, FundPrimary, RoundedCornerShape(10.dp)),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(
-                                            text = ch.toString(),
-                                            fontWeight = FontWeight.Black,
-                                            fontSize = 18.sp,
-                                            color = FundPrimary,
-                                            style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
-                                        )
-                                    }
-                                }
-                            }
-
-                            OutlinedTextField(
-                                value = otpDigits,
-                                onValueChange = { if (it.length <= 6) otpDigits = it.filter { c -> c.isDigit() } },
-                                label = { Text("تعديل رمز التحقق (OTP)") },
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                singleLine = true,
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(12.dp)
-                            )
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                OutlinedButton(
-                                    onClick = {
-                                        otpDigits = (100000..999999).random().toString()
-                                        Toast.makeText(context, "تم توليد رمز تحقق جديد: $otpDigits", Toast.LENGTH_SHORT).show()
-                                    },
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .heightIn(min = 48.dp),
-                                    shape = RoundedCornerShape(10.dp)
-                                ) {
-                                    Text("توليد رمز جديد", fontSize = 12.sp)
-                                }
-
-                                Button(
-                                    onClick = {
-                                        when (val res = authViewModel.loginWithOtp(username, otpDigits)) {
-                                            is AuthResult.Success -> onLoginSuccess()
-                                            is AuthResult.Error -> Toast.makeText(context, res.message, Toast.LENGTH_SHORT).show()
-                                        }
-                                    },
-                                    modifier = Modifier
-                                        .weight(1.4f)
-                                        .heightIn(min = 48.dp),
-                                    colors = ButtonDefaults.buttonColors(containerColor = FundPrimary),
-                                    shape = RoundedCornerShape(10.dp)
-                                ) {
-                                    Text("تأكيد الرمز والدخول", fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
@@ -831,7 +756,7 @@ fun LoginScreen(
                                 !biometricHardwareReady ->
                                     "لا تتوفر بصمة مسجلة أو مستشعر حيوي نشط في نظام الجهاز الحالي. يمكنك استخدام كلمة المرور أو PIN السريع."
                                 else ->
-                                    "اضغط لتشغيل نافذة البصمة الحيوية الرسمية للنظام (BiometricPrompt) وفتح حساب @$username."
+                                    "اضغط لتشغيل نافذة البصمة الحيوية الرسمية للنظام (BiometricPrompt) وفتح حساب @$boundUsername."
                             }
 
                             Text(

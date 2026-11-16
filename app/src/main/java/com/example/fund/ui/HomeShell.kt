@@ -14,7 +14,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavDestination.Companion.hasRoute
@@ -24,6 +28,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
+import com.example.fund.data.repository.AuthResult
 import com.example.fund.ui.components.*
 import com.example.fund.ui.navigation.*
 import com.example.fund.ui.screens.*
@@ -37,8 +42,8 @@ fun HomeShell(authViewModel: AuthViewModel = viewModel()) {
     val coroutineScope = rememberCoroutineScope()
     val navController = rememberNavController()
 
-    val persistedLoggedIn by authViewModel.isLoggedIn.collectAsStateWithLifecycle()
-    var isLoggedIn by remember(persistedLoggedIn) { mutableStateOf(persistedLoggedIn) }
+    val isLoggedIn by authViewModel.isLoggedIn.collectAsStateWithLifecycle()
+    val requiresPasswordChange by authViewModel.requiresPasswordChange.collectAsStateWithLifecycle()
 
     var showQrScannerDialog by remember { mutableStateOf(false) }
     var showAiAdvisorDialog by remember { mutableStateOf(false) }
@@ -50,7 +55,7 @@ fun HomeShell(authViewModel: AuthViewModel = viewModel()) {
 
     if (!isLoggedIn) {
         LoginScreen(
-            onLoginSuccess = { isLoggedIn = true },
+            onLoginSuccess = {},
             authViewModel = authViewModel
         )
         return
@@ -100,7 +105,6 @@ fun HomeShell(authViewModel: AuthViewModel = viewModel()) {
             financeTabIndex = 0
             membersTabIndex = 0
             aidsTabIndex = 0
-            isLoggedIn = false
             return
         }
         navController.navigate(route) {
@@ -308,4 +312,100 @@ fun HomeShell(authViewModel: AuthViewModel = viewModel()) {
     if (showSyncCenterDialog) {
         LocalServerSyncDialog(onDismiss = { showSyncCenterDialog = false })
     }
+
+    if (requiresPasswordChange) {
+        MandatoryPasswordChangeDialog(
+            onSubmit = { currentPw, newPw ->
+                authViewModel.changePassword(currentPw, newPw)
+            },
+            onLogout = { authViewModel.logout() }
+        )
+    }
+}
+
+@Composable
+private fun MandatoryPasswordChangeDialog(
+    onSubmit: (String, String) -> AuthResult,
+    onLogout: () -> Unit
+) {
+    var currentPw by remember { mutableStateOf("") }
+    var newPw by remember { mutableStateOf("") }
+    var confirmPw by remember { mutableStateOf("") }
+    var errorMsg by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = {},
+        properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false),
+        title = {
+            Text(
+                "تغيير كلمة المرور الافتراضية إلزامي",
+                fontWeight = FontWeight.Bold,
+                color = FundPrimary
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    "لأغراض الأمان المالي، يجب استبدال كلمة المرور الافتراضية بكلمة مرور جديدة خاصة بك (6 أحرف أو أرقام على الأقل).",
+                    fontSize = 12.sp
+                )
+                OutlinedTextField(
+                    value = currentPw,
+                    onValueChange = { currentPw = it; errorMsg = null },
+                    label = { Text("كلمة المرور الحالية") },
+                    visualTransformation = PasswordVisualTransformation(),
+                    singleLine = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("mandatory_current_password_input")
+                )
+                OutlinedTextField(
+                    value = newPw,
+                    onValueChange = { newPw = it; errorMsg = null },
+                    label = { Text("كلمة المرور الجديدة") },
+                    visualTransformation = PasswordVisualTransformation(),
+                    singleLine = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("mandatory_new_password_input")
+                )
+                OutlinedTextField(
+                    value = confirmPw,
+                    onValueChange = { confirmPw = it; errorMsg = null },
+                    label = { Text("تأكيد كلمة المرور الجديدة") },
+                    visualTransformation = PasswordVisualTransformation(),
+                    singleLine = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("mandatory_confirm_password_input")
+                )
+                errorMsg?.let { msg ->
+                    Text(msg, color = StatusDanger, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (newPw != confirmPw) {
+                        errorMsg = "كلمتا المرور الجديدتان غير متطابقتين."
+                        return@Button
+                    }
+                    when (val res = onSubmit(currentPw, newPw)) {
+                        is AuthResult.Success -> errorMsg = null
+                        is AuthResult.Error -> errorMsg = res.message
+                    }
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = FundPrimary),
+                modifier = Modifier.testTag("mandatory_change_password_submit")
+            ) {
+                Text("حفظ كلمة المرور والمتابعة")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onLogout) {
+                Text("تسجيل الخروج", color = StatusDanger)
+            }
+        }
+    )
 }

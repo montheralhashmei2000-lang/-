@@ -524,7 +524,8 @@ object SeedData {
                 role = UserRole.ADMIN,
                 isActive = true,
                 lastLogin = "2026-11-07 18:22",
-                passwordHash = com.example.fund.security.SecurityUtils.hashPassword(defaultDemoPassword)
+                passwordHash = com.example.fund.security.SecurityUtils.hashPassword(defaultDemoPassword),
+                mustChangePassword = true
             ),
             AppUser(
                 id = "u2",
@@ -533,7 +534,8 @@ object SeedData {
                 role = UserRole.ACCOUNTANT,
                 isActive = true,
                 lastLogin = "2026-11-07 16:10",
-                passwordHash = com.example.fund.security.SecurityUtils.hashPassword(defaultDemoPassword)
+                passwordHash = com.example.fund.security.SecurityUtils.hashPassword(defaultDemoPassword),
+                mustChangePassword = true
             ),
             AppUser(
                 id = "u3",
@@ -542,7 +544,8 @@ object SeedData {
                 role = UserRole.REVIEWER,
                 isActive = true,
                 lastLogin = "2026-11-06 12:00",
-                passwordHash = com.example.fund.security.SecurityUtils.hashPassword(defaultDemoPassword)
+                passwordHash = com.example.fund.security.SecurityUtils.hashPassword(defaultDemoPassword),
+                mustChangePassword = true
             ),
             AppUser(
                 id = "u4",
@@ -551,7 +554,8 @@ object SeedData {
                 role = UserRole.VIEWER,
                 isActive = true,
                 lastLogin = "2026-11-05 09:30",
-                passwordHash = com.example.fund.security.SecurityUtils.hashPassword(defaultDemoPassword)
+                passwordHash = com.example.fund.security.SecurityUtils.hashPassword(defaultDemoPassword),
+                mustChangePassword = true
             )
         )
     }

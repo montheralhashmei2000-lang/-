@@ -47,7 +47,9 @@ fun MembersScreen(
     val members by membersViewModel.members.collectAsStateWithLifecycle()
     val regions by membersViewModel.regions.collectAsStateWithLifecycle()
     val currentUser by membersViewModel.currentUser.collectAsStateWithLifecycle()
+    val appSettings by membersViewModel.appSettings.collectAsStateWithLifecycle()
     val canEdit = currentUser.role != UserRole.VIEWER
+    val canRunAutoSuspend = currentUser.role == UserRole.ADMIN || currentUser.role == UserRole.ACCOUNTANT
     val screenFormat = LocalScreenFormat.current
 
     var searchQuery by remember { mutableStateOf("") }
@@ -57,6 +59,7 @@ fun MembersScreen(
     var memberToEdit by remember { mutableStateOf<Member?>(null) }
     var memberToToggleStatus by remember { mutableStateOf<Member?>(null) }
     var showAddDialog by remember { mutableStateOf(false) }
+    var showAutoSuspendConfirm by remember { mutableStateOf(false) }
     var handledHighlightId by remember { mutableStateOf("") }
 
     LaunchedEffect(highlightMemberId, members) {
@@ -112,6 +115,18 @@ fun MembersScreen(
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (canRunAutoSuspend) {
+                    IconButton(
+                        onClick = { showAutoSuspendConfirm = true },
+                        modifier = Modifier.testTag("auto_suspend_button")
+                    ) {
+                        Icon(
+                            Icons.Default.PersonOff,
+                            contentDescription = "تعليق المتأخرين تلقائياً",
+                            tint = StatusPending
+                        )
+                    }
+                }
                 IconButton(
                     onClick = onOpenQrCheck,
                     modifier = Modifier.testTag("members_qr_button")
@@ -270,10 +285,15 @@ fun MembersScreen(
             membersViewModel = membersViewModel,
             onDismiss = { memberToEdit = null },
             onSave = { updated ->
-                membersViewModel.addVillageByRegionName(updated.region, updated.village)
-                membersViewModel.updateMember(updated)
-                Toast.makeText(context, "تم تحديث بيانات العضو بنجاح", Toast.LENGTH_SHORT).show()
-                memberToEdit = null
+                runCatching {
+                    membersViewModel.updateMember(updated)
+                    membersViewModel.addVillageByRegionName(updated.region, updated.village)
+                }.onSuccess {
+                    Toast.makeText(context, "تم تحديث بيانات العضو بنجاح", Toast.LENGTH_SHORT).show()
+                    memberToEdit = null
+                }.onFailure { err ->
+                    Toast.makeText(context, err.message ?: "تعذر تحديث بيانات العضو", Toast.LENGTH_LONG).show()
+                }
             }
         )
     }
@@ -286,10 +306,15 @@ fun MembersScreen(
             membersViewModel = membersViewModel,
             onDismiss = { showAddDialog = false },
             onSave = { newMember ->
-                membersViewModel.addVillageByRegionName(newMember.region, newMember.village)
-                membersViewModel.addMember(newMember)
-                Toast.makeText(context, "تم تسجيل العضو الجديد بنجاح", Toast.LENGTH_SHORT).show()
-                showAddDialog = false
+                runCatching {
+                    membersViewModel.addMember(newMember)
+                    membersViewModel.addVillageByRegionName(newMember.region, newMember.village)
+                }.onSuccess {
+                    Toast.makeText(context, "تم تسجيل العضو الجديد بنجاح", Toast.LENGTH_SHORT).show()
+                    showAddDialog = false
+                }.onFailure { err ->
+                    Toast.makeText(context, err.message ?: "تعذر تسجيل العضو الجديد", Toast.LENGTH_LONG).show()
+                }
             }
         )
     }
@@ -317,6 +342,29 @@ fun MembersScreen(
                 memberToToggleStatus = null
             },
             onDismiss = { memberToToggleStatus = null }
+        )
+    }
+
+    if (showAutoSuspendConfirm) {
+        val thresholdAmt = appSettings.autoSuspendMonths * appSettings.monthlySubscriptionFeeYer
+        SensitiveActionConfirmDialog(
+            title = "تعليق الأعضاء المتأخرين تلقائياً",
+            message = "سيتم تعليق كل عضو نشط تتجاوز متأخراته (${appSettings.autoSuspendMonths} أشهر = ${FormatUtils.formatAmount(thresholdAmt, screenFormat)}) تلقائياً وفق سياسة الحوكمة.",
+            confirmText = "تنفيذ التعليق التلقائي",
+            confirmColor = StatusPending,
+            icon = Icons.Default.PersonOff,
+            onConfirm = {
+                runCatching {
+                    membersViewModel.autoSuspendOverdueMembers()
+                }.onSuccess { count ->
+                    val msg = if (count > 0) "تم تعليق $count عضو متأخر تلقائياً" else "لا يوجد أعضاء متجاوزون لحد التعليق التلقائي"
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                }.onFailure { err ->
+                    Toast.makeText(context, err.message ?: "تعذر تنفيذ التعليق التلقائي", Toast.LENGTH_LONG).show()
+                }
+                showAutoSuspendConfirm = false
+            },
+            onDismiss = { showAutoSuspendConfirm = false }
         )
     }
 }

@@ -45,6 +45,7 @@ fun VouchersScreen(
     val accounts by accountingViewModel.accounts.collectAsStateWithLifecycle()
     val currentUser by accountingViewModel.currentUser.collectAsStateWithLifecycle()
     val screenFormat by accountingViewModel.screenFormat.collectAsStateWithLifecycle()
+    val appSettings by accountingViewModel.appSettings.collectAsStateWithLifecycle()
     val canIssue = currentUser.role != UserRole.VIEWER
 
     var selectedFilter by remember(initialFilter) { mutableStateOf(initialFilter) }
@@ -159,7 +160,11 @@ fun VouchersScreen(
                 )
             }
             VerticalDivider(modifier = Modifier.height(22.dp))
-            listOf("الكل" to "كل الحسابات", "1100" to "الخزينة", "1200" to "الكريمي", "1300" to "المحافظ").forEach { (code, label) ->
+            val treasuryFilterAccounts = remember(accounts) {
+                accounts.filter { it.code.startsWith("1") && accounts.none { c -> c.parentCode == it.code } }
+            }
+            val filterOptions = listOf("الكل" to "كل الحسابات") + treasuryFilterAccounts.map { it.code to it.name }
+            filterOptions.forEach { (code, label) ->
                 val isSelected = selectedAccountFilter == code
                 FilterChip(
                     selected = isSelected,
@@ -255,8 +260,13 @@ fun VouchersScreen(
             confirmColor = StatusDanger,
             icon = Icons.Default.Cancel,
             onConfirm = {
-                accountingViewModel.voidVoucher(voucher.id)
-                Toast.makeText(context, "تم إلغاء السند وتوليد قيد عكسي آلي بنجاح", Toast.LENGTH_SHORT).show()
+                runCatching {
+                    accountingViewModel.voidVoucher(voucher.id)
+                }.onSuccess {
+                    Toast.makeText(context, "تم إلغاء السند وتوليد قيد عكسي آلي بنجاح", Toast.LENGTH_SHORT).show()
+                }.onFailure { err ->
+                    Toast.makeText(context, err.message ?: "تعذر إلغاء السند", Toast.LENGTH_LONG).show()
+                }
                 pendingVoidVoucher = null
             },
             onDismiss = { pendingVoidVoucher = null }
@@ -276,24 +286,32 @@ fun VouchersScreen(
         NewVoucherDialog(
             accounts = accounts,
             defaultType = if (initialNewVoucherType == "PAYMENT") VoucherType.PAYMENT else VoucherType.RECEIPT,
+            defaultTreasuryCode = appSettings.defaultTreasuryAccountCode,
             onDismiss = { showNewVoucherDialog = false },
             onSubmit = { type, party, amount, curr, method, accCode, counterpartCode, desc ->
-                if (amount <= 0.0) {
+                if (!amount.isFinite() || amount <= 0.0) {
                     Toast.makeText(context, "يرجى إدخال مبلغ صحيح أكبر من صفر", Toast.LENGTH_SHORT).show()
                 } else {
-                    val v = accountingViewModel.issueVoucher(
-                        type = type,
-                        partyName = party,
-                        amountOriginal = amount,
-                        currency = curr,
-                        paymentMethod = method,
-                        accountCode = accCode,
-                        counterpartAccountCode = counterpartCode,
-                        description = desc
-                    )
-                    Toast.makeText(context, "تم إصدار السند ${FormatUtils.formatCodeOrNumber(v.voucherNo, screenFormat)} وترحيل القيد المحاسبي", Toast.LENGTH_SHORT).show()
-                    showNewVoucherDialog = false
-                    voucherToPrint = v
+                    runCatching {
+                        accountingViewModel.issueVoucher(
+                            type = type,
+                            partyName = party,
+                            amountOriginal = amount,
+                            currency = curr,
+                            paymentMethod = method,
+                            accountCode = accCode,
+                            counterpartAccountCode = counterpartCode,
+                            description = desc
+                        )
+                    }.onSuccess { v ->
+                        Toast.makeText(context, "تم إصدار السند ${FormatUtils.formatCodeOrNumber(v.voucherNo, screenFormat)} وترحيل القيد المحاسبي", Toast.LENGTH_SHORT).show()
+                        showNewVoucherDialog = false
+                        if (appSettings.autoPrintVoucher) {
+                            voucherToPrint = v
+                        }
+                    }.onFailure { err ->
+                        Toast.makeText(context, err.message ?: "تعذر إصدار السند", Toast.LENGTH_LONG).show()
+                    }
                 }
             }
         )
@@ -441,9 +459,11 @@ private fun VoucherListItem(
 private fun NewVoucherDialog(
     accounts: List<Account>,
     defaultType: VoucherType = VoucherType.RECEIPT,
+    defaultTreasuryCode: String = "1100",
     onDismiss: () -> Unit,
     onSubmit: (VoucherType, String, Double, CurrencyCode, PaymentMethod, String, String, String) -> Unit
 ) {
+    val context = LocalContext.current
     var type by remember(defaultType) { mutableStateOf(defaultType) }
     var partyName by remember { mutableStateOf("") }
     var amountStr by remember { mutableStateOf("50000") }
@@ -451,10 +471,33 @@ private fun NewVoucherDialog(
     var method by remember { mutableStateOf(PaymentMethod.CASH) }
     var description by remember { mutableStateOf("") }
 
-    var selectedTreasuryCode by remember { mutableStateOf("1100") }
-    var selectedCounterpartCode by remember(defaultType) {
-        mutableStateOf(if (defaultType == VoucherType.RECEIPT) "4100" else "5100")
+    val leafTreasuryAccounts = remember(accounts) {
+        accounts.filter { it.code.startsWith("1") && accounts.none { c -> c.parentCode == it.code } }
     }
+    val counterpartAccounts = remember(accounts, type) {
+        val prefixes = if (type == VoucherType.RECEIPT) listOf("4", "2", "3") else listOf("5", "2", "1")
+        accounts.filter { acc ->
+            prefixes.any { acc.code.startsWith(it) } && accounts.none { c -> c.parentCode == acc.code }
+        }
+    }
+
+    var selectedTreasuryCode by remember(leafTreasuryAccounts, defaultTreasuryCode) {
+        mutableStateOf(
+            leafTreasuryAccounts.firstOrNull { it.code == defaultTreasuryCode }?.code
+                ?: leafTreasuryAccounts.firstOrNull()?.code
+                ?: "1100"
+        )
+    }
+    var selectedCounterpartCode by remember(defaultType, counterpartAccounts) {
+        mutableStateOf(
+            valPreferredCounterpart(type, counterpartAccounts)
+        )
+    }
+    var treasuryMenuExpanded by remember { mutableStateOf(false) }
+    var counterpartMenuExpanded by remember { mutableStateOf(false) }
+
+    val selectedTreasuryAcc = leafTreasuryAccounts.find { it.code == selectedTreasuryCode }
+    val selectedCounterpartAcc = counterpartAccounts.find { it.code == selectedCounterpartCode }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -465,7 +508,11 @@ private fun NewVoucherDialog(
                     Button(
                         onClick = {
                             type = VoucherType.RECEIPT
-                            selectedCounterpartCode = "4100"
+                            val receiptCandidates = accounts.filter { acc ->
+                                listOf("4", "2", "3").any { acc.code.startsWith(it) } &&
+                                    accounts.none { c -> c.parentCode == acc.code }
+                            }
+                            selectedCounterpartCode = valPreferredCounterpart(VoucherType.RECEIPT, receiptCandidates)
                         },
                         colors = ButtonDefaults.buttonColors(
                             containerColor = if (type == VoucherType.RECEIPT) StatusSuccess else MaterialTheme.colorScheme.surfaceVariant,
@@ -478,7 +525,11 @@ private fun NewVoucherDialog(
                     Button(
                         onClick = {
                             type = VoucherType.PAYMENT
-                            selectedCounterpartCode = "5100"
+                            val paymentCandidates = accounts.filter { acc ->
+                                listOf("5", "2", "1").any { acc.code.startsWith(it) } &&
+                                    accounts.none { c -> c.parentCode == acc.code }
+                            }
+                            selectedCounterpartCode = valPreferredCounterpart(VoucherType.PAYMENT, paymentCandidates)
                         },
                         colors = ButtonDefaults.buttonColors(
                             containerColor = if (type == VoucherType.PAYMENT) StatusDanger else MaterialTheme.colorScheme.surfaceVariant,
@@ -516,14 +567,81 @@ private fun NewVoucherDialog(
                             selected = method == m,
                             onClick = {
                                 method = m
-                                selectedTreasuryCode = when (m) {
+                                val mapped = when (m) {
                                     PaymentMethod.CASH -> "1100"
                                     PaymentMethod.BANK_TRANSFER -> "1200"
                                     PaymentMethod.ELECTRONIC_WALLET -> "1300"
                                 }
+                                if (leafTreasuryAccounts.any { it.code == mapped }) {
+                                    selectedTreasuryCode = mapped
+                                }
                             },
                             label = { Text(m.title, fontSize = 11.sp) }
                         )
+                    }
+                }
+
+                Text("حساب الصندوق / البنك:", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Box {
+                    OutlinedButton(
+                        onClick = { treasuryMenuExpanded = true },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text(
+                            text = selectedTreasuryAcc?.let { "${it.code} - ${it.name}" } ?: selectedTreasuryCode,
+                            maxLines = 1,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+                    }
+                    DropdownMenu(
+                        expanded = treasuryMenuExpanded,
+                        onDismissRequest = { treasuryMenuExpanded = false }
+                    ) {
+                        leafTreasuryAccounts.forEach { acc ->
+                            DropdownMenuItem(
+                                text = { Text("${acc.code} — ${acc.name}") },
+                                onClick = {
+                                    selectedTreasuryCode = acc.code
+                                    treasuryMenuExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                Text(
+                    if (type == VoucherType.RECEIPT) "حساب الإيراد / المصدر المقابل:" else "حساب المصروف / البند المقابل:",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Box {
+                    OutlinedButton(
+                        onClick = { counterpartMenuExpanded = true },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text(
+                            text = selectedCounterpartAcc?.let { "${it.code} - ${it.name}" } ?: selectedCounterpartCode,
+                            maxLines = 1,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+                    }
+                    DropdownMenu(
+                        expanded = counterpartMenuExpanded,
+                        onDismissRequest = { counterpartMenuExpanded = false }
+                    ) {
+                        counterpartAccounts.forEach { acc ->
+                            DropdownMenuItem(
+                                text = { Text("${acc.code} — ${acc.name}") },
+                                onClick = {
+                                    selectedCounterpartCode = acc.code
+                                    counterpartMenuExpanded = false
+                                }
+                            )
+                        }
                     }
                 }
 
@@ -540,9 +658,15 @@ private fun NewVoucherDialog(
             Button(
                 onClick = {
                     val amount = amountStr.toDoubleOrNull() ?: 0.0
-                    if (partyName.isNotBlank() && amount > 0) {
-                        onSubmit(type, partyName, amount, currency, method, selectedTreasuryCode, selectedCounterpartCode, description)
+                    if (partyName.isBlank()) {
+                        Toast.makeText(context, "يرجى إدخال اسم الطرف المقابل", Toast.LENGTH_SHORT).show()
+                        return@Button
                     }
+                    if (!amount.isFinite() || amount <= 0.0) {
+                        Toast.makeText(context, "يرجى إدخال مبلغ صحيح أكبر من الصفر", Toast.LENGTH_SHORT).show()
+                        return@Button
+                    }
+                    onSubmit(type, partyName, amount, currency, method, selectedTreasuryCode, selectedCounterpartCode, description)
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = FundPrimary),
                 modifier = Modifier.heightIn(min = 48.dp)
@@ -554,4 +678,11 @@ private fun NewVoucherDialog(
             TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text("إلغاء") }
         }
     )
+}
+
+private fun valPreferredCounterpart(type: VoucherType, candidates: List<Account>): String {
+    val preferred = if (type == VoucherType.RECEIPT) "4100" else "5100"
+    return candidates.firstOrNull { it.code == preferred }?.code
+        ?: candidates.firstOrNull()?.code
+        ?: preferred
 }

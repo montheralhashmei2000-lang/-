@@ -49,24 +49,10 @@ fun TrendLineChart(
     var activeTimeframe by remember { mutableStateOf(ChartTimeframe.MONTHLY) }
     val resolvedPoints = remember(activeTimeframe, dataPoints, weeklyDataPoints, yearlyDataPoints) {
         when (activeTimeframe) {
-            ChartTimeframe.WEEKLY -> weeklyDataPoints ?: listOf(
-                "السبت" to (dataPoints.lastOrNull()?.second ?: 1_200_000.0) * 0.14,
-                "الأحد" to (dataPoints.lastOrNull()?.second ?: 1_200_000.0) * 0.19,
-                "الاثنين" to (dataPoints.lastOrNull()?.second ?: 1_200_000.0) * 0.16,
-                "الثلاثاء" to (dataPoints.lastOrNull()?.second ?: 1_200_000.0) * 0.22,
-                "الأربعاء" to (dataPoints.lastOrNull()?.second ?: 1_200_000.0) * 0.28,
-                "الخميس" to (dataPoints.lastOrNull()?.second ?: 1_200_000.0) * 0.31
-            )
+            ChartTimeframe.WEEKLY -> weeklyDataPoints ?: emptyList()
             ChartTimeframe.MONTHLY -> dataPoints
-            ChartTimeframe.YEARLY -> yearlyDataPoints ?: listOf(
-                "2021" to 9_400_000.0,
-                "2022" to 12_850_000.0,
-                "2023" to 16_200_000.0,
-                "2024" to 19_600_000.0,
-                "2025" to 23_400_000.0,
-                "2026" to 28_950_000.0
-            )
-        }
+            ChartTimeframe.YEARLY -> yearlyDataPoints ?: emptyList()
+        }.ifEmpty { dataPoints }
     }
 
     var selectedIndex by remember(activeTimeframe) { mutableStateOf<Int?>(resolvedPoints.lastIndex) }
@@ -280,8 +266,11 @@ fun TrendLineChart(
                         color = if (isSelected) FundPrimary else MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = if (value >= 1_000_000.0) "%.1fم".format(value / 1_000_000.0)
-                        else "%dك".format((value / 1_000.0).toInt()),
+                        text = when {
+                            value >= 1_000_000.0 -> "%.1fم".format(value / 1_000_000.0)
+                            value >= 1_000.0 -> "%dك".format((value / 1_000.0).toInt())
+                            else -> value.toInt().toString()
+                        },
                         fontSize = 9.sp,
                         color = FundPrimary,
                         fontWeight = FontWeight.SemiBold,
@@ -346,19 +335,32 @@ fun DonutChart(
                 contentAlignment = Alignment.Center
             ) {
                 Canvas(modifier = Modifier.fillMaxSize()) {
-                    var startAngle = -90f
-                    items.forEachIndexed { idx, item ->
-                        val isFocused = selectedSliceIdx == null || selectedSliceIdx == idx
-                        val strokeW = if (selectedSliceIdx == idx) 16.dp.toPx() else 13.dp.toPx()
-                        val sweep = ((item.second / total) * 360f).toFloat()
+                    val rawTotal = items.sumOf { it.second }
+                    if (rawTotal <= 0.0) {
                         drawArc(
-                            color = if (isFocused) item.third else item.third.copy(alpha = 0.3f),
-                            startAngle = startAngle,
-                            sweepAngle = (sweep - 2f).coerceAtLeast(1f),
+                            color = Color.Gray.copy(alpha = 0.25f),
+                            startAngle = -90f,
+                            sweepAngle = 360f,
                             useCenter = false,
-                            style = Stroke(width = strokeW, cap = StrokeCap.Butt)
+                            style = Stroke(width = 13.dp.toPx(), cap = StrokeCap.Butt)
                         )
-                        startAngle += sweep
+                    } else {
+                        var startAngle = -90f
+                        items.forEachIndexed { idx, item ->
+                            if (item.second > 0.0) {
+                                val isFocused = selectedSliceIdx == null || selectedSliceIdx == idx
+                                val strokeW = if (selectedSliceIdx == idx) 16.dp.toPx() else 13.dp.toPx()
+                                val sweep = ((item.second / total) * 360f).toFloat()
+                                drawArc(
+                                    color = if (isFocused) item.third else item.third.copy(alpha = 0.3f),
+                                    startAngle = startAngle,
+                                    sweepAngle = (sweep - 2f).coerceAtLeast(1f),
+                                    useCenter = false,
+                                    style = Stroke(width = strokeW, cap = StrokeCap.Butt)
+                                )
+                                startAngle += sweep
+                            }
+                        }
                     }
                 }
 
@@ -595,8 +597,8 @@ fun RegionalComparisonBarChart(
         ) {
             regionsData.forEachIndexed { idx, (regionName, rev, exp) ->
                 val isSelected = selectedRegionIdx == idx
-                val revRatio = (rev / maxVal).toFloat().coerceIn(0.06f, 1f)
-                val expRatio = (exp / maxVal).toFloat().coerceIn(0.06f, 1f)
+                val revRatio = if (rev <= 0.0) 0f else (rev / maxVal).toFloat().coerceIn(0.04f, 1f)
+                val expRatio = if (exp <= 0.0) 0f else (exp / maxVal).toFloat().coerceIn(0.04f, 1f)
 
                 Column(
                     modifier = Modifier

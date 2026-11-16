@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.fund.data.FundRepository
+import com.example.fund.model.UserRole
 import com.example.fund.ui.components.FundEmptyState
 import com.example.ui.theme.*
 
@@ -29,11 +30,26 @@ fun MessagesScreen() {
     val context = LocalContext.current
     val repo = FundRepository.getInstance()
     val messages by repo.internalMessages.collectAsStateWithLifecycle()
+    val currentUser by repo.currentUser.collectAsStateWithLifecycle()
+    val canCompose = currentUser.role != UserRole.VIEWER
 
     var showComposeDialog by remember { mutableStateOf(false) }
     var unreadOnly by remember { mutableStateOf(false) }
-    val unreadCount = messages.count { !it.isRead }
-    val displayed = if (unreadOnly) messages.filter { !it.isRead } else messages
+
+    val roleMessages = remember(messages, currentUser) {
+        if (currentUser.role == UserRole.ADMIN) {
+            messages
+        } else {
+            messages.filter { msg ->
+                msg.recipientRole == "الكل" ||
+                    msg.recipientRole == currentUser.role.title ||
+                    msg.senderRole == currentUser.role.title ||
+                    msg.senderName == currentUser.fullName
+            }
+        }
+    }
+    val unreadCount = roleMessages.count { !it.isRead }
+    val displayed = if (unreadOnly) roleMessages.filter { !it.isRead } else roleMessages
 
     Column(
         modifier = Modifier
@@ -51,14 +67,16 @@ fun MessagesScreen() {
                 Text("التواصل بين المحاسب والمراجع ومجلس الإدارة", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
 
-            Button(
-                onClick = { showComposeDialog = true },
-                colors = ButtonDefaults.buttonColors(containerColor = FundPrimary),
-                shape = RoundedCornerShape(10.dp)
-            ) {
-                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("رسالة جديدة", fontSize = 12.sp, maxLines = 1, softWrap = false)
+            if (canCompose) {
+                Button(
+                    onClick = { showComposeDialog = true },
+                    colors = ButtonDefaults.buttonColors(containerColor = FundPrimary),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("رسالة جديدة", fontSize = 12.sp, maxLines = 1, softWrap = false)
+                }
             }
         }
 
@@ -66,7 +84,7 @@ fun MessagesScreen() {
             FilterChip(
                 selected = !unreadOnly,
                 onClick = { unreadOnly = false },
-                label = { Text("الكل (${messages.size})", fontSize = 11.sp) }
+                label = { Text("الكل (${roleMessages.size})", fontSize = 11.sp) }
             )
             FilterChip(
                 selected = unreadOnly,
@@ -80,9 +98,15 @@ fun MessagesScreen() {
                 FundEmptyState(
                     icon = Icons.Default.MarkEmailRead,
                     title = if (unreadOnly) "جميع الرسائل مقروءة" else "لا توجد مراسلات حالياً",
-                    subtitle = if (unreadOnly) "تمت قراءة كافة الرسائل الإدارية الواردة." else "ابدأ بإرسال رسالة إدارية للفريق.",
-                    actionLabel = if (unreadOnly) "عرض كل الرسائل" else "رسالة جديدة",
-                    onAction = { if (unreadOnly) unreadOnly = false else showComposeDialog = true }
+                    subtitle = if (unreadOnly) "تمت قراءة كافة الرسائل الإدارية الواردة لدورك." else "لا توجد مراسلات موجهة لدور (${currentUser.role.title}) حالياً.",
+                    actionLabel = when {
+                        unreadOnly -> "عرض كل الرسائل"
+                        canCompose -> "رسالة جديدة"
+                        else -> null
+                    },
+                    onAction = if (unreadOnly || canCompose) {
+                        { if (unreadOnly) unreadOnly = false else showComposeDialog = true }
+                    } else null
                 )
             }
         } else {
@@ -133,9 +157,14 @@ fun MessagesScreen() {
         ComposeMessageDialog(
             onDismiss = { showComposeDialog = false },
             onSend = { subject, body, recipient ->
-                repo.sendMessage(subject, body, recipient)
-                Toast.makeText(context, "تم إرسال الرسالة بنجاح", Toast.LENGTH_SHORT).show()
-                showComposeDialog = false
+                runCatching {
+                    repo.sendMessage(subject, body, recipient)
+                }.onSuccess {
+                    Toast.makeText(context, "تم إرسال الرسالة بنجاح", Toast.LENGTH_SHORT).show()
+                    showComposeDialog = false
+                }.onFailure { err ->
+                    Toast.makeText(context, err.message ?: "تعذر إرسال الرسالة", Toast.LENGTH_LONG).show()
+                }
             }
         )
     }

@@ -21,6 +21,7 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 
 sealed class AuthResult {
     data class Success(val user: AppUser) : AuthResult()
@@ -31,6 +32,11 @@ class UserRepository(
     private val dbScope: CoroutineScope,
     private val dbDispatcher: CoroutineDispatcher
 ) {
+    companion object {
+        const val MAX_FAILED_ATTEMPTS = 5
+        const val LOCKOUT_DURATION_MS = 5 * 60 * 1000L
+    }
+
     private val _users = MutableStateFlow(SeedData.users)
     val users: StateFlow<List<AppUser>> = _users.asStateFlow()
 
@@ -40,7 +46,8 @@ class UserRepository(
     private val _auditLogs = MutableStateFlow(SeedData.auditLogs)
     val auditLogs: StateFlow<List<AuditLog>> = _auditLogs.asStateFlow()
 
-    private val _isLoggedIn = MutableStateFlow(true)
+    // Secure default: never auto-authenticate on fresh install
+    private val _isLoggedIn = MutableStateFlow(false)
     val isLoggedIn: StateFlow<Boolean> = _isLoggedIn.asStateFlow()
 
     private val _hasCompletedInitialLogin = MutableStateFlow(false)
@@ -49,7 +56,11 @@ class UserRepository(
     private val _hasQuickPin = MutableStateFlow(false)
     val hasQuickPin: StateFlow<Boolean> = _hasQuickPin.asStateFlow()
 
-    private var inMemoryQuickPinHash: String? = null
+    private val _requiresPasswordChange = MutableStateFlow(false)
+    val requiresPasswordChange: StateFlow<Boolean> = _requiresPasswordChange.asStateFlow()
+
+    private val failedAttempts = ConcurrentHashMap<String, Int>()
+    private val lockoutUntilMs = ConcurrentHashMap<String, Long>()
 
     private var db: FundDatabase? = null
     private var sessionManager: EncryptedSessionManager? = null
@@ -83,38 +94,76 @@ class UserRepository(
         }
 
         val dbLogs = database.userDao().observeAuditLogs().first().map { it.toDomain() }
-        if (dbLogs.isNotEmpty()) {
+        val isDbInitialized = database.settingsDao().getFundInfo() != null || dbUsers.isNotEmpty()
+        if (isDbInitialized) {
             _auditLogs.value = dbLogs
         }
 
+        val savedUserId = session.activeUserId ?: session.lastAuthenticatedUserId
         val savedUsername = session.activeUsername ?: session.lastAuthenticatedUsername
-        val savedUserId = session.activeUserId
         val restored = _users.value.firstOrNull {
-            (savedUserId != null && it.id == savedUserId) ||
-                (savedUsername != null && it.username.equals(savedUsername, ignoreCase = true))
+            (!savedUserId.isNullOrBlank() && it.id == savedUserId) ||
+                (!savedUsername.isNullOrBlank() && it.username.equals(savedUsername, ignoreCase = true))
         }
+        val canRestoreLoggedIn = session.isLoggedIn && restored != null && restored.isActive
         if (restored != null && restored.isActive) {
             _currentUser.value = restored
         }
-        _isLoggedIn.value = session.isLoggedIn
-        _hasCompletedInitialLogin.value = session.hasCompletedInitialLogin
-        inMemoryQuickPinHash = session.quickPinHash
-        _hasQuickPin.value = !inMemoryQuickPinHash.isNullOrBlank()
+        _isLoggedIn.value = canRestoreLoggedIn
+        _hasCompletedInitialLogin.value = session.hasCompletedInitialLogin && restored != null && restored.isActive
+        _requiresPasswordChange.value = canRestoreLoggedIn && (restored?.mustChangePassword == true)
+        syncQuickPinAvailability(restored ?: _currentUser.value)
+    }
+
+    private fun syncQuickPinAvailability(user: AppUser) {
+        val sessionPin = sessionManager?.getQuickPinHashForUser(user.id)
+        _hasQuickPin.value = user.quickPinHash.isNotBlank() || !sessionPin.isNullOrBlank()
+    }
+
+    private fun checkLockout(usernameKey: String): AuthResult.Error? {
+        val until = lockoutUntilMs[usernameKey] ?: return null
+        val now = System.currentTimeMillis()
+        if (now < until) {
+            val remainingSec = ((until - now) / 1000L).coerceAtLeast(1L)
+            return AuthResult.Error("الحساب مقفل مؤقتاً بعد $MAX_FAILED_ATTEMPTS محاولات فاشلة؛ يرجى الانتظار $remainingSec ثانية.")
+        }
+        lockoutUntilMs.remove(usernameKey)
+        failedAttempts.remove(usernameKey)
+        return null
+    }
+
+    private fun recordFailedAttempt(usernameKey: String): AuthResult.Error {
+        val nextCount = (failedAttempts[usernameKey] ?: 0) + 1
+        failedAttempts[usernameKey] = nextCount
+        if (nextCount >= MAX_FAILED_ATTEMPTS) {
+            lockoutUntilMs[usernameKey] = System.currentTimeMillis() + LOCKOUT_DURATION_MS
+            logAudit("قفل أمني للحساب", "تم قفل الحساب ($usernameKey) مؤقتاً بعد $MAX_FAILED_ATTEMPTS محاولات دخول فاشلة.")
+            return AuthResult.Error("تم تجاوز الحد الأقصى ($MAX_FAILED_ATTEMPTS محاولات فاشلة)؛ تم قفل الحساب مؤقتاً.")
+        }
+        val remaining = MAX_FAILED_ATTEMPTS - nextCount
+        return AuthResult.Error("بيانات الاعتماد غير صحيحة. المحاولات المتبقية قبل القفل المؤقت: $remaining")
+    }
+
+    private fun clearFailedAttempts(usernameKey: String) {
+        failedAttempts.remove(usernameKey)
+        lockoutUntilMs.remove(usernameKey)
     }
 
     /**
      * Authenticates using username + password verified via PBKDF2WithHmacSHA256.
      */
     fun authenticateWithPassword(usernameInput: String, passwordInput: String): AuthResult {
-        val clean = usernameInput.trim().lowercase()
+        val clean = usernameInput.trim().lowercase(Locale.ENGLISH)
         if (clean.isBlank() || passwordInput.isBlank()) {
             return AuthResult.Error("يرجى إدخال اسم المستخدم وكلمة المرور.")
         }
 
-        val matched = _users.value.find { it.username.lowercase() == clean }
+        checkLockout(clean)?.let { return it }
+
+        val matched = _users.value.find { it.username.lowercase(Locale.ENGLISH) == clean }
             ?: run {
                 logAudit("محاولة دخول فاشلة", "محاولة دخول باسم مستخدم غير مسجل: $clean")
-                return AuthResult.Error("اسم المستخدم غير موجود في سجل موظفي الصندوق.")
+                return recordFailedAttempt(clean)
             }
 
         if (!matched.isActive) {
@@ -124,56 +173,150 @@ class UserRepository(
 
         if (!SecurityUtils.verifyPassword(passwordInput, matched.passwordHash)) {
             logAudit("فشل كلمة المرور", "كلمة مرور غير صحيحة للحساب ${matched.username}")
-            return AuthResult.Error("كلمة المرور غير صحيحة. (للحسابات التجريبية الافتراضية: 123456)")
+            return recordFailedAttempt(clean)
         }
 
+        clearFailedAttempts(clean)
         return AuthResult.Success(completeLogin(matched, "تسجيل دخول آمن (PBKDF2)"))
     }
 
     /**
-     * Authenticates after OTP / Biometric verification or internal demo profile selection.
+     * Switches active user account only after valid password re-authentication.
      */
-    fun authenticateUser(usernameInput: String, methodLabel: String = "تسجيل دخول آمن"): AppUser {
-        val clean = usernameInput.trim().lowercase()
-        val matched = _users.value.find { it.username.lowercase() == clean && it.isActive }
-            ?: _users.value.firstOrNull { it.isActive }
-            ?: SeedData.users[0]
-        return completeLogin(matched, methodLabel)
+    fun switchAccountWithPassword(targetUsername: String, passwordInput: String): AuthResult {
+        val res = authenticateWithPassword(targetUsername, passwordInput)
+        if (res is AuthResult.Success) {
+            logAudit("تبديل حساب موثق", "تم التحقق من كلمة المرور والتبديل إلى ${res.user.fullName} (${res.user.role.title})")
+        }
+        return res
     }
 
+    /**
+     * Enforces mandatory change of default password ("123456") or user-initiated password rotation.
+     */
+    fun changePassword(currentPassword: String, newPassword: String): AuthResult {
+        val user = _currentUser.value
+        if (!SecurityUtils.verifyPassword(currentPassword, user.passwordHash)) {
+            return AuthResult.Error("كلمة المرور الحالية غير صحيحة.")
+        }
+        val cleanNew = newPassword.trim()
+        if (cleanNew.length < 6) {
+            return AuthResult.Error("يجب أن تتكون كلمة المرور الجديدة من 6 أحرف/أرقام على الأقل.")
+        }
+        if (cleanNew == SeedData.defaultDemoPassword || cleanNew == currentPassword) {
+            return AuthResult.Error("يجب اختيار كلمة مرور جديدة تختلف عن كلمة المرور الافتراضية والحالية.")
+        }
+
+        val newHash = SecurityUtils.hashPassword(cleanNew)
+        val updated = user.copy(
+            passwordHash = newHash,
+            mustChangePassword = false
+        )
+        _users.value = _users.value.map { if (it.id == updated.id) updated else it }
+        _currentUser.value = updated
+        _requiresPasswordChange.value = false
+
+        db?.let { database ->
+            dbScope.launch(dbDispatcher) {
+                database.userDao().upsertUser(AppUserEntity.fromDomain(updated))
+            }
+        }
+        logAudit("تغيير كلمة المرور", "تم تحديث كلمة المرور وتشفيرها بـ PBKDF2 (120k) للمستخدم ${updated.username}")
+        return AuthResult.Success(updated)
+    }
+
+    /**
+     * Binds a PBKDF2-hashed Quick PIN strictly to the currently authenticated user's ID.
+     */
     fun setQuickPin(pin: String): Boolean {
+        if (!_isLoggedIn.value && !_hasCompletedInitialLogin.value) return false
         val cleanPin = pin.trim()
         if (cleanPin.length !in 4..6 || !cleanPin.all { it.isDigit() }) {
             return false
         }
+        val current = _currentUser.value
         val hashed = SecurityUtils.hashPassword(cleanPin)
-        inMemoryQuickPinHash = hashed
-        sessionManager?.quickPinHash = hashed
+        val updated = current.copy(quickPinHash = hashed)
+
+        _users.value = _users.value.map { if (it.id == updated.id) updated else it }
+        _currentUser.value = updated
+        sessionManager?.setQuickPinHashForUser(updated.id, hashed)
         _hasQuickPin.value = true
-        logAudit("إعداد الدخول السريع", "تم تعيين رمز الدخول السريع (PIN) المشفر للحساب ${_currentUser.value.username}")
+
+        db?.let { database ->
+            dbScope.launch(dbDispatcher) {
+                database.userDao().upsertUser(AppUserEntity.fromDomain(updated))
+            }
+        }
+        logAudit("إعداد الدخول السريع", "تم ربط رمز PIN المشفر بالحساب ${updated.username} (${updated.id})")
         return true
+    }
+
+    /**
+     * Resolves bound user strictly from the previously authenticated session; prevents username swapping.
+     */
+    fun getBoundQuickAuthUser(): AppUser? {
+        if (!_hasCompletedInitialLogin.value) return null
+        val boundId = sessionManager?.lastAuthenticatedUserId
+        val boundUsername = sessionManager?.lastAuthenticatedUsername
+        return _users.value.firstOrNull {
+            (!boundId.isNullOrBlank() && it.id == boundId) ||
+                (!boundUsername.isNullOrBlank() && it.username.equals(boundUsername, ignoreCase = true))
+        }?.takeIf { it.isActive } ?: _currentUser.value.takeIf { it.isActive }
     }
 
     fun authenticateWithQuickPin(usernameInput: String, pin: String): AuthResult {
         if (!_hasCompletedInitialLogin.value) {
             return AuthResult.Error("يرجى تسجيل الدخول بكلمة المرور لمرة واحدة أولاً لتفعيل الدخول السريع.")
         }
+        val boundUser = getBoundQuickAuthUser()
+            ?: return AuthResult.Error("لا يوجد حساب نشط مرتبط بالدخول السريع.")
+
+        val requestedName = usernameInput.trim()
+        if (requestedName.isNotBlank() && !requestedName.equals(boundUser.username, ignoreCase = true)) {
+            logAudit("محاولة تبديل مستخدم PIN", "رفض محاولة تغيير اسم المستخدم من ${boundUser.username} إلى $requestedName أثناء دخول PIN")
+            return AuthResult.Error("رمز PIN مقيد بالحساب (@${boundUser.username}) فقط؛ استخدم كلمة المرور لتبديل الحساب.")
+        }
+
+        val lockKey = boundUser.username.lowercase(Locale.ENGLISH)
+        checkLockout(lockKey)?.let { return it }
+
+        val storedHash = boundUser.quickPinHash.ifBlank {
+            sessionManager?.getQuickPinHashForUser(boundUser.id).orEmpty()
+        }
+        if (storedHash.isBlank()) {
+            return AuthResult.Error("لم يتم تعيين رمز دخول سريع (PIN) لهذا الحساب بعد.")
+        }
         val cleanPin = pin.trim()
-        val storedHash = inMemoryQuickPinHash ?: sessionManager?.quickPinHash
-        if (storedHash.isNullOrBlank()) {
-            return AuthResult.Error("لم يتم تعيين رمز دخول سريع (PIN) بعد.")
-        }
         if (!SecurityUtils.verifyPassword(cleanPin, storedHash)) {
-            logAudit("فشل رمز PIN", "إدخال رمز PIN سريع غير صحيح للحساب $usernameInput")
-            return AuthResult.Error("رمز الدخول السريع (PIN) غير صحيح.")
+            logAudit("فشل رمز PIN", "إدخال رمز PIN سريع غير صحيح للحساب ${boundUser.username}")
+            return recordFailedAttempt(lockKey)
         }
-        val targetUsername = usernameInput.trim().ifBlank {
-            sessionManager?.lastAuthenticatedUsername ?: _currentUser.value.username
+
+        clearFailedAttempts(lockKey)
+        return AuthResult.Success(completeLogin(boundUser, "دخول سريع بالرمز (PIN)"))
+    }
+
+    /**
+     * Authenticates strictly for [userId] after AndroidKeyStore CryptoObject verification succeeds.
+     */
+    fun authenticateWithBiometrics(userId: String, cryptoVerified: Boolean): AuthResult {
+        if (!_hasCompletedInitialLogin.value) {
+            return AuthResult.Error("يرجى تسجيل الدخول بكلمة المرور لمرة واحدة أولاً لتفعيل البصمة.")
         }
-        val matched = _users.value.find { it.username.equals(targetUsername, ignoreCase = true) && it.isActive }
-            ?: _users.value.firstOrNull { it.isActive }
-            ?: return AuthResult.Error("لم يتم العثور على حساب نشط مطابق.")
-        return AuthResult.Success(completeLogin(matched, "دخول سريع بالرمز (PIN)"))
+        if (!cryptoVerified || userId.isBlank()) {
+            return AuthResult.Error("فشل التحقق التشفيري من مفتاح البصمة (AndroidKeyStore CryptoObject).")
+        }
+        val boundUser = getBoundQuickAuthUser()
+            ?: return AuthResult.Error("لا يوجد حساب نشط مرتبط بالبصمة الحيوية.")
+        if (boundUser.id != userId) {
+            return AuthResult.Error("البصمة مرتبطة بحساب آخر (@${boundUser.username}) ولا يمكن استخدامها لهذا الحساب.")
+        }
+        val lockKey = boundUser.username.lowercase(Locale.ENGLISH)
+        checkLockout(lockKey)?.let { return it }
+
+        clearFailedAttempts(lockKey)
+        return AuthResult.Success(completeLogin(boundUser, "مصادقة حيوية محمية بـ AndroidKeyStore"))
     }
 
     private fun completeLogin(matched: AppUser, auditAction: String): AppUser {
@@ -182,7 +325,9 @@ class UserRepository(
         _currentUser.value = updatedUser
         _isLoggedIn.value = true
         _hasCompletedInitialLogin.value = true
+        _requiresPasswordChange.value = updatedUser.mustChangePassword
         sessionManager?.saveActiveSession(updatedUser.id, updatedUser.username, loggedIn = true)
+        syncQuickPinAvailability(updatedUser)
 
         db?.let { database ->
             dbScope.launch(dbDispatcher) {
@@ -199,20 +344,28 @@ class UserRepository(
     fun logout() {
         val user = _currentUser.value
         _isLoggedIn.value = false
+        _requiresPasswordChange.value = false
         sessionManager?.clearSession()
         logAudit("تسجيل خروج", "تسجيل خروج آمن للمستخدم ${user.fullName}")
     }
 
-    fun switchRole(role: UserRole) {
-        val matched = _users.value.find { it.role == role } ?: AppUser(
-            username = role.name.lowercase(),
-            fullName = "مستخدم (${role.title})",
-            role = role,
-            passwordHash = SecurityUtils.hashPassword(SeedData.defaultDemoPassword)
-        )
-        _currentUser.value = matched
-        sessionManager?.saveActiveSession(matched.id, matched.username, loggedIn = true)
-        logAudit("تبديل الدور", "تم تبديل دور المستخدم الحالي إلى ${role.title} (${matched.fullName})")
+    /**
+     * Centralized RBAC guard executed at the repository layer whenever [strictRolePermissions] is enabled.
+     */
+    fun requirePermission(vararg allowedRoles: UserRole, actionDescription: String) {
+        if (!settingsProvider().strictRolePermissions) return
+        val user = _currentUser.value
+        if (!user.isActive) {
+            logAudit("رفض حساب موقوف", "محاولة تنفيذ ($actionDescription) من حساب موقوف: ${user.username}")
+            throw SecurityException("الحساب الحالي موقوف ولا يملك صلاحية التنفيذ.")
+        }
+        if (user.role !in allowedRoles) {
+            logAudit(
+                "رفض صلاحية (RBAC)",
+                "محاولة غير مصرح بها لتنفيذ ($actionDescription) بدور (${user.role.title})"
+            )
+            throw SecurityException("صلاحية غير كافية (${user.role.title}) لتنفيذ: $actionDescription")
+        }
     }
 
     fun addUser(
@@ -221,14 +374,23 @@ class UserRepository(
         role: UserRole,
         rawPassword: String = SeedData.defaultDemoPassword
     ): AppUser {
-        val hashed = SecurityUtils.hashPassword(rawPassword.ifBlank { SeedData.defaultDemoPassword })
+        requirePermission(UserRole.ADMIN, actionDescription = "إضافة مستخدم جديد")
+        val cleanUsername = username.trim()
+        require(cleanUsername.isNotBlank() && fullName.trim().isNotBlank()) { "اسم المستخدم والاسم الكامل مطلوبان." }
+        require(_users.value.none { it.username.equals(cleanUsername, ignoreCase = true) }) {
+            "اسم المستخدم ($cleanUsername) مسجل مسبقاً."
+        }
+        val effectivePw = rawPassword.ifBlank { SeedData.defaultDemoPassword }
+        val hashed = SecurityUtils.hashPassword(effectivePw)
         val u = AppUser(
-            username = username.trim(),
+            username = cleanUsername,
             fullName = fullName.trim(),
             role = role,
             isActive = true,
             lastLogin = nowTimeStr(),
-            passwordHash = hashed
+            passwordHash = hashed,
+            quickPinHash = "",
+            mustChangePassword = effectivePw == SeedData.defaultDemoPassword
         )
         _users.value = _users.value + u
         db?.let { database ->
@@ -241,6 +403,8 @@ class UserRepository(
     }
 
     fun toggleUserActive(userId: String) {
+        requirePermission(UserRole.ADMIN, actionDescription = "تعديل حالة تفعيل مستخدم")
+        require(userId != _currentUser.value.id) { "لا يمكن إيقاف الحساب النشط حالياً." }
         var updated: AppUser? = null
         _users.value = _users.value.map {
             if (it.id == userId) {
@@ -282,18 +446,60 @@ class UserRepository(
             }
         }
 
-        if (!online && action != "انقطاع الاتصال" && action != "اتصال بالشبكة") {
+        val isSyncableDataMutation = action !in setOf(
+            "انقطاع الاتصال",
+            "اتصال بالشبكة",
+            "تعذر الاتصال بالخادم",
+            "تغيير خادم المزامنة",
+            "تغيير الخادم المحلي",
+            "إعدادات المزامنة",
+            "إعادة ضبط المصنع",
+            "تسجيل دخول آمن (PBKDF2)",
+            "دخول سريع بالرمز (PIN)",
+            "مصادقة حيوية محمية بـ AndroidKeyStore",
+            "تسجيل خروج",
+            "محاولة دخول فاشلة",
+            "فشل كلمة المرور",
+            "فشل رمز PIN",
+            "قفل أمني للحساب",
+            "حساب موقوف",
+            "رفض صلاحية (RBAC)",
+            "رفض حساب موقوف",
+            "محاولة تبديل مستخدم PIN",
+            "تصدير PDF",
+            "معاينة طباعة"
+        ) && !action.startsWith("فشل مزامنة") && !action.startsWith("مزامنة ناجحة")
+
+        if (!online && isSyncableDataMutation) {
             onOfflineAuditHook?.invoke(action, description)
         }
+    }
+
+    fun applyUsersAndAuditSnapshot(users: List<AppUser>?, auditLogs: List<AuditLog>?) {
+        users?.let { restoredUsers ->
+            _users.value = restoredUsers
+            val refreshedCurrent = restoredUsers.find { it.id == _currentUser.value.id }
+                ?: restoredUsers.firstOrNull { it.isActive }
+            if (refreshedCurrent != null) {
+                _currentUser.value = refreshedCurrent
+                _requiresPasswordChange.value = _isLoggedIn.value && refreshedCurrent.mustChangePassword
+                syncQuickPinAvailability(refreshedCurrent)
+            }
+        }
+        auditLogs?.let { _auditLogs.value = it }
     }
 
     fun resetToSeed() {
         _users.value = SeedData.users
         _currentUser.value = SeedData.users[0]
         _auditLogs.value = SeedData.auditLogs
+        _isLoggedIn.value = false
         _hasCompletedInitialLogin.value = false
         _hasQuickPin.value = false
-        inMemoryQuickPinHash = null
+        _requiresPasswordChange.value = false
+        failedAttempts.clear()
+        lockoutUntilMs.clear()
+        sessionManager?.clearSession()
         sessionManager?.clearQuickPin()
     }
 }

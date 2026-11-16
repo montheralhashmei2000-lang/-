@@ -23,6 +23,8 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.fund.data.SeedData
+import com.example.fund.data.repository.AuthResult
+import com.example.fund.model.AppUser
 import com.example.fund.model.UserRole
 import com.example.fund.ui.viewmodel.SettingsViewModel
 import com.example.ui.theme.*
@@ -33,6 +35,7 @@ fun UsersScreen(settingsViewModel: SettingsViewModel = viewModel()) {
     val currentUser by settingsViewModel.currentUser.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var showAddUserDialog by remember { mutableStateOf(false) }
+    var pendingSwitchUser by remember { mutableStateOf<AppUser?>(null) }
 
     LazyColumn(
         modifier = Modifier
@@ -176,8 +179,7 @@ fun UsersScreen(settingsViewModel: SettingsViewModel = viewModel()) {
                             OutlinedButton(
                                 onClick = {
                                     if (u.isActive) {
-                                        settingsViewModel.switchRole(u.role)
-                                        Toast.makeText(context, "تم التبديل إلى حساب: ${u.fullName}", Toast.LENGTH_SHORT).show()
+                                        pendingSwitchUser = u
                                     } else {
                                         Toast.makeText(context, "هذا الحساب موقوف، قم بتفعيله أولاً", Toast.LENGTH_SHORT).show()
                                     }
@@ -187,11 +189,16 @@ fun UsersScreen(settingsViewModel: SettingsViewModel = viewModel()) {
                             ) {
                                 Icon(Icons.Default.SwapHoriz, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(Modifier.width(4.dp))
-                                Text("تبديل الدور", style = MaterialTheme.typography.labelSmall, maxLines = 1, softWrap = false)
+                                Text("تبديل الحساب", style = MaterialTheme.typography.labelSmall, maxLines = 1, softWrap = false)
                             }
                             if (currentUser.role == UserRole.ADMIN) {
                                 TextButton(
-                                    onClick = { settingsViewModel.toggleUserActive(u.id) },
+                                    onClick = {
+                                        runCatching { settingsViewModel.toggleUserActive(u.id) }
+                                            .onFailure { err ->
+                                                Toast.makeText(context, err.message ?: "تعذر تعديل حالة الحساب", Toast.LENGTH_SHORT).show()
+                                            }
+                                    },
                                     modifier = Modifier.height(30.dp),
                                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
                                 ) {
@@ -211,16 +218,78 @@ fun UsersScreen(settingsViewModel: SettingsViewModel = viewModel()) {
         }
     }
 
+    pendingSwitchUser?.let { targetUser ->
+        SwitchUserPasswordDialog(
+            targetUser = targetUser,
+            onDismiss = { pendingSwitchUser = null },
+            onConfirm = { pw ->
+                when (val res = settingsViewModel.switchAccountWithPassword(targetUser.username, pw)) {
+                    is AuthResult.Success -> {
+                        pendingSwitchUser = null
+                        Toast.makeText(context, "تم التبديل إلى حساب: ${res.user.fullName}", Toast.LENGTH_SHORT).show()
+                        null
+                    }
+                    is AuthResult.Error -> res.message
+                }
+            }
+        )
+    }
+
     if (showAddUserDialog) {
         AddUserDialog(
             onDismiss = { showAddUserDialog = false },
             onSave = { username, fullName, role, password ->
-                settingsViewModel.addUser(username, fullName, role, password)
-                showAddUserDialog = false
-                Toast.makeText(context, "تمت إضافة المستخدم وتشفير كلمة المرور بنجاح", Toast.LENGTH_SHORT).show()
+                runCatching {
+                    settingsViewModel.addUser(username, fullName, role, password)
+                }.onSuccess {
+                    showAddUserDialog = false
+                    Toast.makeText(context, "تمت إضافة المستخدم وتشفير كلمة المرور بنجاح", Toast.LENGTH_SHORT).show()
+                }.onFailure { err ->
+                    Toast.makeText(context, err.message ?: "تعذر إضافة المستخدم", Toast.LENGTH_LONG).show()
+                }
             }
         )
     }
+}
+
+@Composable
+private fun SwitchUserPasswordDialog(
+    targetUser: AppUser,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> String?
+) {
+    var password by remember { mutableStateOf("") }
+    var errorMsg by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("تأكيد كلمة المرور لتبديل الحساب", fontWeight = FontWeight.Bold, color = FundPrimary) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("أدخل كلمة المرور الخاصة بحساب ${targetUser.fullName} (@${targetUser.username}) - ${targetUser.role.title}:")
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = { password = it; errorMsg = null },
+                    label = { Text("كلمة المرور") },
+                    visualTransformation = PasswordVisualTransformation(),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                errorMsg?.let { Text(it, color = StatusDanger, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold) }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { errorMsg = onConfirm(password) },
+                colors = ButtonDefaults.buttonColors(containerColor = FundPrimary)
+            ) {
+                Text("تحقق وتبديل")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("إلغاء") }
+        }
+    )
 }
 
 private fun rolePermissionsDescription(role: UserRole): String = when (role) {

@@ -22,6 +22,7 @@ class MembersViewModel : ViewModel() {
     fun addMember(member: Member) = memberRepo.addMember(member)
     fun updateMember(member: Member) = memberRepo.updateMember(member)
     fun toggleMemberStatus(memberId: String) = memberRepo.toggleMemberStatus(memberId)
+    fun autoSuspendOverdueMembers(): Int = coordinator.autoSuspendOverdueMembers()
     fun addVillageByRegionName(regionName: String, villageName: String) =
         memberRepo.addVillageByRegionName(regionName, villageName)
 

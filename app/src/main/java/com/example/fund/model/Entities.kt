@@ -291,7 +291,9 @@ data class AppUser(
     val role: UserRole,
     val isActive: Boolean = true,
     val lastLogin: String = "2026-11-08",
-    val passwordHash: String = ""
+    val passwordHash: String = "",
+    val quickPinHash: String = "",
+    val mustChangePassword: Boolean = false
 )
 
 data class FundInfo(
@@ -503,9 +505,28 @@ data class SyncBatchRecord(
 )
 
 data class LocalServerConfig(
-    val serverName: String = "الخادم المحلي الميداني (LAN)",
-    val serverHost: String = "192.168.1.100:8443",
-    val protocol: String = "TLS 1.3 / SQLite-JSON Engine",
-    val latencyMs: Int = 8,
-    val lastBackupTime: String = "2026-11-08 10:30"
+    val serverName: String = "الخزنة المحلية المدمجة (Local Vault)",
+    val serverHost: String = "127.0.0.1:9000",
+    val protocol: String = "AES-256-GCM Vault + SHA-256",
+    val latencyMs: Int = 0,
+    val lastBackupTime: String = "—"
+)
+
+data class ServerProfile(
+    val id: String = UUID.randomUUID().toString(),
+    val name: String,
+    val host: String,
+    val isBuiltInVault: Boolean = false,
+    val hasAuthToken: Boolean = false,
+    val lastLatencyMs: Int? = null,
+    val lastCheckedAt: String = "",
+    val lastDiagnostic: String = ""
+)
+
+data class ServerProbeResult(
+    val reachable: Boolean,
+    val latencyMs: Int,
+    val message: String,
+    val httpCode: Int? = null,
+    val protocolLabel: String = ""
 )

@@ -39,6 +39,7 @@ fun CampaignsScreen() {
     val repo = FundRepository.getInstance()
     val campaigns by repo.campaigns.collectAsStateWithLifecycle()
     val currentUser by repo.currentUser.collectAsStateWithLifecycle()
+    val appSettings by repo.appSettings.collectAsStateWithLifecycle()
     val canManage = currentUser.role != UserRole.VIEWER
 
     var showNewCampaignDialog by remember { mutableStateOf(false) }
@@ -189,11 +190,17 @@ fun CampaignsScreen() {
     campaignToDonate?.let { campaign ->
         DonateToCampaignDialog(
             campaign = campaign,
+            allowAnonymousDonors = appSettings.allowAnonymousDonors,
             onDismiss = { campaignToDonate = null },
             onDonate = { donorName, amount, currency, method ->
-                repo.donateToCampaign(campaign.id, donorName, amount, currency, method)
-                Toast.makeText(context, "تم تسجيل التبرع للحملة وإصدار سند القبض والقيد المحاسبي", Toast.LENGTH_SHORT).show()
-                campaignToDonate = null
+                runCatching {
+                    repo.donateToCampaign(campaign.id, donorName, amount, currency, method)
+                }.onSuccess {
+                    Toast.makeText(context, "تم تسجيل التبرع للحملة وإصدار سند القبض والقيد المحاسبي", Toast.LENGTH_SHORT).show()
+                    campaignToDonate = null
+                }.onFailure { err ->
+                    Toast.makeText(context, err.message ?: "تعذر تسجيل التبرع للحملة", Toast.LENGTH_LONG).show()
+                }
             }
         )
     }
@@ -204,9 +211,14 @@ fun CampaignsScreen() {
             campaign = campaign,
             onDismiss = { campaignToDisburse = null },
             onDisburse = { recipient, amountYer, desc ->
-                repo.disburseFromCampaign(campaign.id, recipient, amountYer, desc)
-                Toast.makeText(context, "تم الصرف من الحملة وإصدار سند الصرف والقيد المحاسبي", Toast.LENGTH_SHORT).show()
-                campaignToDisburse = null
+                runCatching {
+                    repo.disburseFromCampaign(campaign.id, recipient, amountYer, desc)
+                }.onSuccess {
+                    Toast.makeText(context, "تم الصرف من الحملة وإصدار سند الصرف والقيد المحاسبي", Toast.LENGTH_SHORT).show()
+                    campaignToDisburse = null
+                }.onFailure { err ->
+                    Toast.makeText(context, err.message ?: "تعذر الصرف من الحملة", Toast.LENGTH_LONG).show()
+                }
             }
         )
     }
@@ -215,9 +227,14 @@ fun CampaignsScreen() {
         NewCampaignDialog(
             onDismiss = { showNewCampaignDialog = false },
             onAdd = { newC ->
-                repo.addCampaign(newC)
-                Toast.makeText(context, "تم إطلاق الحملة بنجاح", Toast.LENGTH_SHORT).show()
-                showNewCampaignDialog = false
+                runCatching {
+                    repo.addCampaign(newC)
+                }.onSuccess {
+                    Toast.makeText(context, "تم إطلاق الحملة بنجاح", Toast.LENGTH_SHORT).show()
+                    showNewCampaignDialog = false
+                }.onFailure { err ->
+                    Toast.makeText(context, err.message ?: "تعذر إطلاق الحملة", Toast.LENGTH_LONG).show()
+                }
             }
         )
     }
@@ -226,9 +243,11 @@ fun CampaignsScreen() {
 @Composable
 private fun DonateToCampaignDialog(
     campaign: Campaign,
+    allowAnonymousDonors: Boolean,
     onDismiss: () -> Unit,
     onDonate: (String, Double, CurrencyCode, PaymentMethod) -> Unit
 ) {
+    val context = LocalContext.current
     var donorName by remember { mutableStateOf("") }
     var amountStr by remember { mutableStateOf("100000") }
     var currency by remember { mutableStateOf(CurrencyCode.YER) }
@@ -242,7 +261,10 @@ private fun DonateToCampaignDialog(
                 OutlinedTextField(
                     value = donorName,
                     onValueChange = { donorName = it },
-                    label = { Text("اسم المتبرع / فاعل خير") },
+                    label = { Text(if (allowAnonymousDonors) "اسم المتبرع / فاعل خير" else "اسم المتبرع (مطلوب)") },
+                    supportingText = if (!allowAnonymousDonors && donorName.isBlank()) {
+                        { Text("التبرع المجهول معطّل في إعدادات الحوكمة", color = StatusDanger, fontSize = 10.sp) }
+                    } else null,
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -271,7 +293,15 @@ private fun DonateToCampaignDialog(
             Button(
                 onClick = {
                     val amt = amountStr.toDoubleOrNull() ?: 0.0
-                    if (amt > 0) onDonate(donorName, amt, currency, method)
+                    if (!allowAnonymousDonors && donorName.isBlank()) {
+                        Toast.makeText(context, "يجب إدخال اسم المتبرع حسب إعدادات الحوكمة", Toast.LENGTH_SHORT).show()
+                        return@Button
+                    }
+                    if (amt <= 0) {
+                        Toast.makeText(context, "يرجى إدخال مبلغ صحيح أكبر من الصفر", Toast.LENGTH_SHORT).show()
+                        return@Button
+                    }
+                    onDonate(donorName, amt, currency, method)
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = FundPrimary)
             ) {

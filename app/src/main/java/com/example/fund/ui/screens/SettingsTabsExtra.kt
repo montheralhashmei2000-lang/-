@@ -18,9 +18,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.fund.model.AppFontOption
 import com.example.fund.model.AppSettings
 import com.example.fund.model.CurrencyCode
@@ -30,7 +32,9 @@ import com.example.fund.model.LocalServerConfig
 import com.example.fund.ui.viewmodel.SettingsViewModel
 import com.example.fund.util.FormatUtils
 import com.example.fund.util.LocalScreenFormat
+import com.example.fund.util.OfficialPrintHelper
 import com.example.ui.theme.*
+import kotlinx.coroutines.launch
 
 @Composable
 fun AppFontSelectorSection(
@@ -346,8 +350,12 @@ fun FinanceCurrenciesBudgetsTab(
                 Switch(checked = allowNegative, onCheckedChange = { allowNegative = it })
             }
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text("إلزامية توازن القيد المزدوج (مدين = دائن)", fontSize = 13.sp, modifier = Modifier.weight(1f))
-                Switch(checked = enforceBalanced, onCheckedChange = { enforceBalanced = it })
+                Text(
+                    "إلزامية توازن القيد المزدوج (مدين = دائن — مفعل لحماية ميزان المراجعة)",
+                    fontSize = 13.sp,
+                    modifier = Modifier.weight(1f)
+                )
+                Switch(checked = true, onCheckedChange = null, enabled = false)
             }
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text("فتح معاينة PDF تلقائياً بعد إصدار السند", fontSize = 13.sp, modifier = Modifier.weight(1f))
@@ -383,7 +391,7 @@ fun FinanceCurrenciesBudgetsTab(
                     voucherNoPrefix = voucherPrefix.ifBlank { "V" },
                     defaultTreasuryAccountCode = defaultTreasury,
                     allowNegativeTreasury = allowNegative,
-                    enforceBalancedJournal = enforceBalanced,
+                    enforceBalancedJournal = true,
                     autoPrintVoucher = autoPrint,
                     budgetAlertPercent = alertPct,
                     allowAnonymousDonors = allowAnonDonors
@@ -410,8 +418,15 @@ fun SystemServerBackupTab(
     pendingSyncCount: Int
 ) {
     val context = LocalContext.current
-    var serverName by remember(serverConfig) { mutableStateOf(serverConfig.serverName) }
-    var serverHost by remember(serverConfig) { mutableStateOf(serverConfig.serverHost) }
+    val scope = rememberCoroutineScope()
+    val serverProfiles by settingsViewModel.serverProfiles.collectAsStateWithLifecycle()
+    val syncStageMsg by settingsViewModel.syncStageMessage.collectAsStateWithLifecycle()
+    val isSyncing by settingsViewModel.isSyncing.collectAsStateWithLifecycle()
+
+    var serverName by remember(serverConfig.serverName) { mutableStateOf(serverConfig.serverName) }
+    var serverHost by remember(serverConfig.serverHost) { mutableStateOf(serverConfig.serverHost) }
+    var serverToken by remember(serverConfig.serverHost) { mutableStateOf("") }
+    var isProbing by remember { mutableStateOf(false) }
     var eventLocation by remember(appSettings) { mutableStateOf(appSettings.defaultEventLocation) }
     var strictRoles by remember(appSettings) { mutableStateOf(appSettings.strictRolePermissions) }
     var enableAudit by remember(appSettings) { mutableStateOf(appSettings.enableAuditTrail) }
@@ -423,31 +438,100 @@ fun SystemServerBackupTab(
     // Server & Sync Settings
     Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("إعدادات الخادم المحلي والمزامنة", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = FundPrimary)
+            Text("إعدادات الخوادم والمزامنة", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = FundPrimary)
+            Text(
+                text = syncStageMsg,
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontWeight = FontWeight.Medium
+            )
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text("حالة الاتصال بالخادم", fontSize = 13.sp)
-                Switch(checked = isOnline, onCheckedChange = { settingsViewModel.toggleOnline() })
+                Text("حالة الاتصال بالعقدة النشطة", fontSize = 13.sp)
+                Switch(
+                    checked = isOnline,
+                    enabled = !isSyncing && !isProbing,
+                    onCheckedChange = {
+                        scope.launch {
+                            settingsViewModel.toggleOnlineSuspending()
+                            Toast.makeText(context, settingsViewModel.syncStageMessage.value, Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                )
             }
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text("المزامنة التلقائية فور الاتصال بالشبكة", fontSize = 13.sp, modifier = Modifier.weight(1f))
                 Switch(checked = autoSync, onCheckedChange = { settingsViewModel.setAutoSyncOnConnect(it) })
             }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                serverProfiles.forEach { profile ->
+                    val selected = serverHost.equals(profile.host, ignoreCase = true)
+                    FilterChip(
+                        selected = selected,
+                        onClick = {
+                            serverName = profile.name
+                            serverHost = profile.host
+                            serverToken = ""
+                        },
+                        label = { Text(profile.name, fontSize = 11.sp) }
+                    )
+                }
+            }
             OutlinedTextField(value = serverName, onValueChange = { serverName = it }, label = { Text("اسم عقدة الخادم") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
             OutlinedTextField(value = serverHost, onValueChange = { serverHost = it }, label = { Text("عنوان الخادم والمنفذ (Host:Port)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+            OutlinedTextField(
+                value = serverToken,
+                onValueChange = { serverToken = it },
+                label = { Text("رمز المصادقة Bearer Token (اختياري)") },
+                visualTransformation = PasswordVisualTransformation(),
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(
+                    enabled = !isProbing && !isSyncing,
                     onClick = {
-                        settingsViewModel.updateServerNode(serverName.trim(), serverHost.trim())
-                        Toast.makeText(context, "تم تحديث إعدادات الخادم المحلي", Toast.LENGTH_SHORT).show()
+                        scope.launch {
+                            isProbing = true
+                            val probeRes = runCatching {
+                                settingsViewModel.probeServerConnection(
+                                    hostOverride = serverHost.trim(),
+                                    nameOverride = serverName.trim().ifBlank { serverHost.trim() },
+                                    saveAsActiveNode = true,
+                                    authTokenOverride = serverToken.takeIf { it.isNotBlank() }
+                                )
+                            }
+                            isProbing = false
+                            probeRes.onSuccess { res ->
+                                Toast.makeText(context, res.message, Toast.LENGTH_LONG).show()
+                            }.onFailure { err ->
+                                Toast.makeText(context, err.message ?: "غير مصرح بتعديل الخادم", Toast.LENGTH_LONG).show()
+                            }
+                        }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = FundPrimary)
+                    colors = ButtonDefaults.buttonColors(containerColor = FundPrimary),
+                    modifier = Modifier.heightIn(min = 48.dp)
                 ) {
-                    Text("حفظ العقدة")
+                    Text(if (isProbing) "جارٍ الفحص..." else "حفظ وفحص (Ping)")
                 }
-                OutlinedButton(onClick = {
-                    settingsViewModel.syncNow()
-                    Toast.makeText(context, "تم تشغيل المزامنة الفورية (المعلق: $pendingSyncCount)", Toast.LENGTH_SHORT).show()
-                }) {
+                OutlinedButton(
+                    enabled = !isProbing && !isSyncing,
+                    onClick = {
+                        scope.launch {
+                            settingsViewModel.connectAndSyncSmartSuspending()
+                            Toast.makeText(
+                                context,
+                                settingsViewModel.syncStageMessage.value,
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+                    },
+                    modifier = Modifier.heightIn(min = 48.dp)
+                ) {
                     Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
                     Text("مزامنة الآن ($pendingSyncCount)")
@@ -477,14 +561,19 @@ fun SystemServerBackupTab(
             }
             Button(
                 onClick = {
-                    settingsViewModel.updateAppSettings(
-                        appSettings.copy(
-                            defaultEventLocation = eventLocation.ifBlank { "مقر الصندوق - قاعة الاجتماعات" },
-                            strictRolePermissions = strictRoles,
-                            enableAuditTrail = enableAudit
+                    runCatching {
+                        settingsViewModel.updateAppSettings(
+                            appSettings.copy(
+                                defaultEventLocation = eventLocation.ifBlank { "مقر الصندوق - قاعة الاجتماعات" },
+                                strictRolePermissions = strictRoles,
+                                enableAuditTrail = enableAudit
+                            )
                         )
-                    )
-                    Toast.makeText(context, "تم حفظ إعدادات المواعيد والرقابة", Toast.LENGTH_SHORT).show()
+                    }.onSuccess {
+                        Toast.makeText(context, "تم حفظ إعدادات المواعيد والرقابة", Toast.LENGTH_SHORT).show()
+                    }.onFailure { err ->
+                        Toast.makeText(context, err.message ?: "غير مصرح بتعديل إعدادات الرقابة", Toast.LENGTH_LONG).show()
+                    }
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = FundPrimary)
             ) {
@@ -519,12 +608,16 @@ fun SystemServerBackupTab(
                 OutlinedButton(
                     onClick = {
                         val json = settingsViewModel.exportDatabaseJson()
-                        val sendIntent = Intent(Intent.ACTION_SEND).apply {
-                            type = "application/json"
-                            putExtra(Intent.EXTRA_SUBJECT, "نسخة احتياطية - ${fundInfo.name}")
-                            putExtra(Intent.EXTRA_TEXT, json)
+                        val shared = OfficialPrintHelper.shareExportFile(
+                            context = context,
+                            fileName = "FundBackup_${System.currentTimeMillis()}.json",
+                            content = json,
+                            mimeType = "application/json",
+                            chooserTitle = "مشاركة ملف النسخة الاحتياطية JSON"
+                        )
+                        if (!shared) {
+                            Toast.makeText(context, "تعذر إنشاء أو مشاركة ملف النسخة الاحتياطية", Toast.LENGTH_SHORT).show()
                         }
-                        context.startActivity(Intent.createChooser(sendIntent, "مشاركة النسخة الاحتياطية JSON"))
                     }
                 ) {
                     Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -567,12 +660,16 @@ fun SystemServerBackupTab(
                         Spacer(Modifier.width(8.dp))
                         Button(
                             onClick = {
-                                val ok = settingsViewModel.importDatabaseFromJson(jsonBackupText)
-                                if (ok) {
-                                    Toast.makeText(context, "تم فحص واستيراد النسخة الاحتياطية بنجاح", Toast.LENGTH_SHORT).show()
-                                    showBackupModal = false
-                                } else {
-                                    Toast.makeText(context, "ملف JSON غير صالح أو تالف", Toast.LENGTH_SHORT).show()
+                                val res = runCatching { settingsViewModel.importDatabaseFromJson(jsonBackupText) }
+                                res.onSuccess { ok ->
+                                    if (ok) {
+                                        Toast.makeText(context, "تم فحص SHA-256 واستيراد النسخة الاحتياطية بنجاح", Toast.LENGTH_SHORT).show()
+                                        showBackupModal = false
+                                    } else {
+                                        Toast.makeText(context, "ملف JSON غير صالح أو فشل التحقق من توقيع SHA-256", Toast.LENGTH_LONG).show()
+                                    }
+                                }.onFailure { err ->
+                                    Toast.makeText(context, err.message ?: "غير مصرح باستيراد النسخة الاحتياطية", Toast.LENGTH_LONG).show()
                                 }
                             }
                         ) {

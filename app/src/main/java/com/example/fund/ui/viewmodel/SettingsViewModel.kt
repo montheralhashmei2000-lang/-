@@ -2,6 +2,7 @@ package com.example.fund.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import com.example.fund.data.FundRepository
+import com.example.fund.data.repository.AuthResult
 import com.example.fund.model.*
 import kotlinx.coroutines.flow.StateFlow
 
@@ -29,8 +30,11 @@ class SettingsViewModel : ViewModel() {
     val screenFormat: StateFlow<DisplayFormatConfig> = settingsRepo.screenFormat
     val printFormat: StateFlow<DisplayFormatConfig> = settingsRepo.printFormat
     val serverConfig: StateFlow<LocalServerConfig> = syncRepo.serverConfig
+    val serverProfiles: StateFlow<List<ServerProfile>> = syncRepo.serverProfiles
     val autoSyncOnConnect: StateFlow<Boolean> = syncRepo.autoSyncOnConnect
     val isOnline: StateFlow<Boolean> = syncRepo.isOnline
+    val isSyncing: StateFlow<Boolean> = syncRepo.isSyncing
+    val syncStageMessage: StateFlow<String> = syncRepo.syncStageMessage
     val syncQueue: StateFlow<List<SyncQueueItem>> = syncRepo.syncQueue
     val users: StateFlow<List<AppUser>> = userRepo.users
     val currentUser: StateFlow<AppUser> = userRepo.currentUser
@@ -49,8 +53,25 @@ class SettingsViewModel : ViewModel() {
     fun updateCurrencyRate(currency: CurrencyCode, rate: Double) = accountingRepo.updateCurrencyRate(currency, rate)
     fun setAutoSyncOnConnect(enabled: Boolean) = syncRepo.setAutoSyncOnConnect(enabled)
     fun toggleOnline() = syncRepo.toggleOnline()
+    suspend fun toggleOnlineSuspending(): Boolean {
+        if (syncRepo.isOnline.value) {
+            syncRepo.toggleOnline()
+            return false
+        }
+        return syncRepo.connectAndVerifyHealthBlocking()
+    }
     fun syncNow() = syncRepo.syncNow()
-    fun updateServerNode(name: String, host: String, latencyMs: Int = 8) = syncRepo.updateServerNode(name, host, latencyMs)
+    suspend fun syncNowSuspending(): Boolean = syncRepo.syncNowBlocking()
+    suspend fun connectAndSyncSmartSuspending(): Boolean = syncRepo.connectAndSyncSmartSuspending()
+    fun updateServerNode(name: String, host: String, latencyMs: Int = 0, authToken: String? = null) =
+        syncRepo.updateServerNode(name, host, latencyMs, authToken)
+    suspend fun probeServerConnection(
+        hostOverride: String = serverConfig.value.serverHost,
+        nameOverride: String = serverConfig.value.serverName,
+        saveAsActiveNode: Boolean = false,
+        authTokenOverride: String? = null
+    ): ServerProbeResult = syncRepo.probeServerConnection(hostOverride, nameOverride, saveAsActiveNode, authTokenOverride)
+    fun isBuiltInVaultHost(host: String = serverConfig.value.serverHost): Boolean = syncRepo.isBuiltInVaultHost(host)
     fun exportDatabaseJson(): String = coordinator.exportDatabaseJson()
     fun importDatabaseFromJson(json: String): Boolean = coordinator.importDatabaseFromJson(json)
     fun resetToDefaultSeedData() = coordinator.resetToDefaultSeedData()
@@ -59,7 +80,8 @@ class SettingsViewModel : ViewModel() {
     fun addUser(username: String, fullName: String, role: UserRole, password: String) =
         userRepo.addUser(username, fullName, role, password)
 
-    fun switchRole(role: UserRole) = userRepo.switchRole(role)
+    fun switchAccountWithPassword(username: String, password: String): AuthResult =
+        userRepo.switchAccountWithPassword(username, password)
     fun toggleUserActive(userId: String) = userRepo.toggleUserActive(userId)
 
     fun addRegion(name: String): Boolean = memberRepo.addRegion(name)
